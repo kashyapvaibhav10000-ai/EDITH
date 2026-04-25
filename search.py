@@ -3,6 +3,7 @@ import re
 import sqlite3
 import datetime
 import requests
+import vault
 from config import get_logger, MEMORY_ARCHIVE_PATH, SEARCH_DAILY_LIMITS
 from errors import Result
 
@@ -89,7 +90,7 @@ def _search_serper(query, num_results=5):
     try:
         url = "https://google.serper.dev/search"
         headers = {
-            "X-API-KEY": os.getenv("SERPER_API_KEY", ""),
+            "X-API-KEY": vault.get_secret("SERPER_API_KEY", "") or os.getenv("SERPER_API_KEY", ""),
             "Content-Type": "application/json"
         }
         payload = {"q": query, "num": num_results}
@@ -113,7 +114,7 @@ def _search_exa(query, num_results=5):
     try:
         url = "https://api.exa.ai/search"
         headers = {
-            "x-api-key": os.getenv("EXA_API_KEY", ""),
+            "x-api-key": vault.get_secret("EXA_API_KEY", "") or os.getenv("EXA_API_KEY", ""),
             "Content-Type": "application/json"
         }
         payload = {"query": query, "numResults": num_results, "useAutoprompt": True}
@@ -137,7 +138,7 @@ def _search_tavily(query, num_results=5):
     try:
         url = "https://api.tavily.com/search"
         payload = {
-            "api_key": os.getenv("TAVILY_API_KEY", ""),
+            "api_key": vault.get_secret("TAVILY_API_KEY", "") or os.getenv("TAVILY_API_KEY", ""),
             "query": query,
             "max_results": num_results,
             "search_depth": "basic"

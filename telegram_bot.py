@@ -37,8 +37,8 @@ CHAT_ID = vault.get_secret("TELEGRAM_CHAT_ID", "") or os.getenv("TELEGRAM_CHAT_I
 
 def send_telegram_placeholder(text: str = "⏳ Thinking...") -> int | None:
     """Send a placeholder message and return its message_id for later editing."""
-    token = os.getenv("TELEGRAM_TOKEN") or TOKEN
-    chat_id = os.getenv("TELEGRAM_CHAT_ID") or CHAT_ID
+    token = TOKEN or os.getenv("TELEGRAM_TOKEN", "")
+    chat_id = CHAT_ID or os.getenv("TELEGRAM_CHAT_ID", "")
     if not token or not chat_id:
         return None
     url = f"https://api.telegram.org/bot{token}/sendMessage"
@@ -53,8 +53,8 @@ def send_telegram_placeholder(text: str = "⏳ Thinking...") -> int | None:
 
 def edit_telegram_message(message_id: int, text: str, parse_mode: str = None) -> bool:
     """Edit an existing Telegram message in-place. Used for streaming updates."""
-    token = os.getenv("TELEGRAM_TOKEN") or TOKEN
-    chat_id = os.getenv("TELEGRAM_CHAT_ID") or CHAT_ID
+    token = TOKEN or os.getenv("TELEGRAM_TOKEN", "")
+    chat_id = CHAT_ID or os.getenv("TELEGRAM_CHAT_ID", "")
     if not token or not chat_id or not message_id:
         return False
     url = f"https://api.telegram.org/bot{token}/editMessageText"
@@ -79,8 +79,8 @@ def edit_telegram_message(message_id: int, text: str, parse_mode: str = None) ->
 
 def send_telegram(message: str, parse_mode: str = "Markdown") -> bool:
     """Send a message to the user's Telegram."""
-    token = os.getenv("TELEGRAM_TOKEN") or TOKEN
-    chat_id = os.getenv("TELEGRAM_CHAT_ID") or CHAT_ID
+    token = TOKEN or os.getenv("TELEGRAM_TOKEN", "")
+    chat_id = CHAT_ID or os.getenv("TELEGRAM_CHAT_ID", "")
     if not token or not chat_id:
         log.error("TELEGRAM_TOKEN or TELEGRAM_CHAT_ID not set in .env")
         return False

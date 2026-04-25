@@ -2,6 +2,7 @@ import imapclient
 import email
 from email.header import decode_header
 import os
+import vault
 from dotenv import load_dotenv
 from config import get_logger, MODELS
 from errors import Result
@@ -26,9 +27,9 @@ PROVIDERS = {
     "hotmail": "outlook.office365.com",
 }
 
-# Credentials loaded from .env (NEVER hardcode)
-EMAIL_ADDRESS = os.getenv("GMAIL_ADDRESS", "")
-APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD", "")
+# Credentials — vault first, .env fallback
+EMAIL_ADDRESS = vault.get_secret("GMAIL_ADDRESS", "") or os.getenv("GMAIL_ADDRESS", "")
+APP_PASSWORD  = vault.get_secret("GMAIL_APP_PASSWORD", "") or os.getenv("GMAIL_APP_PASSWORD", "")
 PROVIDER = "gmail"
 
 def connect():
