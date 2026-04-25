@@ -706,6 +706,15 @@ def _handle_video_summarize(ctx) -> Result:
         return Result.from_exception(e)
 
 
+def _handle_system_health(ctx) -> Result:
+    try:
+        from validator import validate_all, format_health_report
+        results = validate_all()
+        return Result.success(format_health_report(results))
+    except Exception as e:
+        return Result.from_exception(e)
+
+
 def _handle_chat_fallback(ctx) -> Result:
     try:
         from search import web_search, format_results
@@ -808,6 +817,7 @@ INTENT_HANDLERS = {
     "mcp":             _handle_mcp,
     "image_gen":       _handle_image_gen,
     "video_summarize": _handle_video_summarize,
+    "system_health":   _handle_system_health,
 }
 
 
