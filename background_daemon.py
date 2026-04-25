@@ -302,13 +302,15 @@ def _prefetch_weather():
     try:
         from weather import get_current_weather, format_weather
         w = get_current_weather()
-        if w:
+        if w.ok:
             with _prefetch_lock:
                 _prefetch_cache["weather"] = {
-                    "data": format_weather(w),
+                    "data": format_weather(w.value),
                     "timestamp": time.time()
                 }
             log.info("Pre-fetched weather data")
+        else:
+            log.warning(f"Weather pre-fetch failed: {w.error}")
     except Exception as e:
         log.error(f"Weather pre-fetch failed: {e}")
 
@@ -318,9 +320,10 @@ def _prefetch_daily_report():
     try:
         from calendar_reader import get_today_briefing
         briefing = get_today_briefing()
+        data = briefing.value if briefing.ok else f"Calendar unavailable: {briefing.error}"
         with _prefetch_lock:
             _prefetch_cache["daily_report"] = {
-                "data": briefing,
+                "data": data,
                 "timestamp": time.time()
             }
         log.info("Pre-fetched daily report")
