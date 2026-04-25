@@ -157,14 +157,27 @@ _VALIDATORS = [
 ]
 
 
-def validate_all() -> dict:
-    """Run all validators. Returns dict[str, Result]."""
+def validate_all(emit_events: bool = False) -> dict:
+    """Run all validators. Returns dict[str, Result].
+
+    If emit_events=True, publishes HEALTH_CRITICAL to event_bus for each failed check.
+    """
     results = {}
     for name, fn in _VALIDATORS:
         try:
             results[name] = fn()
         except Exception as e:
             results[name] = Result.from_exception(e)
+
+    if emit_events:
+        try:
+            from event_bus import health_critical
+            for name, r in results.items():
+                if not r.ok:
+                    health_critical(name, r.error, source="validator")
+        except Exception as e:
+            log.warning(f"Event emit failed: {e}")
+
     return results
 
 
