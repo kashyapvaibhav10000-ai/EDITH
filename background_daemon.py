@@ -331,8 +331,59 @@ def _prefetch_daily_report():
         log.error(f"Daily report pre-fetch failed: {e}")
 
 
+def _prefetch_email_summary():
+    """Pre-fetch unread email summary (refreshed every 30 min)."""
+    try:
+        from email_reader import check_inbox
+        r = check_inbox(limit=5, unread_only=True)
+        data = r.value if r.ok else f"Email unavailable: {r.error}"
+        with _prefetch_lock:
+            _prefetch_cache["email_summary"] = {
+                "data": data,
+                "timestamp": time.time()
+            }
+        log.info("Pre-fetched email summary")
+    except Exception as e:
+        log.error(f"Email pre-fetch failed: {e}")
+
+
+def _prefetch_calendar_tomorrow():
+    """Pre-fetch tomorrow's calendar events."""
+    try:
+        from calendar_reader import get_events, format_events
+        events = get_events(days_ahead=2)
+        data = format_events(events)
+        with _prefetch_lock:
+            _prefetch_cache["calendar_tomorrow"] = {
+                "data": data,
+                "timestamp": time.time()
+            }
+        log.info("Pre-fetched tomorrow's calendar")
+    except Exception as e:
+        log.error(f"Calendar tomorrow pre-fetch failed: {e}")
+
+
+def _prefetch_top_news():
+    """Pre-fetch top 3 news headlines."""
+    try:
+        from search import web_search, format_results
+        r = web_search("top news today India tech", num_results=3)
+        data = format_results(r.value if r.ok else [])
+        with _prefetch_lock:
+            _prefetch_cache["top_news"] = {
+                "data": data,
+                "timestamp": time.time()
+            }
+        log.info("Pre-fetched top news")
+    except Exception as e:
+        log.error(f"News pre-fetch failed: {e}")
+
+
 def get_cached(key: str, max_age_seconds: int = 3600):
-    """Get a pre-fetched cached value if still fresh."""
+    """Get a pre-fetched cached value if still fresh.
+
+    TTL defaults: weather=1h, email=30min (1800s), news=2h (7200s).
+    """
     with _prefetch_lock:
         entry = _prefetch_cache.get(key)
     if entry and (time.time() - entry["timestamp"]) < max_age_seconds:
@@ -344,6 +395,16 @@ def invalidate_cache(key: str):
     """Invalidate a specific cache key (used by ambient monitor)."""
     with _prefetch_lock:
         _prefetch_cache.pop(key, None)
+
+
+def get_cache_keys() -> list:
+    """Return all currently cached keys with ages."""
+    now = time.time()
+    with _prefetch_lock:
+        return [
+            {"key": k, "age_seconds": int(now - v["timestamp"])}
+            for k, v in _prefetch_cache.items()
+        ]
 
 
 # ──────────────────────────────────────────────
@@ -460,8 +521,16 @@ def _setup_schedule():
     # Pre-fetch weather at 7:00 AM
     schedule.every().day.at("07:00").do(_prefetch_weather)
 
-    # Pre-fetch daily report at 8:00 AM
+    # Pre-fetch daily report + tomorrow's calendar at 8:00 AM
     schedule.every().day.at("08:00").do(_prefetch_daily_report)
+    schedule.every().day.at("08:00").do(_prefetch_calendar_tomorrow)
+
+    # Pre-fetch top news at 9:00 AM and 6:00 PM
+    schedule.every().day.at("09:00").do(_prefetch_top_news)
+    schedule.every().day.at("18:00").do(_prefetch_top_news)
+
+    # Email summary every 30 minutes
+    schedule.every(30).minutes.do(_prefetch_email_summary)
 
     # KDE heartbeat every 5 minutes
     schedule.every(5).minutes.do(_kde_heartbeat)
