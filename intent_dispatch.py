@@ -162,7 +162,9 @@ def _handle_weather(ctx) -> Result:
     try:
         from weather import get_current_weather, format_weather
         w = get_current_weather()
-        return Result.success(format_weather(w) if w else "Couldn't fetch weather data right now.")
+        if w.ok:
+            return Result.success(format_weather(w.value))
+        return Result.success("Couldn't fetch weather data right now.")
     except Exception as e:
         return Result.from_exception(e)
 
@@ -170,7 +172,7 @@ def _handle_weather(ctx) -> Result:
 def _handle_calendar_today(ctx) -> Result:
     try:
         from calendar_reader import get_today_briefing
-        return Result.success(get_today_briefing())
+        return get_today_briefing()
     except Exception as e:
         return Result.from_exception(e)
 
@@ -178,7 +180,7 @@ def _handle_calendar_today(ctx) -> Result:
 def _handle_calendar_week(ctx) -> Result:
     try:
         from calendar_reader import get_week_briefing
-        return Result.success(get_week_briefing())
+        return get_week_briefing()
     except Exception as e:
         return Result.from_exception(e)
 
@@ -189,7 +191,8 @@ def _handle_calendar_create(ctx) -> Result:
         date_str = _extract_date(ctx.user_input)
         time_str = _extract_time(ctx.user_input)
         title = _extract_event_title(ctx.user_input)
-        return Result.success(f"📅 {create_event(title, date_str, time_str)}")
+        r = create_event(title, date_str, time_str)
+        return Result.success(f"📅 {r.value}") if r.ok else r
     except Exception as e:
         return Result.from_exception(e)
 
@@ -197,7 +200,7 @@ def _handle_calendar_create(ctx) -> Result:
 def _handle_email(ctx) -> Result:
     try:
         from email_reader import check_inbox
-        return Result.success(check_inbox(limit=5, unread_only=False))
+        return check_inbox(limit=5, unread_only=False)
     except Exception as e:
         return Result.from_exception(e)
 
@@ -205,7 +208,7 @@ def _handle_email(ctx) -> Result:
 def _handle_unread_email(ctx) -> Result:
     try:
         from email_reader import check_inbox
-        return Result.success(check_inbox(limit=5, unread_only=True))
+        return check_inbox(limit=5, unread_only=True)
     except Exception as e:
         return Result.from_exception(e)
 
@@ -213,7 +216,8 @@ def _handle_unread_email(ctx) -> Result:
 def _handle_search(ctx) -> Result:
     try:
         from search import web_search, format_results
-        results = web_search(ctx.user_input)
+        results_r = web_search(ctx.user_input)
+        results = results_r.value if results_r.ok else []
         search_text = format_results(results)
         if search_text and "error" not in search_text.lower() and "no results" not in search_text.lower():
             today_str = datetime.datetime.now().strftime('%A, %d %B %Y')
@@ -270,11 +274,14 @@ def _handle_phone(ctx) -> Result:
             ring_phone()
             return Result.success("📱 Ringing your phone now!")
         elif "notification" in lower:
-            return Result.success(f"📱 {get_notifications()}")
+            r = get_notifications()
+            return Result.success(f"📱 {r.value if r.ok else r.error}")
         elif "battery" in lower:
             from phone import get_battery
-            return Result.success(f"📱 {get_battery()}")
-        return Result.success(f"📱 {phone_status()}")
+            r = get_battery()
+            return Result.success(f"📱 {r.value if r.ok else r.error}")
+        r = phone_status()
+        return Result.success(f"📱 {r.value if r.ok else r.error}")
     except Exception as e:
         return Result.from_exception(e)
 
@@ -283,7 +290,8 @@ def _handle_vision(ctx) -> Result:
     try:
         from vision import analyze_screenshot
         question = ctx.user_input if len(ctx.user_input.split()) > 3 else "What is on my screen right now?"
-        return Result.success(f"👁️ {analyze_screenshot(question)}")
+        r = analyze_screenshot(question)
+        return Result.success(f"👁️ {r.value}") if r.ok else r
     except Exception as e:
         return Result.from_exception(e)
 
@@ -422,9 +430,11 @@ def _handle_delete_file(ctx) -> Result:
 def _handle_rag(ctx) -> Result:
     try:
         from rag import build_index, query_rag
-        idx = build_index()
-        text = query_rag(ctx.user_input, idx) if idx else "No notes indexed."
-        return Result.success(text)
+        idx_r = build_index()
+        if not idx_r.ok:
+            return Result.success(f"📚 {idx_r.error}")
+        r = query_rag(ctx.user_input, idx_r.value)
+        return r
     except Exception as e:
         return Result.from_exception(e)
 
@@ -438,8 +448,8 @@ def _handle_data_analysis(ctx) -> Result:
         for word in ["analyze", "analyse", "read", "load", "open", "chart", "graph", "plot"]:
             question = re.sub(rf"\b{word}\b", "", question, flags=re.IGNORECASE).strip()
         from data_analyst import analyze_file
-        result = analyze_file(filepath, question if question else None, "bar")
-        return Result.success(f"📊 {result}" if result else "📊 Analysis complete.")
+        r = analyze_file(filepath, question if question else None, "bar")
+        return Result.success(f"📊 {r.value}") if r.ok else r
     except Exception as e:
         return Result.from_exception(e)
 
@@ -733,8 +743,8 @@ def _handle_chat_fallback(ctx) -> Result:
                 log.warning(f"Query rewrite failed: {e}")
 
             log.info(f"Auto-search triggered: {search_query[:80]}")
-            results = web_search(search_query, num_results=3)
-            search_text = format_results(results)
+            results_r = web_search(search_query, num_results=3)
+            search_text = format_results(results_r.value if results_r.ok else [])
             if search_text and "error" not in search_text.lower():
                 today_str = datetime.datetime.now().strftime('%A, %d %B %Y')
                 prompt = (
@@ -749,8 +759,8 @@ def _handle_chat_fallback(ctx) -> Result:
 
         if re.search(r"(i can search|search the web|i don.t have real.time|let me check|want me to.*search)", reply.lower()):
             log.info(f"LLM admitted need for search: {ctx.user_input[:50]}")
-            results = web_search(ctx.user_input, num_results=3)
-            search_text = format_results(results)
+            results_r = web_search(ctx.user_input, num_results=3)
+            search_text = format_results(results_r.value if results_r.ok else [])
             if search_text and "error" not in search_text.lower():
                 today_str = datetime.datetime.now().strftime('%A, %d %B %Y')
                 prompt = (
