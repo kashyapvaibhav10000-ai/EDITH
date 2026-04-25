@@ -510,6 +510,17 @@ def _prepare_weekly_briefing():
         log.error(f"Weekly briefing prep failed: {e}")
 
 
+def _run_self_improve():
+    """Tuesday/Friday 10 AM — scan ArXiv, propose upgrade, push via Telegram."""
+    log.info("🧬 Running self-improvement scan...")
+    try:
+        from self_improve import run_scheduled_improvement
+        summary = run_scheduled_improvement()
+        log.info(f"Self-improve done: {summary[:80]}")
+    except Exception as e:
+        log.error(f"Self-improve failed: {e}")
+
+
 # ──────────────────────────────────────────────
 # Scheduler Setup
 # ──────────────────────────────────────────────
@@ -546,6 +557,10 @@ def _setup_schedule():
 
     # Weekly briefing prep on Sunday evening
     schedule.every().sunday.at("21:00").do(_prepare_weekly_briefing)
+
+    # Self-improvement: ArXiv scan + Telegram push twice a week
+    schedule.every().tuesday.at("10:00").do(_run_self_improve)
+    schedule.every().friday.at("10:00").do(_run_self_improve)
 
     log.info("Scheduled tasks configured:")
     log.info("  03:00 → Nightly maintenance (backup + consolidation + cleanup)")
