@@ -821,8 +821,8 @@ INTENT_HANDLERS = {
 }
 
 
-def dispatch(ctx: DispatchContext) -> str:
-    """Route an intent to its handler via DispatchContext. Returns response string."""
+def _dispatch_single(ctx: DispatchContext) -> str:
+    """Route one intent to its handler. No compound check — called by DAG executor."""
     handler = INTENT_HANDLERS.get(ctx.intent, _handle_chat_fallback)
     try:
         result = handler(ctx)
@@ -831,12 +831,47 @@ def dispatch(ctx: DispatchContext) -> str:
                 return str(result.value)
             log.error(f"Handler [{ctx.intent}] failure: {result.error} ({result.error_type})")
             return _friendly_error(ctx.intent, result.error)
-        # Backward compat: handler returned plain string
         return str(result) if result else _friendly_error(ctx.intent, "No response generated")
     except Exception as e:
         res = Result.from_exception(e)
         log.error(f"Dispatch exception [{ctx.intent}]: {res.error}")
         return _friendly_error(ctx.intent, res.error)
+
+
+def dispatch(ctx: DispatchContext) -> str:
+    """Route an intent to its handler via DispatchContext. Returns response string.
+
+    Compound queries (with 'and then', 'then', 'also', etc.) are automatically
+    split and executed through the DAG executor.
+    """
+    try:
+        from compound_dag import detect_compound, split_into_tasks, DAGExecutor
+        from intent import detect_intent
+
+        if detect_compound(ctx.user_input):
+            tasks = split_into_tasks(ctx.user_input)
+            if len(tasks) >= 2:
+                log.info(f"Compound intent detected — routing {len(tasks)} tasks through DAG")
+
+                def _dag_execute(task_str):
+                    sub_intent = detect_intent(task_str)
+                    sub_ctx = DispatchContext(
+                        user_input=task_str,
+                        intent=sub_intent,
+                        chat_fn=ctx.chat_fn,
+                        source=ctx.source,
+                    )
+                    result_str = _dispatch_single(sub_ctx)
+                    success = not result_str.startswith("Something went wrong") and bool(result_str)
+                    return result_str, success
+
+                dag = DAGExecutor(tasks, _dag_execute)
+                dag_result = dag.execute_all()
+                return dag_result.value if dag_result.ok else dag_result.error
+    except Exception as e:
+        log.warning(f"DAG routing failed, falling back to direct dispatch: {e}")
+
+    return _dispatch_single(ctx)
 
 
 def execute_pending_action(action) -> str:
