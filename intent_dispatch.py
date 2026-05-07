@@ -216,7 +216,15 @@ def _handle_unread_email(ctx) -> Result:
 def _handle_search(ctx) -> Result:
     try:
         from search import web_search, format_results
-        results_r = web_search(ctx.user_input)
+        _ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+        _now = datetime.datetime.now(_ist)
+        _original_query = ctx.user_input
+        _search_query = (
+            f"Today is {_now.strftime('%A %B %d %Y')}, India IST. {_original_query}"
+            if not re.search(r'\b20\d{2}\b', _original_query)
+            else _original_query
+        )
+        results_r = web_search(_search_query)
         results = results_r.value if results_r.ok else []
         search_text = format_results(results)
         if search_text and "error" not in search_text.lower() and "no results" not in search_text.lower():
@@ -292,6 +300,74 @@ def _handle_vision(ctx) -> Result:
         question = ctx.user_input if len(ctx.user_input.split()) > 3 else "What is on my screen right now?"
         r = analyze_screenshot(question)
         return Result.success(f"👁️ {r.value}") if r.ok else r
+    except Exception as e:
+        return Result.from_exception(e)
+
+
+def _handle_open_app(ctx) -> Result:
+    try:
+        import re as _re
+        text = ctx.user_input.lower().strip()
+        m = _re.match(r"^(?:open|launch|start)\s+(.+)$", text)
+        app_name = m.group(1).strip() if m else text
+
+        APP_MAP = {
+            "chrome": ["chromium", "google-chrome", "google-chrome-stable"],
+            "chromium": ["chromium"],
+            "firefox": ["firefox"],
+            "brave": ["brave", "brave-browser"],
+            "opera": ["opera"],
+            "browser": ["chromium", "firefox", "brave"],
+            "terminal": ["konsole", "xterm", "gnome-terminal", "alacritty", "kitty"],
+            "konsole": ["konsole"],
+            "spotify": ["spotify"],
+            "vlc": ["vlc"],
+            "code": ["code"],
+            "vscode": ["code"],
+            "files": ["dolphin", "nautilus", "thunar"],
+            "dolphin": ["dolphin"],
+            "nautilus": ["nautilus"],
+            "calculator": ["kcalc", "gnome-calculator"],
+            "kcalc": ["kcalc"],
+            "steam": ["steam"],
+            "discord": ["discord"],
+            "slack": ["slack"],
+            "telegram": ["telegram-desktop", "telegram"],
+            "notion": ["notion-app", "notion"],
+            "obsidian": ["obsidian"],
+            "gimp": ["gimp"],
+            "inkscape": ["inkscape"],
+            "blender": ["blender"],
+            "thunderbird": ["thunderbird"],
+            "libreoffice": ["libreoffice"],
+            "okular": ["okular"],
+            "mpv": ["mpv"],
+            "celluloid": ["celluloid"],
+            "audacity": ["audacity"],
+            "kdenlive": ["kdenlive"],
+            "handbrake": ["ghb"],
+            "virtualbox": ["virtualbox"],
+            "postman": ["postman"],
+            "insomnia": ["insomnia"],
+            "dbeaver": ["dbeaver"],
+        }
+
+        candidates = APP_MAP.get(app_name, [app_name])
+        import shutil as _shutil
+        binary = next((c for c in candidates if _shutil.which(c)), None)
+
+        if binary:
+            subprocess.Popen([binary], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             start_new_session=True)
+            return Result.success(f"Launched {app_name}.")
+        else:
+            # xdg-open fallback
+            try:
+                subprocess.Popen(["xdg-open", app_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                 start_new_session=True)
+                return Result.success(f"Tried to open {app_name} — let me know if it didn't launch.")
+            except Exception:
+                return Result.success(f"Can't find '{app_name}' on your system. Is it installed?")
     except Exception as e:
         return Result.from_exception(e)
 
@@ -491,6 +567,36 @@ def _handle_decision(ctx) -> Result:
         return Result.from_exception(e)
 
 
+def _handle_morning_briefing(ctx) -> Result:
+    parts = []
+    try:
+        from weather import get_current_weather, format_weather
+        r = get_current_weather()
+        parts.append(f"🌤️ Weather: {format_weather(r.value) if r.ok else 'Unavailable'}")
+    except Exception:
+        parts.append("🌤️ Weather: Unavailable")
+    try:
+        from email_reader import check_inbox
+        r = check_inbox(limit=3, unread_only=True)
+        parts.append(f"📧 Email: {r.value if r.ok else 'Unavailable'}")
+    except Exception:
+        parts.append("📧 Email: Unavailable")
+    try:
+        from calendar_reader import get_today_briefing
+        r = get_today_briefing()
+        parts.append(f"📅 Calendar: {r.value if r.ok else 'Unavailable'}")
+    except Exception:
+        parts.append("📅 Calendar: Unavailable")
+    try:
+        from life_os import format_open_loops
+        loops = format_open_loops()
+        if loops and loops.strip():
+            parts.append(f"🔄 Open loops: {loops}")
+    except Exception:
+        pass
+    return Result.success("Good morning, Boss. 🌅\n\n" + "\n\n".join(parts))
+
+
 def _handle_briefing(ctx) -> Result:
     try:
         from life_os import weekly_briefing
@@ -673,6 +779,9 @@ def _handle_image_gen(ctx) -> Result:
         path = generate_image(prompt)
         if not path:
             return Result.success("🎨 Image generation failed. Check internet connection.")
+        path = os.path.abspath(path)
+        if not os.path.exists(path):
+            return Result.success("File not found")
         try:
             _sp.Popen(["xdg-open", path], stdout=_sp.DEVNULL, stderr=_sp.DEVNULL)
         except Exception:
@@ -735,7 +844,7 @@ def _handle_chat_fallback(ctx) -> Result:
                 "Just ask naturally — I'll figure out what you need."
             )
 
-        if re.search(r"\b(who won|score|result|ipl|cricket|football|election|stock|price|match|latest|today.s|current|news)\b", ctx.user_input.lower()):
+        if re.search(r"\b(who won|score|result|ipl|cricket|football|election|stock|price|match|latest|today|today.s|current|news|recent|now|happening|update)\b", ctx.user_input.lower()):
             search_query = ctx.user_input
             try:
                 from smart_router import smart_call
@@ -764,9 +873,9 @@ def _handle_chat_fallback(ctx) -> Result:
                 )
                 return Result.success(ctx.chat_fn(prompt, intent="search"))
 
-        reply = ctx.chat_fn(ctx.user_input, intent=ctx.intent)
+        reply = ctx.chat_fn(ctx.user_input, intent=ctx.intent, source=getattr(ctx, "source", "widget"))
 
-        if re.search(r"(i can search|search the web|i don.t have real.time|let me check|want me to.*search)", reply.lower()):
+        if re.search(r"(i can search|search the web|don.t have.*real.time|real.time.*access|knowledge cutoff|can.t access|let me check|want me to.*search|up.to.date)", reply.lower()):
             log.info(f"LLM admitted need for search: {ctx.user_input[:50]}")
             results_r = web_search(ctx.user_input, num_results=3)
             search_text = format_results(results_r.value if results_r.ok else [])
@@ -787,6 +896,87 @@ def _handle_chat_fallback(ctx) -> Result:
 # ──────────────────────────────────────────────
 # Dispatch Table
 # ──────────────────────────────────────────────
+def _handle_compact(ctx: DispatchContext) -> Result:
+    """O7 — /compact: trim widget history, clear conversation buffer, consolidate memories."""
+    try:
+        import shared_state as _ss
+        with _ss._widget_history_lock:
+            hist = list(_ss._widget_history.items())
+            keep = dict(hist[-5:]) if len(hist) > 5 else dict(hist)
+            _ss._widget_history.clear()
+            _ss._widget_history.update(keep)
+        mem_count = 0
+        try:
+            from smart_memory import SmartMemory
+            sm = SmartMemory()
+            mem_count = len(sm._hot)
+        except Exception:
+            pass
+        try:
+            import consolidation
+            consolidation.consolidate_memories()
+        except Exception:
+            pass
+        try:
+            import orchestrator as _orch
+            with _orch._history_lock:
+                if len(_orch.conversation_history) > 3:
+                    _orch.conversation_history = _orch.conversation_history[-3:]
+        except Exception:
+            pass
+        return Result.success(f"Context compacted, Boss. Kept last 3 turns and consolidated memories ({mem_count} items).")
+    except Exception as e:
+        return Result.failure(str(e))
+
+
+def _handle_think_level(ctx: DispatchContext) -> Result:
+    """J2 — /think high|low: set FORCE_DEEP_THINK flag."""
+    import re, config
+    m = re.search(r'\b(high|deep|hard|max|low|fast|quick|shallow)\b', ctx.user_input.lower())
+    if not m:
+        return Result.success("Usage: /think high|deep|max|low|fast|quick")
+    level = m.group(1)
+    if level in ("high", "deep", "hard", "max"):
+        config.FORCE_DEEP_THINK = True
+        return Result.success("Deep think ON, Boss. I'll reason step by step and prefer high-context providers.")
+    else:
+        config.FORCE_DEEP_THINK = False
+        return Result.success("Deep think OFF, Boss. Back to fast routing.")
+
+
+def _handle_trace_toggle(ctx: DispatchContext) -> Result:
+    """T5 — /trace on|off: toggle trace logging."""
+    import re, config
+    m = re.search(r'\b(on|off)\b', ctx.user_input.lower())
+    if not m:
+        return Result.success("Usage: /trace on|off")
+    state = m.group(1)
+    config.TRACE_ENABLED = (state == "on")
+    return Result.success(f"Trace logging turned {state}, Boss.")
+
+
+def _handle_agent_stop(ctx: DispatchContext) -> Result:
+    """J3 — stop/cancel/abort agent: set _STOP_AGENT event."""
+    try:
+        from agent import interrupt_agent
+        interrupt_agent()
+        return Result.success("Stopping current task, Boss.")
+    except Exception as e:
+        return Result.failure(str(e))
+
+
+def _handle_list_skills(ctx: DispatchContext) -> Result:
+    """O1 — list skills: return loaded skill names."""
+    try:
+        from skills_loader import list_skills
+        skills = list_skills()
+        if not skills:
+            return Result.success("No skills loaded, Boss.")
+        return Result.success("Loaded skills: " + ", ".join(skills))
+    except Exception as e:
+        return Result.failure(str(e))
+
+
 INTENT_HANDLERS = {
     "weather":         _handle_weather,
     "calendar_today":  _handle_calendar_today,
@@ -799,6 +989,7 @@ INTENT_HANDLERS = {
     "sms":             _handle_sms,
     "phone":           _handle_phone,
     "vision":          _handle_vision,
+    "open_app":        _handle_open_app,
     "shell":           _handle_shell,
     "file_query":      _handle_file_query,
     "create_file":     _handle_create_file,
@@ -808,6 +999,7 @@ INTENT_HANDLERS = {
     "agent":           _handle_agent,
     "council":         _handle_council,
     "decision":        _handle_decision,
+    "morning_briefing": _handle_morning_briefing,
     "briefing":        _handle_briefing,
     "profile":         _handle_profile,
     "self_improve":    _handle_self_improve,
@@ -818,7 +1010,20 @@ INTENT_HANDLERS = {
     "image_gen":       _handle_image_gen,
     "video_summarize": _handle_video_summarize,
     "system_health":   _handle_system_health,
+    "compact":         _handle_compact,
+    "think_level":     _handle_think_level,
+    "trace_toggle":    _handle_trace_toggle,
+    "agent_stop":      _handle_agent_stop,
+    "list_skills":     _handle_list_skills,
 }
+
+
+def _validate_tool_output(output: str, intent: str) -> str:
+    if not output or not output.strip():
+        return f"I couldn't get a result for {intent} right now, Boss."
+    if len(output) > 4000:
+        return output[:4000] + "... [truncated]"
+    return output
 
 
 def _dispatch_single(ctx: DispatchContext) -> str:
@@ -828,10 +1033,11 @@ def _dispatch_single(ctx: DispatchContext) -> str:
         result = handler(ctx)
         if isinstance(result, Result):
             if result.ok:
-                return str(result.value)
+                return _validate_tool_output(str(result.value), ctx.intent)
             log.error(f"Handler [{ctx.intent}] failure: {result.error} ({result.error_type})")
             return _friendly_error(ctx.intent, result.error)
-        return str(result) if result else _friendly_error(ctx.intent, "No response generated")
+        output = str(result) if result else ""
+        return _validate_tool_output(output, ctx.intent) if output else _friendly_error(ctx.intent, "No response generated")
     except Exception as e:
         res = Result.from_exception(e)
         log.error(f"Dispatch exception [{ctx.intent}]: {res.error}")
