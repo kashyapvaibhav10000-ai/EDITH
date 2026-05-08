@@ -38,11 +38,13 @@ def load_vault(password=None):
     if not os.path.exists(VAULT_PATH):
         return {}
         
-    salt = open(VAULT_SALT_PATH, "rb").read()
+    with open(VAULT_SALT_PATH, "rb") as _sf:
+        salt = _sf.read()
     key = get_key(password, salt)
-    f = Fernet(key)
+    fernet = Fernet(key)
     try:
-        data = f.decrypt(open(VAULT_PATH, "rb").read())
+        with open(VAULT_PATH, "rb") as _vf:
+            data = fernet.decrypt(_vf.read())
         return json.loads(data)
     except Exception:
         print("[EDITH Vault] Wrong password or corrupted vault.")
@@ -54,7 +56,8 @@ def save_vault(password, vault):
         with open(VAULT_SALT_PATH, "wb") as sf:
             sf.write(salt)
             
-    salt = open(VAULT_SALT_PATH, "rb").read()
+    with open(VAULT_SALT_PATH, "rb") as _sf:
+        salt = _sf.read()
     key = get_key(password, salt)
     f = Fernet(key)
     encrypted = f.encrypt(json.dumps(vault).encode())

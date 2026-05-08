@@ -1,0 +1,518 @@
+<svg viewBox="0 0 1400 2800" xmlns="http://www.w3.org/2000/svg" width="100%" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <style>
+    .section-label { font-size: 15px; font-weight: 600; fill: #1a1a1a; }
+    .subsection-label { font-size: 11px; font-weight: 600; fill: #1a1a1a; }
+    .normal-text { font-size: 10px; fill: #1a1a1a; }
+    .small-text { font-size: 9px; fill: #1a1a1a; }
+    .meta-text { font-size: 9px; fill: #666; font-family: monospace; }
+  </style>
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#333"/>
+    </marker>
+    <marker id="arrowhead-red" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#DC2626"/>
+    </marker>
+    <marker id="arrowhead-green" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#15803D"/>
+    </marker>
+  </defs>
+
+  <!-- LEGEND -->
+  <rect x="1050" y="15" width="330" height="300" fill="#F9F3EE" stroke="#888" stroke-width="1" rx="4"/>
+  <text x="1060" y="35" font-size="13" font-weight="700">LEGEND &amp; DATA FLOW</text>
+  
+  <rect x="1060" y="45" width="12" height="12" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="1"/>
+  <text x="1080" y="53" font-size="11">Entry points (5 channels)</text>
+  
+  <rect x="1060" y="65" width="12" height="12" fill="#FEF3C7" stroke="#D97706" stroke-width="1"/>
+  <text x="1080" y="73" font-size="11">Intent &amp; Routing logic</text>
+  
+  <rect x="1060" y="85" width="12" height="12" fill="#DCFCE7" stroke="#16A34A" stroke-width="1"/>
+  <text x="1080" y="93" font-size="11">Local LLM (Ollama)</text>
+  
+  <rect x="1060" y="105" width="12" height="12" fill="#DBEAFE" stroke="#2563EB" stroke-width="1"/>
+  <text x="1080" y="113" font-size="11">Cloud providers</text>
+  
+  <rect x="1060" y="125" width="12" height="12" fill="#F3E8FF" stroke="#7C3AED" stroke-width="1"/>
+  <text x="1080" y="133" font-size="11">Memory systems (4 tier)</text>
+  
+  <rect x="1060" y="145" width="12" height="12" fill="#FDE8FF" stroke="#A21CAF" stroke-width="1"/>
+  <text x="1080" y="153" font-size="11">Council (4 personas)</text>
+  
+  <rect x="1060" y="165" width="12" height="12" fill="#FFF7ED" stroke="#EA580C" stroke-width="1"/>
+  <text x="1080" y="173" font-size="11">Tools &amp; Integrations</text>
+  
+  <rect x="1060" y="185" width="12" height="12" fill="#F0FDF4" stroke="#15803D" stroke-width="1"/>
+  <text x="1080" y="193" font-size="11">Background daemons</text>
+  
+  <rect x="1060" y="205" width="12" height="12" fill="#FEE2E2" stroke="#DC2626" stroke-width="1"/>
+  <text x="1080" y="213" font-size="11">In-progress/stub</text>
+  
+  <rect x="1060" y="225" width="12" height="12" fill="#ECFDF5" stroke="#059669" stroke-width="1"/>
+  <text x="1080" y="233" font-size="11">Completed phases</text>
+  
+  <text x="1060" y="260" font-size="9" font-weight="600">MAIN FLOW:</text>
+  <text x="1060" y="275" font-size="9">Input → PreProcess → Intent →</text>
+  <text x="1060" y="290" font-size="9">Router (5-tier) → Council/Direct</text>
+  <text x="1060" y="305" font-size="9">→ Output (6 channels)</text>
+
+  <!-- SECTION 1: ENTRY LAYER (5 Channels) -->
+  <text x="50" y="35" class="section-label">[1] ENTRY LAYER — 5 INPUT CHANNELS</text>
+  
+  <rect x="30" y="50" width="130" height="120" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="2" rx="4"/>
+  <text x="40" y="75" font-size="12" font-weight="600">📋 Terminal CLI</text>
+  <text x="40" y="95" font-size="10">Interactive menu</text>
+  <text x="40" y="110" font-size="10">20 options + chat</text>
+  <text x="40" y="125" font-size="9">$ python edith.py</text>
+  <text x="40" y="140" font-size="8" fill="#666">edith.py:main()</text>
+
+  <rect x="175" y="50" width="130" height="120" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="2" rx="4"/>
+  <text x="185" y="75" font-size="12" font-weight="600">🎨 Widget GUI</text>
+  <text x="185" y="95" font-size="10">Ctrl+Space hotkey</text>
+  <text x="185" y="110" font-size="10">PyQt6 + streaming</text>
+  <text x="185" y="125" font-size="9">voice + text input</text>
+  <text x="185" y="140" font-size="8" fill="#666">edith_widget.py</text>
+
+  <rect x="320" y="50" width="130" height="120" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="2" rx="4"/>
+  <text x="330" y="75" font-size="12" font-weight="600">💬 Telegram Bot</text>
+  <text x="330" y="95" font-size="10">@EdithAI telegram</text>
+  <text x="330" y="110" font-size="10">OAuth token auth</text>
+  <text x="330" y="125" font-size="9">Message &amp; photo</text>
+  <text x="330" y="140" font-size="8" fill="#666">telegram_bot.py</text>
+
+  <rect x="465" y="50" width="130" height="120" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="2" rx="4"/>
+  <text x="475" y="75" font-size="12" font-weight="600">🎤 Voice/Wake</text>
+  <text x="475" y="95" font-size="10">Vosk wake word</text>
+  <text x="475" y="110" font-size="10">Whisper.cpp ASR</text>
+  <text x="475" y="125" font-size="9">Always-on listen</text>
+  <text x="475" y="140" font-size="8" fill="#666">wake_listener.py</text>
+
+  <rect x="610" y="50" width="130" height="120" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="2" rx="4"/>
+  <text x="620" y="75" font-size="12" font-weight="600">🌐 Web API</text>
+  <text x="620" y="95" font-size="10">Port 8001 FastAPI</text>
+  <text x="620" y="110" font-size="10">CORS + rate limit</text>
+  <text x="620" y="125" font-size="9">JSON request/resp</text>
+  <text x="620" y="140" font-size="8" fill="#666">chat_server.py</text>
+
+  <!-- ARROWS: Entry → Pre-Processing -->
+  <line x1="95" y1="170" x2="95" y2="220" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <line x1="240" y1="170" x2="240" y2="220" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <line x1="385" y1="170" x2="385" y2="220" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <line x1="530" y1="170" x2="530" y2="220" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <line x1="675" y1="170" x2="675" y2="220" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- SECTION 2: PRE-PROCESSING PIPELINE -->
+  <text x="50" y="275" font-size="15" font-weight="600">[2] PRE-PROCESSING LAYER</text>
+  
+  <rect x="50" y="290" width="650" height="160" fill="#FEF3C7" stroke="#D97706" stroke-width="2" rx="4"/>
+  <text x="70" y="315" font-size="12" font-weight="600">Pre-Processing Pipeline (3 stages)</text>
+  
+  <rect x="70" y="330" width="180" height="100" fill="#FFFBEB" stroke="#D97706" stroke-width="1" rx="3"/>
+  <text x="80" y="350" font-size="11" font-weight="500">⚠️ Danger Scan</text>
+  <text x="80" y="370" font-size="9">Keywords: delete, format,</text>
+  <text x="80" y="383" font-size="9">uninstall, DROP TABLE</text>
+  <text x="80" y="400" font-size="9">If true: force HITL</text>
+  <text x="80" y="415" font-size="8" fill="#666">orchestrator.py</text>
+  <text x="80" y="425" font-size="8" fill="#666">_danger_scan()</text>
+
+  <rect x="270" y="330" width="180" height="100" fill="#FFFBEB" stroke="#D97706" stroke-width="1" rx="3"/>
+  <text x="280" y="350" font-size="11" font-weight="500">🔒 PII Detection</text>
+  <text x="280" y="370" font-size="9">Email, phone, SSN,</text>
+  <text x="280" y="383" font-size="9">credit card, password</text>
+  <text x="280" y="400" font-size="9">If detected: force local</text>
+  <text x="280" y="415" font-size="8" fill="#666">smart_router.py</text>
+  <text x="280" y="425" font-size="8" fill="#666">detect_pii()</text>
+
+  <rect x="470" y="330" width="200" height="100" fill="#FFFBEB" stroke="#D97706" stroke-width="1" rx="3"/>
+  <text x="480" y="350" font-size="11" font-weight="500">🔀 Compound DAG</text>
+  <text x="480" y="370" font-size="9">Parse: "do X then Y"</text>
+  <text x="480" y="383" font-size="9">Build DAG (max 15 nodes)</text>
+  <text x="480" y="400" font-size="9">Execute sequence</text>
+  <text x="480" y="415" font-size="8" fill="#666">compound_dag.py</text>
+  <text x="480" y="425" font-size="8" fill="#666">DAGExecutor</text>
+
+  <!-- Arrow to Intent -->
+  <line x1="350" y1="450" x2="350" y2="500" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- SECTION 3: INTENT DETECTION & CLASSIFICATION -->
+  <text x="50" y="535" font-size="15" font-weight="600">[3] INTENT DETECTION (18 Categories)</text>
+
+  <rect x="50" y="550" width="650" height="140" fill="#FEF3C7" stroke="#D97706" stroke-width="2" rx="4"/>
+  <text x="70" y="575" font-size="11" font-weight="600">Tiered Intent Inference</text>
+  
+  <rect x="70" y="590" width="140" height="90" fill="#FFFBEB" stroke="#D97706" stroke-width="1" rx="3"/>
+  <text x="80" y="610" font-size="10" font-weight="500">1️⃣ Regex Fast-Path</text>
+  <text x="80" y="630" font-size="8">CALL, SMS, EMAIL,</text>
+  <text x="80" y="641" font-size="8">SHELL, FILE, VAULT</text>
+  <text x="80" y="655" font-size="8" fill="#666">intent.py lines 1-80</text>
+  <text x="80" y="665" font-size="8" fill="#666">~30 regex patterns</text>
+
+  <rect x="230" y="590" width="140" height="90" fill="#FFFBEB" stroke="#D97706" stroke-width="1" rx="3"/>
+  <text x="240" y="610" font-size="10" font-weight="500">2️⃣ ML Fallback</text>
+  <text x="240" y="630" font-size="8">SEARCH, CODE, REASON</text>
+  <text x="240" y="641" font-size="8">LOOKUP, DECISION,</text>
+  <text x="240" y="655" font-size="8" fill="#666">intent.py lines 80-120</text>
+  <text x="240" y="665" font-size="8" fill="#666">5+ classifier models</text>
+
+  <rect x="390" y="590" width="140" height="90" fill="#FFFBEB" stroke="#D97706" stroke-width="1" rx="3"/>
+  <text x="400" y="610" font-size="10" font-weight="500">3️⃣ LLM Fallback</text>
+  <text x="400" y="630" font-size="8">Last resort: ask</text>
+  <text x="400" y="641" font-size="8">Ollama for intent</text>
+  <text x="400" y="655" font-size="8" fill="#666">orchestrator.py</text>
+  <text x="400" y="665" font-size="8" fill="#666">detect_intent()</text>
+
+  <rect x="550" y="590" width="140" height="90" fill="#FFFBEB" stroke="#D97706" stroke-width="1" rx="3"/>
+  <text x="560" y="610" font-size="10" font-weight="500">All 18 Intents</text>
+  <text x="560" y="627" font-size="7">CALL, SMS, EMAIL, VAULT,</text>
+  <text x="560" y="635" font-size="7">SHELL, FILE, SEARCH, RAG,</text>
+  <text x="560" y="643" font-size="7">CODE, COUNCIL, PHONE,</text>
+  <text x="560" y="651" font-size="7">WEATHER, CHAT, VISION,</text>
+  <text x="560" y="659" font-size="7">REASON, DECISION, LOOKUP</text>
+
+  <!-- Arrow to Smart Router -->
+  <line x1="350" y1="690" x2="350" y2="740" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- SECTION 4: SMART ROUTER - 5-TIER PROVIDER SELECTION -->
+  <text x="50" y="775" font-size="15" font-weight="600">[4] SMART ROUTER — 5-TIER PROVIDER SELECTION</text>
+
+  <!-- TIER 1: LOCAL-ONLY GATE -->
+  <rect x="50" y="790" width="650" height="95" fill="#DCFCE7" stroke="#16A34A" stroke-width="2" rx="4"/>
+  <text x="70" y="815" font-size="11" font-weight="600">✅ TIER 1: Local-Only Gate (Air-Gapped Intents)</text>
+  <text x="70" y="835" font-size="9">If: intent ∈ {EMAIL, VAULT, SHELL, RAG, PHONE, CALL, SMS} OR PII detected</text>
+  <text x="70" y="850" font-size="9">Then: Force Ollama (qwen2.5:1.5b) — NEVER cloud, privacy first</text>
+  <text x="70" y="865" font-size="8" fill="#666">smart_router.py:55-60 LOCAL_ONLY_INTENTS()</text>
+  <text x="70" y="875" font-size="8" fill="#666">All cloud routes blocked by PII check</text>
+
+  <!-- TIER 2: CACHE CHECK -->
+  <rect x="50" y="895" width="650" height="90" fill="#DBEAFE" stroke="#2563EB" stroke-width="2" rx="4"/>
+  <text x="70" y="920" font-size="11" font-weight="600">💾 TIER 2: Context Fingerprint Cache (30 min TTL)</text>
+  <text x="70" y="940" font-size="9">Hash: MD5(intent + last_5_queries + user_params) → check cache</text>
+  <text x="70" y="955" font-size="9">If match: return cached response | If miss: continue to TIER 3</text>
+  <text x="70" y="970" font-size="8" fill="#666">smart_memory.py recall() | CONTEXT_FINGERPRINT_ENABLED ✅</text>
+
+  <!-- TIER 3: PROVIDER CHAIN SELECTION -->
+  <rect x="50" y="995" width="650" height="185" fill="#DBEAFE" stroke="#2563EB" stroke-width="2" rx="4"/>
+  <text x="70" y="1020" font-size="11" font-weight="600">🔄 TIER 3: Provider Routing Chain (by task type)</text>
+  
+  <rect x="70" y="1035" width="610" height="28" fill="#EFF6FF" stroke="#2563EB" stroke-width="1" rx="2"/>
+  <text x="80" y="1050" font-size="9">FAST (CODE/SYNTHESIS): Groq (llama-3.3-70b) → OpenRouter → NVIDIA → Ollama</text>
+  
+  <rect x="70" y="1070" width="610" height="28" fill="#EFF6FF" stroke="#2563EB" stroke-width="1" rx="2"/>
+  <text x="80" y="1085" font-size="9">IMAGE (VISION): Gemini (2.0-flash) → NVIDIA NIM → Ollama</text>
+  
+  <rect x="70" y="1105" width="610" height="28" fill="#EFF6FF" stroke="#2563EB" stroke-width="1" rx="2"/>
+  <text x="80" y="1120" font-size="9">GENERAL (CHAT/SEARCH): Gemini → Groq → OpenRouter → Ollama</text>
+  
+  <rect x="70" y="1140" width="610" height="28" fill="#EFF6FF" stroke="#2563EB" stroke-width="1" rx="2"/>
+  <text x="80" y="1155" font-size="9">LOCAL ONLY: Ollama (qwen2.5:1.5b) — no fallback, no cloud</text>
+  
+  <text x="70" y="1175" font-size="8" fill="#666">smart_router.py:ROUTING_CHAINS dict | provider selection logic lines 140-200</text>
+
+  <!-- TIER 4: CIRCUIT BREAKER -->
+  <rect x="50" y="1190" width="650" height="85" fill="#DBEAFE" stroke="#2563EB" stroke-width="2" rx="4"/>
+  <text x="70" y="1215" font-size="11" font-weight="600">🔌 TIER 4: Circuit Breaker (Failure Detection)</text>
+  <text x="70" y="1235" font-size="9">3 failures → OPEN (60s cooldown) | 1 success → CLOSED | timeout → OPEN</text>
+  <text x="70" y="1255" font-size="8" fill="#666">circuit_breaker.py check_state() | Per-provider fault tracking</text>
+
+  <!-- TIER 5: DAILY LIMITS & FALLBACK -->
+  <rect x="50" y="1285" width="650" height="100" fill="#DBEAFE" stroke="#2563EB" stroke-width="2" rx="4"/>
+  <text x="70" y="1310" font-size="11" font-weight="600">📊 TIER 5: Daily Rate Limits &amp; Fallback Chain</text>
+  <text x="70" y="1330" font-size="9">Groq: 200/day | Gemini: 1500/day | NVIDIA: 100/day | OpenRouter: 500/day</text>
+  <text x="70" y="1345" font-size="9">If limit hit: try next provider in chain | Chain exhausted: fallback Ollama</text>
+  <text x="70" y="1360" font-size="8" fill="#666">smart_router.py:_daily_calls dict | _is_provider_cooled_down() lines 240-260</text>
+
+  <!-- Arrow to Council Decision -->
+  <line x1="350" y1="1385" x2="350" y2="1435" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- SECTION 5: COUNCIL vs DIRECT DECISION -->
+  <text x="50" y="1470" font-size="15" font-weight="600">[5] REASONING Layer: COUNCIL vs DIRECT</text>
+
+  <g>
+    <!-- Decision Diamond -->
+    <polygon points="350,1490 410,1540 350,1590 290,1540" fill="#FDE8FF" stroke="#A21CAF" stroke-width="2"/>
+    <text x="330" y="1535" font-size="9" font-weight="600">Council</text>
+    <text x="325" y="1550" font-size="9" font-weight="600">needed?</text>
+  </g>
+
+  <!-- YES: Council Path -->
+  <line x1="410" y1="1540" x2="510" y2="1540" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <text x="450" y="1535" font-size="9" font-weight="700">YES</text>
+
+  <!-- 4 Council Personas (run in parallel) -->
+  <rect x="510" y="1470" width="150" height="110" fill="#FDE8FF" stroke="#A21CAF" stroke-width="2" rx="4"/>
+  <text x="520" y="1490" font-size="10" font-weight="600">🧠 Strategist</text>
+  <text x="520" y="1508" font-size="8">Long-term advantage,</text>
+  <text x="520" y="1519" font-size="8">positioning, leverage</text>
+  <text x="520" y="1540" font-size="8" fill="#666">council.py</text>
+  <text x="520" y="1550" font-size="8" fill="#666">persona_system</text>
+  <text x="520" y="1560" font-size="8" fill="#666">prompts</text>
+
+  <rect x="670" y="1470" width="150" height="110" fill="#FDE8FF" stroke="#A21CAF" stroke-width="2" rx="4"/>
+  <text x="680" y="1490" font-size="10" font-weight="600">🔍 Critic</text>
+  <text x="680" y="1508" font-size="8">Adversarial review,</text>
+  <text x="680" y="1519" font-size="8">failure modes, risks</text>
+  <text x="680" y="1540" font-size="8" fill="#666">Parallel execution</text>
+  <text x="680" y="1550" font-size="8" fill="#666">in concurrent</text>
+  <text x="680" y="1560" font-size="8" fill="#666">futures pool</text>
+
+  <!-- Synthesis Box -->
+  <rect x="590" y="1595" width="150" height="95" fill="#FDE8FF" stroke="#A21CAF" stroke-width="2" rx="4"/>
+  <text x="600" y="1615" font-size="11" font-weight="600">synthesis_layer()</text>
+  <text x="600" y="1633" font-size="9">Weigh 4 personas,</text>
+  <text x="600" y="1645" font-size="9">rank by confidence,</text>
+  <text x="600" y="1657" font-size="9">select best reasoning</text>
+  <text x="600" y="1675" font-size="8" fill="#666">council.py:run_council()</text>
+
+  <!-- NO: Direct Path -->
+  <line x1="290" y1="1540" x2="150" y2="1540" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <text x="180" y="1535" font-size="9" font-weight="700">NO</text>
+
+  <rect x="30" y="1470" width="120" height="110" fill="#DBEAFE" stroke="#2563EB" stroke-width="2" rx="4"/>
+  <text x="40" y="1490" font-size="11" font-weight="600">🚀 Direct LLM</text>
+  <text x="40" y="1510" font-size="9">Fast path for</text>
+  <text x="40" y="1523" font-size="9">simple queries</text>
+  <text x="40" y="1540" font-size="8" fill="#666">smart_router</text>
+  <text x="40" y="1550" font-size="8" fill="#666">.smart_call()</text>
+  <text x="40" y="1560" font-size="8" fill="#666">priority intents</text>
+
+  <!-- Both paths converge to HITL -->
+  <line x1="590" y1="1595" x2="500" y2="1720" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <line x1="90" y1="1580" x2="500" y2="1720" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- SECTION 6: OUTPUT LAYER - HITL GATE & DELIVERY -->
+  <text x="50" y="1755" font-size="15" font-weight="600">[6] OUTPUT LAYER — HITL GATE &amp; RESPONSE DELIVERY</text>
+
+  <rect x="50" y="1770" width="650" height="115" fill="#FFF7ED" stroke="#EA580C" stroke-width="2" rx="4"/>
+  <text x="70" y="1795" font-size="11" font-weight="600">🔓 HITL Confirmation Gate (Human-in-the-Loop)</text>
+  <text x="70" y="1815" font-size="9">Risky ops: DELETE FILE, SHELL COMMAND, PHONE CALL, SMS, UNINSTALL</text>
+  <text x="70" y="1830" font-size="9">User confirms YES/NO → execute_pending_action() OR rollback &amp; notify</text>
+  <text x="70" y="1850" font-size="8" fill="#666">intent_dispatch.py:set_pending_action() | HITL state machine</text>
+  <text x="70" y="1860" font-size="8" fill="#666">Safe operations bypass HITL (READ, SEARCH, CHAT, etc.)</text>
+
+  <!-- Response branching -->
+  <line x1="350" y1="1885" x2="350" y2="1925" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- 6 Output Channels in parallel -->
+  <rect x="30" y="1925" width="105" height="100" fill="#FFF7ED" stroke="#EA580C" stroke-width="2" rx="4"/>
+  <text x="40" y="1945" font-size="10" font-weight="600">🔊 TTS Speaker</text>
+  <text x="40" y="1963" font-size="8">Piper TTS daemon</text>
+  <text x="40" y="1975" font-size="8">VAD mute guard</text>
+  <text x="40" y="1992" font-size="8" fill="#666">voice.py speak()</text>
+
+  <rect x="145" y="1925" width="105" height="100" fill="#FFF7ED" stroke="#EA580C" stroke-width="2" rx="4"/>
+  <text x="155" y="1945" font-size="10" font-weight="600">💻 PyQt6 Widget</text>
+  <text x="155" y="1963" font-size="8">Bubble chat UI</text>
+  <text x="155" y="1975" font-size="8">Stream response</text>
+  <text x="155" y="1992" font-size="8" fill="#666">edith_widget.py</text>
+
+  <rect x="260" y="1925" width="105" height="100" fill="#FFF7ED" stroke="#EA580C" stroke-width="2" rx="4"/>
+  <text x="270" y="1945" font-size="10" font-weight="600">💬 Telegram</text>
+  <text x="270" y="1963" font-size="8">Send messages</text>
+  <text x="270" y="1975" font-size="8">Media support</text>
+  <text x="270" y="1992" font-size="8" fill="#666">telegram_bot.py</text>
+
+  <rect x="375" y="1925" width="105" height="100" fill="#FFF7ED" stroke="#EA580C" stroke-width="2" rx="4"/>
+  <text x="385" y="1945" font-size="10" font-weight="600">⌨️ CLI Terminal</text>
+  <text x="385" y="1963" font-size="8">Print stdout</text>
+  <text x="385" y="1975" font-size="8">Colored output</text>
+  <text x="385" y="1992" font-size="8" fill="#666">orchestrator.py</text>
+
+  <rect x="490" y="1925" width="105" height="100" fill="#FFF7ED" stroke="#EA580C" stroke-width="2" rx="4"/>
+  <text x="500" y="1945" font-size="10" font-weight="600">📊 Trace Log</text>
+  <text x="500" y="1963" font-size="8">SQLite trace_log.db</text>
+  <text x="500" y="1975" font-size="8">Feedback tagging</text>
+  <text x="500" y="1992" font-size="8" fill="#666">trace_logger.py</text>
+
+  <rect x="605" y="1925" width="105" height="100" fill="#FFF7ED" stroke="#EA580C" stroke-width="2" rx="4"/>
+  <text x="615" y="1945" font-size="10" font-weight="600">📱 KDE Notify</text>
+  <text x="615" y="1963" font-size="8">Phone desktop</text>
+  <text x="615" y="1975" font-size="8">push notification</text>
+  <text x="615" y="1992" font-size="8" fill="#666">phone.py notify()</text>
+
+  <!-- SECTION 7: MEMORY ARCHITECTURE (4-Tier Hybrid) -->
+  <text x="50" y="2050" font-size="15" font-weight="600">[7] MEMORY OPERATIONS — 4-TIER HYBRID STORAGE</text>
+
+  <rect x="50" y="2065" width="650" height="95" fill="#F3E8FF" stroke="#7C3AED" stroke-width="2" rx="4"/>
+  <text x="70" y="2090" font-size="11" font-weight="600">📖 READ PATH (Before LLM): Hierarchical recall</text>
+  <text x="70" y="2110" font-size="9">1. RAM cache (SmartMemoryManager, LRU OrderedDict, &lt;100MB)</text>
+  <text x="70" y="2125" font-size="9">2. SQLite FTS (memories_archive.db) → 3. ChromaDB episodic → 4. Graph triples (JSON)</text>
+  <text x="70" y="2145" font-size="8" fill="#666">smart_memory.py recall() | episodic_memory.recall_episodes()</text>
+
+  <rect x="50" y="2170" width="650" height="105" fill="#F3E8FF" stroke="#7C3AED" stroke-width="2" rx="4"/>
+  <text x="70" y="2195" font-size="11" font-weight="600">💾 WRITE PATH (After Response): Multi-store persist</text>
+  <text x="70" y="2215" font-size="9">1. session_memory.jsonl append → 2. SmartMemoryManager (RAM+SQLite hot) → 3. ChromaDB episodic ingest</text>
+  <text x="70" y="2230" font-size="9">4. Extract knowledge triples from response → 5. Ingest graph triples → 6. cognitive_profile update + drift detect</text>
+  <text x="70" y="2250" font-size="8" fill="#666">session.py end_session() | graph_memory.extract_and_store_triples()</text>
+  <text x="70" y="2260" font-size="8" fill="#666">consolidation.py nightly merge, cognitive_profile.update_profile()</text>
+
+  <!-- SECTION 8: TOOLS & INTEGRATIONS (Intent-Triggered) -->
+  <text x="50" y="2290" font-size="15" font-weight="600">[8] TOOLS &amp; INTEGRATIONS LAYER (Triggered by Intent)</text>
+
+  <rect x="50" y="2305" width="650" height="220" fill="#FFF7ED" stroke="#EA580C" stroke-width="2" rx="4"/>
+  <text x="70" y="2330" font-size="10" font-weight="600">External Services &amp; Capabilities (intent_dispatch.dispatch() delegation)</text>
+  
+  <!-- Row 1: Search & Knowledge -->
+  <rect x="70" y="2345" width="85" height="45" fill="#FFEDD5" stroke="#EA580C" stroke-width="1" rx="2"/>
+  <text x="75" y="2360" font-size="9" font-weight="500">🔍 Search</text>
+  <text x="75" y="2373" font-size="7" fill="#666">search.py</text>
+  <text x="75" y="2381" font-size="7" fill="#666">SearXNG API</text>
+
+  <rect x="165" y="2345" width="85" height="45" fill="#FFEDD5" stroke="#EA580C" stroke-width="1" rx="2"/>
+  <text x="170" y="2360" font-size="9" font-weight="500">📚 RAG</text>
+  <text x="170" y="2373" font-size="7" fill="#666">rag.py</text>
+  <text x="170" y="2381" font-size="7" fill="#666">LlamaIndex</text>
+
+  <rect x="260" y="2345" width="85" height="45" fill="#FFEDD5" stroke="#EA580C" stroke-width="1" rx="2"/>
+  <text x="265" y="2360" font-size="9" font-weight="500">💻 Code RAG</text>
+  <text x="265" y="2373" font-size="7" fill="#666">code_rag.py</text>
+  <text x="265" y="2381" font-size="7" fill="#666">AST indexing</text>
+
+  <rect x="355" y="2345" width="85" height="45" fill="#FFEDD5" stroke="#EA580C" stroke-width="1" rx="2"/>
+  <text x="360" y="2360" font-size="9" font-weight="500">🖼️ Vision</text>
+  <text x="360" y="2373" font-size="7" fill="#666">vision.py</text>
+  <text x="360" y="2381" font-size="7" fill="#666">llava-phi3</text>
+
+  <rect x="450" y="2345" width="85" height="45" fill="#FFEDD5" stroke="#EA580C" stroke-width="1" rx="2"/>
+  <text x="455" y="2360" font-size="9" font-weight="500">🎙️ Voice</text>
+  <text x="455" y="2373" font-size="7" fill="#666">voice.py</text>
+  <text x="455" y="2381" font-size="7" fill="#666">Whisper.cpp</text>
+
+  <rect x="545" y="2345" width="105" height="45" fill="#FFEDD5" stroke="#EA580C" stroke-width="1" rx="2"/>
+  <text x="550" y="2360" font-size="9" font-weight="500">🎨 Image Gen</text>
+  <text x="550" y="2373" font-size="7" fill="#666">image_gen.py</text>
+  <text x="550" y="2381" font-size="7" fill="#666">DALL-E API</text>
+
+  <!-- Row 2: Communications -->
+  <rect x="70" y="2400" width="85" height="45" fill="#FFEDD5" stroke="#EA580C" stroke-width="1" rx="2"/>
+  <text x="75" y="2415" font-size="9" font-weight="500">📧 Email</text>
+  <text x="75" y="2428" font-size="7" fill="#666">email_reader.py</text>
+  <text x="75" y="2436" font-size="7" fill="#666">Gmail OAuth</text>
+
+  <rect x="165" y="2400" width="85" height="45" fill="#FFEDD5" stroke="#EA580C" stroke-width="1" rx="2"/>
+  <text x="170" y="2415" font-size="9" font-weight="500">📱 Phone</text>
+  <text x="170" y="2428" font-size="7" fill="#666">phone.py</text>
+  <text x="170" y="2436" font-size="7" fill="#666">KDE Connect</text>
+
+  <rect x="260" y="2400" width="85" height="45" fill="#FFEDD5" stroke="#EA580C" stroke-width="1" rx="2"/>
+  <text x="265" y="2415" font-size="9" font-weight="500">📞 SMS</text>
+  <text x="265" y="2428" font-size="7" fill="#666">phone.py</text>
+  <text x="265" y="2436" font-size="7" fill="#666">Twilio API</text>
+
+  <rect x="355" y="2400" width="85" height="45" fill="#FFEDD5" stroke="#EA580C" stroke-width="1" rx="2"/>
+  <text x="360" y="2415" font-size="9" font-weight="500">💬 WhatsApp</text>
+  <text x="360" y="2428" font-size="7" fill="#666">whatsapp.py</text>
+  <text x="360" y="2436" font-size="7" fill="#666">Bridge stub</text>
+
+  <rect x="450" y="2400" width="85" height="45" fill="#FFEDD5" stroke="#EA580C" stroke-width="1" rx="2"/>
+  <text x="455" y="2415" font-size="9" font-weight="500">📅 Calendar</text>
+  <text x="455" y="2428" font-size="7" fill="#666">calendar.py</text>
+  <text x="455" y="2436" font-size="7" fill="#666">Google API</text>
+
+  <rect x="545" y="2400" width="105" height="45" fill="#FFEDD5" stroke="#EA580C" stroke-width="1" rx="2"/>
+  <text x="550" y="2415" font-size="9" font-weight="500">⛅ Weather</text>
+  <text x="550" y="2428" font-size="7" fill="#666">weather.py</text>
+  <text x="550" y="2436" font-size="7" fill="#666">OpenWeather</text>
+
+  <!-- Row 3: Execution & Data -->
+  <rect x="70" y="2455" width="85" height="45" fill="#FFEDD5" stroke="#EA580C" stroke-width="1" rx="2"/>
+  <text x="75" y="2470" font-size="9" font-weight="500">🐳 Docker</text>
+  <text x="75" y="2483" font-size="7" fill="#666">sandbox.py</text>
+  <text x="75" y="2491" font-size="7" fill="#666">Lazy init</text>
+
+  <rect x="165" y="2455" width="85" height="45" fill="#FFEDD5" stroke="#EA580C" stroke-width="1" rx="2"/>
+  <text x="170" y="2470" font-size="9" font-weight="500">📊 Data Analyst</text>
+  <text x="170" y="2483" font-size="7" fill="#666">data_analyst.py</text>
+  <text x="170" y="2491" font-size="7" fill="#666">Pandas, plots</text>
+
+  <rect x="260" y="2455" width="85" height="45" fill="#FFEDD5" stroke="#EA580C" stroke-width="1" rx="2"/>
+  <text x="265" y="2470" font-size="9" font-weight="500">️🎬 Video</text>
+  <text x="265" y="2483" font-size="7" fill="#666">video_summ.py</text>
+  <text x="265" y="2491" font-size="7" fill="#666">FFmpeg</text>
+
+  <rect x="355" y="2455" width="85" height="45" fill="#FFEDD5" stroke="#EA580C" stroke-width="1" rx="2"/>
+  <text x="360" y="2470" font-size="9" font-weight="500">🔐 Vault</text>
+  <text x="360" y="2483" font-size="7" fill="#666">vault.py</text>
+  <text x="360" y="2491" font-size="7" fill="#666">Fernet cyph</text>
+
+  <rect x="450" y="2455" width="85" height="45" fill="#FFEDD5" stroke="#EA580C" stroke-width="1" rx="2"/>
+  <text x="455" y="2470" font-size="9" font-weight="500">🔧 MCP</text>
+  <text x="455" y="2483" font-size="7" fill="#666">mcp_bridge.py</text>
+  <text x="455" y="2491" font-size="7" fill="#666">Protocol</text>
+
+  <rect x="545" y="2455" width="105" height="45" fill="#FFEDD5" stroke="#EA580C" stroke-width="1" rx="2"/>
+  <text x="550" y="2470" font-size="9" font-weight="500">🛠️ File/Shell</text>
+  <text x="550" y="2483" font-size="7" fill="#666">tools.py</text>
+  <text x="550" y="2491" font-size="7" fill="#666">interactive=False</text>
+
+  <!-- SECTION 9: BACKGROUND SYSTEMS (Independent Daemons) -->
+  <text x="50" y="2535" font-size="15" font-weight="600">[9] BACKGROUND SYSTEMS — INDEPENDENT DAEMONS</text>
+
+  <rect x="50" y="2550" width="650" height="155" fill="#F0FDF4" stroke="#15803D" stroke-width="2" stroke-dasharray="5,3" rx="4"/>
+  <text x="70" y="2575" font-size="11" font-weight="600">background_daemon.py: Supervised subprocess watchdog</text>
+  
+  <rect x="70" y="2590" width="140" height="100" fill="#F0FDF4" stroke="#15803D" stroke-width="1" rx="2"/>
+  <text x="80" y="2610" font-size="10" font-weight="500">🎯 Process Monitor</text>
+  <text x="80" y="2628" font-size="8">Track chat_server PID</text>
+  <text x="80" y="2640" font-size="8">Auto-restart if crash</text>
+  <text x="80" y="2657" font-size="8" fill="#666">background_daemon.py</text>
+  <text x="80" y="2667" font-size="8" fill="#666">watchdog_thread</text>
+
+  <rect x="220" y="2590" width="140" height="100" fill="#F0FDF4" stroke="#15803D" stroke-width="1" rx="2"/>
+  <text x="230" y="2610" font-size="10" font-weight="500">🛠️ Nightly Maintenance</text>
+  <text x="230" y="2628" font-size="8">3am scheduled: backup,</text>
+  <text x="230" y="2640" font-size="8">consolidate archives,</text>
+  <text x="230" y="2657" font-size="8" fill="#666">schedule + cron</text>
+  <text x="230" y="2667" font-size="8" fill="#666">consolidation.py</text>
+
+  <rect x="370" y="2590" width="140" height="100" fill="#F0FDF4" stroke="#15803D" stroke-width="1" rx="2"/>
+  <text x="380" y="2610" font-size="10" font-weight="500">⏰ Prefetch Engine</text>
+  <text x="380" y="2628" font-size="8">7am weather, 8am report</text>
+  <text x="380" y="2640" font-size="8">12pm graph extraction</text>
+  <text x="380" y="2657" font-size="8" fill="#666">smart_memory cache</text>
+  <text x="380" y="2667" font-size="8" fill="#666">warm-up</text>
+
+  <rect x="520" y="2590" width="140" height="100" fill="#F0FDF4" stroke="#15803D" stroke-width="1" rx="2"/>
+  <text x="530" y="2610" font-size="10" font-weight="500">❤️ Proactive Monitor</text>
+  <text x="530" y="2628" font-size="8">5m KDE heartbeat,</text>
+  <text x="530" y="2640" font-size="8">disk/RAM alerts</text>
+  <text x="530" y="2657" font-size="8" fill="#666">monitor.py</text>
+  <text x="530" y="2667" font-size="8" fill="#666">health_check()</text>
+
+  <!-- SECTION 10: PROJECT PHASE STATUS -->
+  <text x="50" y="2735" font-size="15" font-weight="600">[10] PROJECT STATUS — PHASES &amp; COMPLETENESS</text>
+
+  <rect x="50" y="2750" width="315" height="255" fill="#ECFDF5" stroke="#059669" stroke-width="2" rx="4"/>
+  <text x="70" y="2775" font-size="11" font-weight="600">✅ COMPLETE PHASES</text>
+  <text x="70" y="2795" font-size="8">• Phase 16: Supervised agent mode</text>
+  <text x="70" y="2807" font-size="8">• Phase 17: RAG chunk retrieval</text>
+  <text x="70" y="2819" font-size="8">• Phase 18: RAG reranking</text>
+  <text x="70" y="2831" font-size="8">• Phase 19: Vision + OCR</text>
+  <text x="70" y="2843" font-size="8">• Phase 20: KDE Connect</text>
+  <text x="70" y="2855" font-size="8">• Phase 21: Trace Logger</text>
+  <text x="70" y="2867" font-size="8">• Phase 22: Circuit Breaker</text>
+  <text x="70" y="2879" font-size="8">• Phase 23: Smart Routing</text>
+  <text x="70" y="2891" font-size="8">• Phase 24: Graph Memory</text>
+  <text x="70" y="2903" font-size="8">• Phase 25: Test Harness</text>
+  <text x="70" y="2920" font-size="8" font-weight="600">✅ 20/20 tests pass</text>
+  <text x="70" y="2932" font-size="8" font-weight="600">✅ All syntax clean</text>
+  <text x="70" y="2944" font-size="8" font-weight="600">✅ No import errors</text>
+  <text x="70" y="2956" font-size="8" font-weight="600">✅ Lazy init working</text>
+
+  <rect x="375" y="2750" width="325" height="255" fill="#FEE2E2" stroke="#DC2626" stroke-width="2" rx="4"/>
+  <text x="395" y="2775" font-size="11" font-weight="600">🔄 IN PROGRESS / KNOWN ISSUES</text>
+  <text x="395" y="2795" font-size="8">• Phase 26: Monitors (scheduled)</text>
+  <text x="395" y="2807" font-size="8">• WhatsApp: Bridge STUB mode</text>
+  <text x="395" y="2819" font-size="8">  (httpd not reachable)</text>
+  <text x="395" y="2831" font-size="8">• agent.py: placeholder</text>
+  <text x="395" y="2843" font-size="8">  (not yet integrated)</text>
+  <text x="395" y="2855" font-size="8"></text>
+  <text x="395" y="2867" font-size="8" font-weight="600">RECENT FIXES:</text>
+  <text x="395" y="2879" font-size="8">✅ devlog.py: fixed startup</text>
+  <text x="395" y="2891" font-size="8">  (deferred report +1800s)</text>
+  <text x="395" y="2903" font-size="8">✅ test_harness.py: WhatsApp</text>
+  <text x="395" y="2915" font-size="8">  updated for bridge stub</text>
+  <text x="395" y="2927" font-size="8">✅ chat_server: now responsive</text>
+  <text x="395" y="2939" font-size="8">  (port 8001 &lt;1s boot)</text>
+  <text x="395" y="2951" font-size="8">✅ All 8 QA checks verify</text>
+</svg>

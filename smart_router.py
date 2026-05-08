@@ -35,10 +35,17 @@ You are sharp, warm, and direct. Talk like a brilliant friend, not a corporate b
 Match his energy — casual when he's casual, deep when he's deep.
 Never say Great question or Certainly. Just answer. No filler, no padding.
 Be honest even when uncomfortable. Never break character."""
-GROQ_KEY = vault.get_secret("GROQ_API_KEY", "") or os.getenv("GROQ_API_KEY", "")
-GEMINI_KEY = vault.get_secret("GEMINI_API_KEY", "") or os.getenv("GEMINI_API_KEY", "")
-NVIDIA_KEY = vault.get_secret("NVIDIA_API_KEY", "") or os.getenv("NVIDIA_API_KEY", "")
-OPENROUTER_KEY = vault.get_secret("OPENROUTER_API_KEY", "") or os.getenv("OPENROUTER_API_KEY", "")
+GROQ_KEY = vault.get_secret("GROQ_API_KEY")
+GEMINI_KEY = vault.get_secret("GEMINI_API_KEY")
+NVIDIA_KEY = vault.get_secret("NVIDIA_API_KEY")
+OPENROUTER_KEY = vault.get_secret("OPENROUTER_API_KEY")
+
+
+def _require_key(key_value: str, key_name: str) -> str:
+    """Raise a clear error if a vault key is missing (called at use-time, not import-time)."""
+    if not key_value:
+        raise RuntimeError(f"{key_name} not found in vault. Run: python vault.py set {key_name} <value>")
+    return key_value
 
 # ──────────────────────────────────────────────
 # Provider Models (free tier best picks)
@@ -107,12 +114,13 @@ CLOUD_OK_INTENTS = {
 # Each task type has a preferred provider order.
 # The router tries them in sequence until one succeeds.
 
-ROUTING_CHAINS = {
-    "system":       ["openrouter", "groq", "gemini", "nvidia", "ollama"],
-    "conversation": ["openrouter", "groq", "gemini", "nvidia", "ollama"],
-    "coding":       ["openrouter", "nvidia", "gemini", "groq", "ollama"],
-    "reasoning":    ["openrouter", "nvidia", "gemini", "groq", "ollama"],
-}
+# T7: routing chains now config-driven — loaded at call time via get_routing_chains()
+from config import get_routing_chains as _get_routing_chains
+
+def _routing_chains() -> dict:
+    return _get_routing_chains()
+
+ROUTING_CHAINS = _routing_chains()  # module-level default; live calls use _routing_chains()
 
 # Intent → Task Type mapping
 INTENT_TASK_TYPE = {
@@ -130,6 +138,8 @@ INTENT_TASK_TYPE = {
     # Reasoning tasks (Council, Decisions, Self-Improvement)
     "council": "reasoning", "decision": "reasoning",
     "reason": "reasoning", "self_improve": "reasoning",
+    # Session lifecycle
+    "session_end": "conversation",
 }
 
 # ──────────────────────────────────────────────
@@ -144,7 +154,6 @@ MAX_COOLDOWN = 300         # Max cooldown: 5 minutes
 
 # Daily rate limit counters
 _daily_calls = {"groq": 0, "gemini": 0, "nvidia": 0, "openrouter": 0, "ollama": 0}
-_daily_reset_time = time.time()
 DAILY_LIMITS = {"groq": 150, "gemini": 250, "nvidia": 80, "openrouter": 80, "ollama": 999999}
 
 # Response cache (LRU, 100 entries, 1 hour TTL)
@@ -160,8 +169,49 @@ _INTERNET_CHECK_INTERVAL = 30.0
 # Response latency tracking — rolling window of 20 samples per provider
 _response_times: dict[str, deque] = {p: deque(maxlen=20) for p in ("groq", "gemini", "nvidia", "openrouter", "ollama")}
 
+# Latest single latency per provider — exposed via /api/provider-latencies
+_provider_latencies: dict[str, float] = {}
+
+
+def _call_with_latency_track(provider_name: str, call_fn, *args, **kwargs):
+    """Call a provider fn and record its latency. Slow (>3s) providers get a warning."""
+    _t0 = time.time()
+    try:
+        result = call_fn(*args, **kwargs)
+        latency = time.time() - _t0
+        _provider_latencies[provider_name] = round(latency, 3)
+        if latency > 3.0:
+            log.warning(f"Provider {provider_name} slow: {latency:.1f}s")
+        return result
+    except Exception:
+        _provider_latencies[provider_name] = 999.0
+        raise
+
 # Short query threshold — prefer Groq for snappy one-liners
 _SHORT_QUERY_CHARS = 200
+
+
+_last_call_stats: dict = {"provider": "", "tokens_in": 0, "tokens_out": 0, "cost_usd": 0.0}
+
+
+def get_last_call_stats() -> dict:
+    """Return stats from the most recent smart_call (provider, token estimates, cost)."""
+    return dict(_last_call_stats)
+
+
+def _score_complexity(query: str) -> str:
+    """Returns 'low', 'medium', or 'high' complexity for routing decisions."""
+    q = query.lower().strip()
+    word_count = len(q.split())
+    low_signals = ["what time", "weather", "reminder", "timer", "hello",
+                   "thanks", "ok", "yes", "no", "stop", "play", "pause"]
+    if any(s in q for s in low_signals) or word_count < 8:
+        return "low"
+    high_signals = ["explain", "analyze", "compare", "debug", "review",
+                    "architecture", "plan", "research", "summarize", "write"]
+    if any(s in q for s in high_signals) or word_count > 40:
+        return "high"
+    return "medium"
 
 
 def _has_internet() -> bool:
@@ -181,52 +231,72 @@ def _has_internet() -> bool:
 
 
 def _init_usage_db():
-    """Initialize the API usage table in the archive DB."""
+    """Initialize the API usage and api_costs tables in the archive DB."""
     try:
-        conn = sqlite3.connect(MEMORY_ARCHIVE_PATH)
-        cursor = conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS api_usage (
-                provider TEXT PRIMARY KEY,
-                date TEXT,
-                call_count INTEGER
-            )
-        """)
-        conn.commit()
-        conn.close()
+        import db_pool
+        with db_pool.connection(MEMORY_ARCHIVE_PATH) as conn:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS api_usage (
+                    provider TEXT PRIMARY KEY,
+                    date TEXT,
+                    call_count INTEGER
+                )
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS api_costs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp REAL NOT NULL,
+                    provider TEXT NOT NULL,
+                    model TEXT,
+                    input_tokens_est INTEGER,
+                    output_tokens_est INTEGER,
+                    cost_usd_est REAL DEFAULT 0.0
+                )
+            """)
+            conn.commit()
     except Exception as e:
         log.error(f"Failed to init usage DB: {e}")
 
 _init_usage_db()
+
+
+def _log_api_cost(provider: str, model: str, prompt: str, response: str):
+    """J4 — log per-call token estimates to api_costs table."""
+    try:
+        input_est = int(len(prompt.split()) * 1.3)
+        output_est = int(len(response.split()) * 1.3)
+        import db_pool
+        with db_pool.connection(MEMORY_ARCHIVE_PATH) as conn:
+            conn.execute(
+                "INSERT INTO api_costs (timestamp, provider, model, input_tokens_est, output_tokens_est, cost_usd_est) VALUES (?,?,?,?,?,?)",
+                (time.time(), provider, model, input_est, output_est, 0.0)
+            )
+            conn.commit()
+    except Exception as e:
+        log.debug(f"api_cost log failed: {e}")
 
 def _reset_daily_if_needed():
     """Reset daily call counters in DB if the day has changed."""
     global _daily_calls
     today = datetime.date.today().isoformat()
     try:
-        conn = sqlite3.connect(MEMORY_ARCHIVE_PATH)
-        cursor = conn.cursor()
-        
-        # Check current date in DB for any provider
-        cursor.execute("SELECT date FROM api_usage LIMIT 1")
-        row = cursor.fetchone()
-        
-        if not row or row[0] != today:
-            log.info(f"New day ({today}) — resetting API usage in DB")
-            for provider in DAILY_LIMITS:
-                cursor.execute("""
-                    INSERT OR REPLACE INTO api_usage (provider, date, call_count)
-                    VALUES (?, ?, ?)
-                """, (provider, today, 0))
-                _daily_calls[provider] = 0
-            conn.commit()
-        else:
-            # Sync in-memory dict with DB
-            cursor.execute("SELECT provider, call_count FROM api_usage")
-            rows = cursor.fetchall()
-            for provider, count in rows:
-                _daily_calls[provider] = count
-        conn.close()
+        import db_pool
+        with db_pool.connection(MEMORY_ARCHIVE_PATH) as conn:
+            row = conn.execute("SELECT date FROM api_usage LIMIT 1").fetchone()
+
+            if not row or row[0] != today:
+                log.info(f"New day ({today}) — resetting API usage in DB")
+                for provider in DAILY_LIMITS:
+                    conn.execute("""
+                        INSERT OR REPLACE INTO api_usage (provider, date, call_count)
+                        VALUES (?, ?, ?)
+                    """, (provider, today, 0))
+                    _daily_calls[provider] = 0
+                conn.commit()
+            else:
+                rows = conn.execute("SELECT provider, call_count FROM api_usage").fetchall()
+                for provider, count in rows:
+                    _daily_calls[provider] = count
     except Exception as e:
         log.error(f"Failed to reset/sync usage DB: {e}")
 
@@ -241,6 +311,64 @@ def _get_fastest_provider(candidates: list[str]) -> str | None:
             if avg < best_avg:
                 best, best_avg = p, avg
     return best
+
+
+# L2: Provider latency leaderboard for auto-routing optimization
+def get_provider_latency_stats() -> dict:
+    """Return latency stats for all providers (min, avg, max, samples)."""
+    stats = {}
+    for provider, samples in _response_times.items():
+        if samples:
+            samples_list = list(samples)
+            stats[provider] = {
+                "samples": len(samples_list),
+                "min": min(samples_list),
+                "avg": sum(samples_list) / len(samples_list),
+                "max": max(samples_list),
+            }
+    return stats
+
+
+def get_provider_leaderboard() -> list[tuple]:
+    """Return providers ranked by average latency (fastest first)."""
+    stats = get_provider_latency_stats()
+    if not stats:
+        return []
+    # Filter to providers with at least 3 samples
+    candidates = [(p, data["avg"]) for p, data in stats.items() if data["samples"] >= 3]
+    return sorted(candidates, key=lambda x: x[1])
+
+
+def _log_latency_leaderboard():
+    """Log provider latency leaderboard periodically for auto-routing tuning."""
+    leaderboard = get_provider_leaderboard()
+    if leaderboard:
+        leaders = " > ".join([f"{p}({t:.2f}s)" for p, t in leaderboard])
+        log.info(f"Latency Leaderboard: {leaders}")
+
+
+def _get_tuner_weights() -> dict:
+    """Load tuner-adjusted provider weights (soft preference, cached 5 min)."""
+    try:
+        from tuner import get_weights
+        return get_weights()
+    except Exception:
+        return {}
+
+
+def _apply_tuner_weights(chain: list[str]) -> list[str]:
+    """Re-sort chain by tuner weights as a soft preference.
+
+    Only reorders within the chain — never adds or removes providers.
+    Ollama stays last (privacy fallback).
+    """
+    weights = _get_tuner_weights()
+    if not weights:
+        return chain
+    non_ollama = [p for p in chain if p != "ollama"]
+    non_ollama.sort(key=lambda p: weights.get(p, 0.5), reverse=True)
+    result = non_ollama + (["ollama"] if "ollama" in chain else [])
+    return result
 
 
 def _is_provider_cooled_down(provider: str) -> bool:
@@ -281,16 +409,15 @@ def _track_call(provider: str):
     with _router_lock:
         _reset_daily_if_needed()
         _daily_calls[provider] = _daily_calls.get(provider, 0) + 1
-    
+
     today = datetime.date.today().isoformat()
     try:
-        conn = sqlite3.connect(MEMORY_ARCHIVE_PATH)
-        cursor = conn.cursor()
-        cursor.execute("""
-            UPDATE api_usage SET call_count = ? WHERE provider = ? AND date = ?
-        """, (_daily_calls[provider], provider, today))
-        conn.commit()
-        conn.close()
+        import db_pool
+        with db_pool.connection(MEMORY_ARCHIVE_PATH) as conn:
+            conn.execute("""
+                UPDATE api_usage SET call_count = ? WHERE provider = ? AND date = ?
+            """, (_daily_calls[provider], provider, today))
+            conn.commit()
     except Exception as e:
         log.error(f"Failed to update usage DB: {e}")
 
@@ -384,8 +511,8 @@ def _call_gemini(prompt: str, system: str = "") -> str:
     final_system = f"{EDITH_PERSONA_PREFIX}\n\n{system}" if system else EDITH_PERSONA_PREFIX
     
     resp = requests.post(
-        f"https://generativelanguage.googleapis.com/v1beta/models/{PROVIDER_MODELS['gemini']}:generateContent?key={GEMINI_KEY}",
-        headers={"Content-Type": "application/json"},
+        f"https://generativelanguage.googleapis.com/v1beta/models/{PROVIDER_MODELS['gemini']}:generateContent",
+        headers={"Content-Type": "application/json", "x-goog-api-key": GEMINI_KEY},
         json={
             "system_instruction": {"parts": [{"text": final_system}]},
             "contents": [{"parts": [{"text": prompt}]}],
@@ -482,10 +609,10 @@ def _call_groq_stream(prompt: str, system: str = ""):
 def _call_gemini_stream(prompt: str, system: str = ""):
     """Stream from Gemini API."""
     final_system = f"{EDITH_PERSONA_PREFIX}\n\n{system}" if system else EDITH_PERSONA_PREFIX
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{PROVIDER_MODELS['gemini']}:streamGenerateContent?alt=sse&key={GEMINI_KEY}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{PROVIDER_MODELS['gemini']}:streamGenerateContent?alt=sse"
     
     resp = requests.post(
-        url, headers={"Content-Type": "application/json"},
+        url, headers={"Content-Type": "application/json", "x-goog-api-key": GEMINI_KEY},
         json={
             "system_instruction": {"parts": [{"text": final_system}]},
             "contents": [{"parts": [{"text": prompt}]}],
@@ -505,6 +632,60 @@ def _call_gemini_stream(prompt: str, system: str = ""):
                     if token: yield token
                 except (ValueError, KeyError): continue
 
+def _call_nvidia_stream(prompt: str, system: str = ""):
+    """Stream from NVIDIA NIM API (OpenAI-compatible SSE)."""
+    final_system = f"{EDITH_PERSONA_PREFIX}\n\n{system}" if system else EDITH_PERSONA_PREFIX
+    messages = [{"role": "system", "content": final_system}, {"role": "user", "content": prompt}]
+    resp = requests.post(
+        "https://integrate.api.nvidia.com/v1/chat/completions",
+        headers={"Authorization": f"Bearer {NVIDIA_KEY}", "Content-Type": "application/json"},
+        json={"model": PROVIDER_MODELS["nvidia"], "messages": messages, "temperature": 0.7, "stream": True},
+        stream=True, timeout=30,
+    )
+    resp.raise_for_status()
+    for line in resp.iter_lines():
+        if line:
+            line = line.decode("utf-8")
+            if line.startswith("data: "):
+                data_str = line[6:]
+                if data_str == "[DONE]":
+                    break
+                try:
+                    chunk = json.loads(data_str)
+                    token = chunk["choices"][0]["delta"].get("content", "")
+                    if token:
+                        yield token
+                except (ValueError, KeyError):
+                    continue
+
+
+def _call_openrouter_stream(prompt: str, system: str = ""):
+    """Stream from OpenRouter API (OpenAI-compatible SSE)."""
+    final_system = f"{EDITH_PERSONA_PREFIX}\n\n{system}" if system else EDITH_PERSONA_PREFIX
+    messages = [{"role": "system", "content": final_system}, {"role": "user", "content": prompt}]
+    resp = requests.post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        headers={"Authorization": f"Bearer {OPENROUTER_KEY}", "Content-Type": "application/json"},
+        json={"model": PROVIDER_MODELS["openrouter"], "messages": messages, "temperature": 0.7, "stream": True},
+        stream=True, timeout=30,
+    )
+    resp.raise_for_status()
+    for line in resp.iter_lines():
+        if line:
+            line = line.decode("utf-8")
+            if line.startswith("data: "):
+                data_str = line[6:]
+                if data_str == "[DONE]":
+                    break
+                try:
+                    chunk = json.loads(data_str)
+                    token = chunk["choices"][0]["delta"].get("content", "")
+                    if token:
+                        yield token
+                except (ValueError, KeyError):
+                    continue
+
+
 def _call_ollama_stream(prompt: str, system: str = ""):
     """Stream from local Ollama."""
     final_system = f"{EDITH_PERSONA_PREFIX}\n\n{system}" if system else EDITH_PERSONA_PREFIX
@@ -516,6 +697,8 @@ def _call_ollama_stream(prompt: str, system: str = ""):
 _PROVIDER_STREAM_CALLS = {
     "groq": _call_groq_stream,
     "gemini": _call_gemini_stream,
+    "nvidia": _call_nvidia_stream,
+    "openrouter": _call_openrouter_stream,
     "ollama": _call_ollama_stream,
 }
 
@@ -549,6 +732,10 @@ def smart_call(prompt: str, intent: str = "chat", system: str = "") -> str:
         log.info(f"📦 Cache hit for [{intent}]")
         return cached
 
+    # ── CoT injection: applied after cache check so cache keys stay stable ──
+    _COT = "Think step by step. Be precise and direct. Show reasoning before giving final answer."
+    system = f"{system}\n\n{_COT}" if system else _COT
+
     # ── Privacy Gate ──
     pii = detect_pii(prompt)
     force_local = intent in LOCAL_ONLY_INTENTS or pii["has_pii"]
@@ -568,10 +755,20 @@ def smart_call(prompt: str, intent: str = "chat", system: str = "") -> str:
 
     # ── Determine routing chain ──
     task_type = INTENT_TASK_TYPE.get(intent, "conversation")
-    chain = list(ROUTING_CHAINS.get(task_type, ROUTING_CHAINS["conversation"]))
+    _live_chains = _routing_chains()
+    chain = list(_live_chains.get(task_type, _live_chains["conversation"]))
+
+    # ── Complexity routing: reorder chain based on query complexity ──
+    complexity = _score_complexity(prompt)
+    if complexity == "low" and "ollama" in chain:
+        chain = ["ollama"] + [p for p in chain if p != "ollama"]
+        log.debug(f"Low-complexity query → Ollama-first chain")
+    elif complexity == "high" and "ollama" in chain:
+        chain = [p for p in chain if p != "ollama"] + ["ollama"]
+        log.debug(f"High-complexity query → cloud-first chain (Ollama last)")
 
     # ── Short query bias: put Groq first (fastest for short completions) ──
-    if len(prompt) <= _SHORT_QUERY_CHARS and "groq" in chain and chain[0] != "groq":
+    if complexity != "low" and len(prompt) <= _SHORT_QUERY_CHARS and "groq" in chain and chain[0] != "groq":
         chain = ["groq"] + [p for p in chain if p != "groq"]
         log.debug(f"Short query ({len(prompt)}c) → Groq-first chain")
 
@@ -580,6 +777,22 @@ def smart_call(prompt: str, intent: str = "chat", system: str = "") -> str:
     if fastest and fastest != chain[0]:
         chain = [fastest] + [p for p in chain if p != fastest]
         log.debug(f"Auto-tune: promoting {fastest} (lowest avg latency)")
+    
+    # L2: Log latency leaderboard periodically for visibility
+    _log_latency_leaderboard()
+
+    # J2: FORCE_DEEP_THINK → prefer Gemini (high context) and add reasoning suffix to prompt
+    try:
+        import config as _cfg
+        if _cfg.FORCE_DEEP_THINK and "gemini" in chain and chain[0] != "gemini":
+            chain = ["gemini"] + [p for p in chain if p != "gemini"]
+            log.debug("FORCE_DEEP_THINK: promoting gemini to front of chain")
+    except Exception:
+        pass
+
+    # ── Tuner weights: soft preference from feedback history ──
+    chain = _apply_tuner_weights(chain)
+    log.debug(f"Tuner-adjusted chain: {chain}")
 
     # Skip cloud providers when offline — go straight to Ollama
     if not _has_internet():
@@ -613,12 +826,17 @@ def smart_call(prompt: str, intent: str = "chat", system: str = "") -> str:
         try:
             log.info(f"  🔄 Trying {provider}...")
             _t0 = time.time()
-            result = _PROVIDER_CALLS[provider](prompt, system)
+            result = _call_with_latency_track(provider, _PROVIDER_CALLS[provider], prompt, system)
             _elapsed = time.time() - _t0
             _response_times[provider].append(_elapsed)
             log.info(f"  ✅ {provider} responded ({len(result)} chars, {_elapsed:.2f}s)")
             _track_call(provider)
             _cache_set(prompt, intent, result)
+            _log_api_cost(provider, PROVIDER_MODELS.get(provider, "unknown"), prompt, result)
+            _last_call_stats["provider"] = provider
+            _last_call_stats["tokens_in"] = len(prompt) // 4
+            _last_call_stats["tokens_out"] = len(result) // 4
+            _last_call_stats["cost_usd"] = 0.0  # Groq/Gemini/NVIDIA free tier
             return result
         except Exception as e:
             error_msg = str(e)[:100]
@@ -633,23 +851,64 @@ def smart_call(prompt: str, intent: str = "chat", system: str = "") -> str:
 
 
 def smart_call_stream(prompt: str, intent: str = "chat", system: str = ""):
-    """Streaming variant of smart_call. Yields tokens in real-time."""
-    # ── Privacy Gate ──
-    if intent in LOCAL_ONLY_INTENTS:
+    """Streaming variant of smart_call. Yields tokens in real-time.
+
+    Routing logic mirrors smart_call exactly: PII gate, complexity scoring,
+    short-query Groq bias, auto-tune, tuner weights, FORCE_DEEP_THINK, internet check.
+    """
+    # ── CoT injection: mirrored from smart_call() ──
+    _COT = "Think step by step. Be precise and direct. Show reasoning before giving final answer."
+    system = f"{system}\n\n{_COT}" if system else _COT
+
+    # ── Privacy Gate (PII + intent) ──
+    pii = detect_pii(prompt)
+    force_local = intent in LOCAL_ONLY_INTENTS or pii["has_pii"]
+    if force_local:
+        if pii["has_pii"]:
+            log.debug("PII detected in stream — forcing local route")
+        else:
+            log.info(f"🔒 PRIVATE [{intent}] stream → forced local Ollama")
         try:
             for token in _call_ollama_stream(prompt, system):
                 yield token
             _track_call("ollama")
-            return
         except Exception as e:
             yield f"[EDITH] Ollama is offline (Private Task). Error: {e}"
-            return
+        return
 
     # ── Determine routing chain ──
     task_type = INTENT_TASK_TYPE.get(intent, "conversation")
-    chain = ROUTING_CHAINS.get(task_type, ROUTING_CHAINS["conversation"])
+    _live_chains = _routing_chains()
+    chain = list(_live_chains.get(task_type, _live_chains["conversation"]))
 
-    # Skip cloud providers when offline
+    # ── Complexity routing ──
+    complexity = _score_complexity(prompt)
+    if complexity == "low" and "ollama" in chain:
+        chain = ["ollama"] + [p for p in chain if p != "ollama"]
+    elif complexity == "high" and "ollama" in chain:
+        chain = [p for p in chain if p != "ollama"] + ["ollama"]
+
+    # ── Short query bias: Groq first ──
+    if complexity != "low" and len(prompt) <= _SHORT_QUERY_CHARS and "groq" in chain and chain[0] != "groq":
+        chain = ["groq"] + [p for p in chain if p != "groq"]
+
+    # ── Auto-tune: fastest provider first ──
+    fastest = _get_fastest_provider([p for p in chain if p != "ollama"])
+    if fastest and fastest != chain[0]:
+        chain = [fastest] + [p for p in chain if p != fastest]
+
+    # ── FORCE_DEEP_THINK: promote Gemini ──
+    try:
+        import config as _cfg
+        if _cfg.FORCE_DEEP_THINK and "gemini" in chain and chain[0] != "gemini":
+            chain = ["gemini"] + [p for p in chain if p != "gemini"]
+    except Exception:
+        pass
+
+    # ── Tuner weights ──
+    chain = _apply_tuner_weights(chain)
+
+    # ── Skip cloud when offline ──
     if not _has_internet():
         log.warning("🔌 No internet — streaming directly via Ollama")
         try:
@@ -660,11 +919,17 @@ def smart_call_stream(prompt: str, intent: str = "chat", system: str = ""):
             yield f"[EDITH] Offline and Ollama failed: {e}"
         return
 
+    log.info(f"🌐 CLOUD-OK [{intent}] stream → chain={chain}")
+
     for provider in chain:
-        if not _has_key(provider) or not _is_provider_cooled_down(provider) or not _is_under_daily_limit(provider):
+        if not _has_key(provider):
             continue
-        
-        # Only certain providers support streaming in this implementation
+        if not _is_provider_cooled_down(provider):
+            log.info(f"  ⏳ {provider} on cooldown, skipping")
+            continue
+        if not _is_under_daily_limit(provider):
+            log.info(f"  🚫 {provider} daily limit reached, skipping")
+            continue
         if provider not in _PROVIDER_STREAM_CALLS:
             continue
 
@@ -674,13 +939,13 @@ def smart_call_stream(prompt: str, intent: str = "chat", system: str = ""):
             for token in _PROVIDER_STREAM_CALLS[provider](prompt, system):
                 full_response += token
                 yield token
-            
             _track_call(provider)
             _cache_set(prompt, intent, full_response)
             return
         except Exception as e:
             log.warning(f"  ❌ {provider} stream failed: {e}")
-            if provider != "ollama": _mark_provider_failed(provider)
+            if provider != "ollama":
+                _mark_provider_failed(provider)
 
     yield "[EDITH] All streaming providers failed. Try a non-stream request."
 
@@ -736,7 +1001,7 @@ def router_status() -> str:
 
     # Show routing chains
     lines.append("\nRouting Chains:")
-    for task_type, chain in ROUTING_CHAINS.items():
+    for task_type, chain in _routing_chains().items():
         active = [p for p in chain if _has_key(p)]
         lines.append(f"  {task_type:<14} → {' → '.join(active)}")
 

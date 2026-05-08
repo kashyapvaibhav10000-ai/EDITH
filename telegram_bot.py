@@ -31,6 +31,24 @@ def _llm_gen(*args, **kwargs):
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 log = get_logger("telegram")
 
+try:
+    from event_bus import bus, Topic
+
+    @bus.subscribe(Topic.AGENT_DONE)
+    def _on_agent_done(payload: dict):
+        summary = payload.get("summary", "Task completed")
+        task_id = payload.get("task_id", "")
+        send_telegram(f"✅ Agent done [{task_id}]: {summary}")
+
+    @bus.subscribe(Topic.AGENT_ERROR)
+    def _on_agent_error(payload: dict):
+        error = payload.get("error", "Unknown error")
+        task_id = payload.get("task_id", "")
+        send_telegram(f"⛔ Agent error [{task_id}]: {error}")
+
+except Exception as _eb_err:
+    log.warning(f"event_bus subscription failed: {_eb_err}")
+
 TOKEN = vault.get_secret("TELEGRAM_TOKEN", "") or os.getenv("TELEGRAM_TOKEN", "")
 CHAT_ID = vault.get_secret("TELEGRAM_CHAT_ID", "") or os.getenv("TELEGRAM_CHAT_ID", "")
 

@@ -27,6 +27,7 @@ from config import (
     get_logger, EDITH_PATH, MEMORY_DB_PATH, KDE_DEVICE_ID,
     SMART_MEMORY_MAX_RAM_ITEMS
 )
+from event_bus import bus, Topic
 
 log = get_logger("background_daemon")
 
@@ -122,9 +123,8 @@ def _start_subprocess(name: str, script: str) -> subprocess.Popen:
 
     proc = subprocess.Popen(
         [python_exe, script_path],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
     with _managed_processes_lock:
         _managed_processes[name] = proc
@@ -152,8 +152,26 @@ def _monitor_subprocesses():
 # KDE Connect Heartbeat
 # ──────────────────────────────────────────────
 def _kde_heartbeat():
-    """Check KDE Connect device connectivity. Alert if silent."""
+    """Check KDE Connect device connectivity. Alert if silent. No-op if KDE absent."""
     global _last_kde_heartbeat
+    
+    # Skip if KDE not configured
+    if not KDE_DEVICE_ID:
+        return
+    
+    # Check if kdeconnect-cli is available
+    try:
+        result = subprocess.run(
+            ["which", "kdeconnect-cli"],
+            capture_output=True, timeout=2
+        )
+        if result.returncode != 0:
+            log.debug("kdeconnect-cli not found in PATH, skipping KDE heartbeat")
+            return
+    except Exception:
+        log.debug("KDE heartbeat skipped (kdeconnect-cli unavailable)")
+        return
+    
     try:
         result = subprocess.run(
             ["kdeconnect-cli", "-d", KDE_DEVICE_ID, "--ping"],
@@ -272,8 +290,10 @@ def _save_maintenance_timestamp():
             pass
     state["last_maintenance"] = datetime.now().isoformat()
     state["last_backup"] = datetime.now().isoformat()
-    with open(ts_file, "w") as f:
+    tmp = ts_file + ".tmp"
+    with open(tmp, "w") as f:
         json.dump(state, f, indent=2)
+    os.replace(tmp, ts_file)
 
 
 def get_last_backup_timestamp() -> str:
@@ -521,9 +541,46 @@ def _run_self_improve():
         log.error(f"Self-improve failed: {e}")
 
 
+def _validate_all(emit_events=True):
+    """Every 30 min — run system health checks, emit events for failures."""
+    log.debug("🩺 Running scheduled health checks...")
+    try:
+        from validator import validate_all, format_health_report
+        results = validate_all(emit_events=True)
+        failures = [name for name, r in results.items() if not r.ok]
+        if failures:
+            log.warning(f"Health check failures: {failures}")
+            _push_proactive(f"🩺 EDITH Health: {len(failures)} issue(s) — {', '.join(failures)}")
+        else:
+            log.debug(f"Health checks passed ({len(results)} systems OK)")
+    except Exception as e:
+        log.error(f"Health checks failed: {e}")
+
+
+def _run_weekly_tuner():
+    """Monday 4 AM — analyze feedback, adjust provider routing weights."""
+    log.info("🎯 Running weekly router tuner...")
+    try:
+        from tuner import run_weekly_tune
+        result = run_weekly_tune()
+        log.info(f"Tuner: {result}")
+    except Exception as e:
+        log.error(f"Weekly tuner failed: {e}")
+
+
 # ──────────────────────────────────────────────
 # Scheduler Setup
 # ──────────────────────────────────────────────
+
+def _run_health_checks():
+    try:
+        from validator import validate_all, format_health_report
+        results = validate_all(emit_events=True)
+        report = format_health_report(results)
+        log.info(f"[Health Check]\n{report}")
+    except Exception as e:
+        log.error(f"Health check failed: {e}")
+
 def _setup_schedule():
     """Configure all scheduled tasks."""
     # Nightly maintenance at 3:00 AM
@@ -562,6 +619,12 @@ def _setup_schedule():
     schedule.every().tuesday.at("10:00").do(_run_self_improve)
     schedule.every().friday.at("10:00").do(_run_self_improve)
 
+    # Health checks every 30 minutes
+    schedule.every(30).minutes.do(_run_health_checks)
+
+    # Weekly router tuner: Monday 4 AM
+    schedule.every().monday.at("04:00").do(_run_weekly_tuner)
+
     log.info("Scheduled tasks configured:")
     log.info("  03:00 → Nightly maintenance (backup + consolidation + cleanup)")
     log.info("  07:00 → Pre-fetch weather")
@@ -592,6 +655,8 @@ def _watchdog_loop():
         # Send systemd watchdog keepalive
         _sd_notify("WATCHDOG=1")
 
+        bus.publish(Topic.WATCHDOG_HEARTBEAT, {"source": "daemon"})
+
         _shutdown_event.wait(10)  # Check every 10 seconds
 
 
@@ -603,6 +668,18 @@ if __name__ == "__main__":
     log.info("EDITH Background Daemon v2.0 starting...")
     log.info("=" * 50)
 
+    # Hardware-aware model selection
+    try:
+        from config import detect_optimal_models, MODELS
+        chat_model, code_model, resource_mode = detect_optimal_models()
+        MODELS["chat"] = chat_model
+        MODELS["code"] = code_model
+        MODELS["reason"] = chat_model
+        MODELS["lookup"] = chat_model
+        log.info(f"Auto-selected models: chat={chat_model} code={code_model} mode={resource_mode}")
+    except Exception as e:
+        log.warning(f"Hardware model detection failed, using defaults: {e}")
+
     # Register signal handlers
     signal.signal(signal.SIGTERM, _graceful_shutdown)
     signal.signal(signal.SIGINT, _graceful_shutdown)
@@ -610,6 +687,29 @@ if __name__ == "__main__":
     # Start managed subprocesses
     _start_subprocess("chat_server", "chat_server.py")
     _start_subprocess("wake_listener", "wake_listener.py")
+
+    # L3: Pre-warm Ollama on boot (ensures model is loaded into memory)
+    def _prewarm_ollama():
+        import urllib.request
+        deadline = time.time() + 30
+        while time.time() < deadline:
+            try:
+                urllib.request.urlopen("http://localhost:11434/api/tags", timeout=2)
+                break
+            except Exception:
+                log.debug("Ollama not ready yet — retrying in 2s")
+                time.sleep(2)
+        else:
+            log.warning("Ollama did not become ready within 30s — skipping prewarm")
+            return
+        try:
+            from smart_router import smart_call
+            response = smart_call("Say hello", intent="internal").strip()
+            log.info(f"✅ Ollama warmed up ({len(response)} chars)")
+        except Exception as e:
+            log.warning(f"Ollama warmup failed (non-fatal): {e}")
+
+    threading.Thread(target=_prewarm_ollama, daemon=True, name="ollama-prewarm").start()
 
     # Pre-warm enabled MCP servers in background (avoids cold-start on first user call)
     def _prewarm_mcp():
@@ -628,6 +728,13 @@ if __name__ == "__main__":
 
     threading.Thread(target=_prewarm_mcp, daemon=True, name="mcp-prewarm").start()
 
+    # Pre-warm DB connection pool
+    try:
+        import db_pool
+        log.info("DB connection pool initialized")
+    except Exception as e:
+        log.warning(f"DB pool init failed (non-fatal): {e}")
+
     # Wire proactive alerts to event bus
     try:
         from proactive import wire_alerts
@@ -635,6 +742,21 @@ if __name__ == "__main__":
         log.info("Proactive alert handlers wired")
     except Exception as e:
         log.warning(f"Proactive wiring failed (non-fatal): {e}")
+
+    # Wire skill auto-creation on AGENT_DONE
+    try:
+        from orchestrator import _maybe_create_skill
+
+        def _on_agent_done(payload: dict) -> None:
+            task_id = payload.get("task_id", "")
+            summary = payload.get("summary", "")
+            if task_id:
+                _maybe_create_skill(task_id, summary)
+
+        bus.subscribe_fn(Topic.AGENT_DONE, _on_agent_done)
+        log.info("Skill auto-creation wired to AGENT_DONE")
+    except Exception as e:
+        log.warning(f"Skill auto-creation wiring failed (non-fatal): {e}")
 
     # Setup scheduler
     _setup_schedule()

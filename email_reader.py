@@ -27,12 +27,14 @@ PROVIDERS = {
     "hotmail": "outlook.office365.com",
 }
 
-# Credentials — vault first, .env fallback
+# Credentials — vault only (validated lazily in connect() to avoid import-time failure)
 EMAIL_ADDRESS = vault.get_secret("GMAIL_ADDRESS", "") or os.getenv("GMAIL_ADDRESS", "")
-APP_PASSWORD  = vault.get_secret("GMAIL_APP_PASSWORD", "") or os.getenv("GMAIL_APP_PASSWORD", "")
+APP_PASSWORD = vault.get_secret("GMAIL_APP_PASSWORD")
 PROVIDER = "gmail"
 
 def connect():
+    if not APP_PASSWORD:
+        raise RuntimeError("GMAIL_APP_PASSWORD not found in vault. Run: python vault.py set GMAIL_APP_PASSWORD <value>")
     server = PROVIDERS.get(PROVIDER, PROVIDER)
     client = imapclient.IMAPClient(server, ssl=True)
     client.login(EMAIL_ADDRESS, APP_PASSWORD)

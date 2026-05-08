@@ -72,7 +72,7 @@ class TestAPIEndpoints:
         assert r.status_code in (200, 422)
 
     def test_chat_endpoint_with_message(self, client):
-        with patch("chat_server.process_message", return_value="test response"):
+        with patch("chat_server.dispatch", return_value="test response"):
             r = client.post("/api/chat", json={"message": "hello"})
         assert r.status_code == 200
         data = r.json()
@@ -87,7 +87,7 @@ class TestAPIEndpoints:
         assert r.status_code in (200, 201, 422)
 
     def test_validator_via_health_intent(self, client):
-        with patch("chat_server.process_message") as mock:
+        with patch("chat_server.dispatch") as mock:
             mock.return_value = "7/7 systems operational"
             r = client.post("/api/chat", json={"message": "system health check"})
         assert r.status_code == 200

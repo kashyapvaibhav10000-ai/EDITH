@@ -1,0 +1,20 @@
+[
+  {
+    "date": "2026-05-05T10:00:21.812529",
+    "papers": [
+      "AlbumFill: Album-Guided Reasoning and Retrieval for Personalized Image Completion",
+      "SpecKV: Adaptive Speculative Decoding with Compression-Aware Gamma Selection"
+    ],
+    "proposal": "PROPOSED UPGRADE: Integrate a speculative decoding mechanism into EDITH's language processing pipeline, specifically for intent routing and agent modules.\nREASON: The SpecKV paper inspired this upgrade, as it demonstrates the potential for accelerating large language model inference using speculative decoding, which can be particularly useful for EDITH's CPU-based architecture.\nEXPECTED GAIN: This upgrade can improve EDITH's response time by 15-20% by reducing the number of tokens that need to be processed by the larger target model, allowing for faster intent routing and agent responses.\nIMPLEMENTATION: \n1. Implement a draft model that can propose candidate tokens for the target model to verify, using a speculation length (\u03b3) that balances accuracy and speed.\n2. Integrate the speculative decoding mechanism into EDITH's intent routing and agent modules, ensuring seamless interaction with the existing ChromaDB and Piper components.\n3. Fine-tune the speculation length (\u03b3) and other hyperparameters to optimize performance for EDITH's specific use case and hardware constraints.\nDIFFICULTY: Medium"
+  },
+  {
+    "timestamp": "2026-05-05T10:00:21.812567",
+    "papers": [
+      "AlbumFill: Album-Guided Reasoning and Retrieval for Personalized Image Completion",
+      "SpecKV: Adaptive Speculative Decoding with Compression-Aware Gamma Selection"
+    ],
+    "proposal": "PROPOSED UPGRADE: Integrate a speculative decoding mechanism into EDITH's language processing pipeline, specifically for intent routing and agent modules.\nREASON: The SpecKV paper inspired this upgrade, as it demonstrates the potential for accelerating large language model inference using speculative decoding, which can be particularly useful for EDITH's CPU-based architecture.\nEXPECTED GAIN: This upgrade can improve EDITH's response time by 15-20% by reducing the number of tokens that need to b",
+    "score": 0.9,
+    "status": "proposed"
+  }
+]

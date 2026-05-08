@@ -1,0 +1,36 @@
+{
+  "weights": {
+    "groq": 1.0,
+    "gemini": 0.9,
+    "nvidia": 0.8,
+    "openrouter": 0.7,
+    "ollama": 0.5
+  },
+  "history": [
+    {
+      "timestamp": "2026-04-29T23:52:07.701658",
+      "old_weights": {
+        "groq": 1.0,
+        "gemini": 0.9,
+        "nvidia": 0.8,
+        "openrouter": 0.7,
+        "ollama": 0.5
+      },
+      "new_weights": {
+        "groq": 1.0,
+        "gemini": 0.9,
+        "nvidia": 0.8,
+        "openrouter": 0.7,
+        "ollama": 0.5
+      },
+      "adjustments": {},
+      "feedback_stats": {
+        "total": 14,
+        "thumbs_up": 1,
+        "thumbs_down": 6,
+        "satisfaction": 14.3
+      }
+    }
+  ],
+  "last_tuned": "2026-04-29T23:52:07.701669"
+}

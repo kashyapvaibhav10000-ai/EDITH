@@ -1,0 +1,123 @@
+# Dockerfile.cloud — Cloud Node (Headless Server)
+# No GPU needed. No PyAudio, PyQt6, or display deps.
+
+FROM python:3.11-slim
+
+WORKDIR /edith
+
+# ────────────────────────────────────────────────
+# System Dependencies (minimal)
+# ────────────────────────────────────────────────
+RUN apt-get update && apt-get install -y \
+    # Network + utilities
+    curl \
+    wget \
+    git \
+    # Build tools (for some pip packages)
+    build-essential \
+    # Database support
+    sqlite3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# ────────────────────────────────────────────────
+# Python Dependencies
+# ────────────────────────────────────────────────
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# ────────────────────────────────────────────────
+# Copy Cloud Node Files Only
+# ────────────────────────────────────────────────
+# LLM + routing
+COPY smart_router.py .
+COPY orchestrator.py .
+COPY intent_dispatch.py .
+COPY intent.py .
+COPY chat_server.py .
+
+# Background daemon (scheduler)
+COPY background_daemon_cloud.py .
+
+# Memory + storage
+COPY smart_memory.py .
+COPY episodic_memory.py .
+COPY graph_memory.py .
+COPY consolidation.py .
+COPY rag.py .
+COPY code_rag.py .
+COPY session.py .
+
+# Vision system (cognition)
+COPY cognitive_profile.py .
+COPY council.py .
+COPY life_os.py .
+COPY self_improve.py .
+
+# Config + context
+COPY config.py .
+COPY context.py .
+COPY shared_state.py .
+COPY vault.py .
+COPY vault.enc .
+COPY vault.salt .
+
+# Utilities
+COPY tools.py .
+COPY search.py .
+COPY phone.py .
+COPY email_reader.py .
+COPY calendar_reader.py .
+COPY weather.py .
+COPY data_analyst.py .
+COPY agent.py .
+COPY sandbox.py .
+COPY validator.py .
+COPY monitor.py .
+COPY tuner.py .
+COPY proactive.py .
+COPY event_bus.py .
+COPY trace_logger.py .
+COPY db_pool.py .
+COPY circuit_breaker.py .
+
+# Optional: vision + OCR
+COPY vision.py .
+COPY ocr.py .
+
+# Telegram bot
+COPY telegram_bot.py .
+
+# MCP bridge
+COPY mcp_bridge.py .
+COPY mcp_config.json .
+
+# Data directories (will be mounted as volumes)
+RUN mkdir -p memory_db memory_db_archive logs data
+
+# Version/state files
+COPY edith_modules.json .
+COPY .agentignore .
+
+# ────────────────────────────────────────────────
+# Environment
+# ────────────────────────────────────────────────
+ENV PYTHONUNBUFFERED=1
+ENV LOG_LEVEL=INFO
+
+# ────────────────────────────────────────────────
+# Expose Ports
+# ────────────────────────────────────────────────
+EXPOSE 8001
+
+# ────────────────────────────────────────────────
+# Health Check
+# ────────────────────────────────────────────────
+HEALTHCHECK --interval=30s --timeout=5s --retries=2 --start-period=15s \
+    CMD curl -f http://localhost:8001/ || exit 1
+
+# ────────────────────────────────────────────────
+# Entry Point
+# ────────────────────────────────────────────────
+# Start both chat_server (FastAPI) and background_daemon_cloud (scheduler)
+# You can override CMD at runtime to run only one
+CMD ["sh", "-c", "python -u chat_server.py &\nsleep 2\npython -u background_daemon_cloud.py\nwait"]

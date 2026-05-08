@@ -1,0 +1,54 @@
+# ──────────────────────────────────────────────
+# EDITH — Security-Critical Files (NEVER commit)
+# ──────────────────────────────────────────────
+.env
+credentials.json
+token.json
+token.pickle
+vault.enc
+vault.salt
+vault.enc.bak
+*.key
+*.pem
+*.crt
+
+# ──────────────────────────────────────────────
+# Python
+# ──────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ──────────────────────────────────────────────
+# Virtual Environment
+# ──────────────────────────────────────────────
+edith-env/
+.venv/
+env/
+
+# ──────────────────────────────────────────────
+# Large / Generated Files
+# ──────────────────────────────────────────────
+whisper.cpp/
+memory_db/
+chroma_db/
+edith-memory/
+downloads/
+images/
+charts/
+logs/
+voices/
+
+# ──────────────────────────────────────────────
+# OS / IDE
+# ──────────────────────────────────────────────
+.DS_Store
+*.swp
+*.swo
+*~
+.idea/
+.vscode/

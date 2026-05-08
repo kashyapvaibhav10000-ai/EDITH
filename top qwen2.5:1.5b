@@ -1,0 +1,21 @@
+[0;1;32m●[0m ollama.service - Ollama Service
+     Loaded: loaded (]8;;file://vaibhav-h610mhv2ddr4/etc/systemd/system/ollama.service\/etc/systemd/system/ollama.service]8;;\; [0;1;32menabled[0m; preset: [0;1;38:5:185mdisabled[0m)
+     Active: [0;1;32mactive (running)[0m since Mon 2026-04-06 02:44:28 IST; 3min 32s ago
+ Invocation: b5ba1f66577f4424aeb8d3c8803ad865
+   Main PID: 56163 (ollama)
+      Tasks: 12[0;38:5:245m (limit: 9201)[0m
+     Memory: 52.3M (peak: 69M)
+        CPU: 60ms
+     CGroup: /system.slice/ollama.service
+             └─[0;38:5:245m56163 /usr/local/bin/ollama serve[0m
+
+Apr 06 02:44:28 vaibhav-h610mhv2ddr4 ollama[56163]: time=2026-04-06T02:44:28.272+05:30 level=INFO source=routes.go:1746 msg="Ollama cloud disabled: false"
+Apr 06 02:44:28 vaibhav-h610mhv2ddr4 ollama[56163]: time=2026-04-06T02:44:28.281+05:30 level=INFO source=images.go:499 msg="total blobs: 33"
+Apr 06 02:44:28 vaibhav-h610mhv2ddr4 ollama[56163]: time=2026-04-06T02:44:28.281+05:30 level=INFO source=images.go:506 msg="total unused blobs removed: 0"
+Apr 06 02:44:28 vaibhav-h610mhv2ddr4 ollama[56163]: time=2026-04-06T02:44:28.281+05:30 level=INFO source=routes.go:1802 msg="Listening on 127.0.0.1:11434 (version 0.20.0)"
+Apr 06 02:44:28 vaibhav-h610mhv2ddr4 ollama[56163]: time=2026-04-06T02:44:28.283+05:30 level=INFO source=runner.go:67 msg="discovering available GPUs..."
+Apr 06 02:44:28 vaibhav-h610mhv2ddr4 ollama[56163]: time=2026-04-06T02:44:28.283+05:30 level=INFO source=runner.go:106 msg="experimental Vulkan support disabled.  To enable, set OLLAMA_VULKAN=1"
+Apr 06 02:44:28 vaibhav-h610mhv2ddr4 ollama[56163]: time=2026-04-06T02:44:28.292+05:30 level=INFO source=server.go:432 msg="starting runner" cmd="/usr/local/bin/ollama runner --ollama-engine --port 44961"
+Apr 06 02:44:28 vaibhav-h610mhv2ddr4 ollama[56163]: time=2026-04-06T02:44:28.456+05:30 level=INFO source=server.go:432 msg="starting runner" cmd="/usr/local/bin/ollama runner --ollama-engine --port 33369"
+Apr 06 02:44:28 vaibhav-h610mhv2ddr4 ollama[56163]: time=2026-04-06T02:44:28.564+05:30 level=INFO source=types.go:60 msg="inference compute" id=cpu library=cpu compute="" name=cpu description=cpu libdirs=ollama driver="" pci_id="" type="" total="7.5 GiB" available="4.1 GiB"
+Apr 06 02:44:28 vaibhav-h610mhv2ddr4 ollama[56163]: time=2026-04-06T02:44:28.564+05:30 level=INFO source=routes.go:1852 msg="vram-based default context" total_vram="0 B" default_num_ctx=4096

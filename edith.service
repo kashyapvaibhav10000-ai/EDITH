@@ -1,0 +1,22 @@
+[Unit]
+Description=EDITH Personal AI Assistant — Background Daemon
+After=graphical-session.target pulseaudio.service
+Wants=pulseaudio.service
+
+[Service]
+Type=notify
+ExecStart=/home/vaibhav/edith-env/bin/python /home/vaibhav/EDITH/background_daemon.py
+WorkingDirectory=/home/vaibhav/EDITH
+Restart=always
+RestartSec=5
+WatchdogSec=300
+Environment=DISPLAY=:0
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=PULSE_SERVER=unix:/run/user/1000/pulse/native
+
+# Logging
+StandardOutput=append:/home/vaibhav/EDITH/logs/edith_daemon.log
+StandardError=append:/home/vaibhav/EDITH/logs/edith_daemon.log
+
+[Install]
+WantedBy=default.target

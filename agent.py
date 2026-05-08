@@ -15,7 +15,9 @@ New:
 """
 
 import subprocess
+import asyncio
 import os
+import re
 import shlex
 import shutil
 import sqlite3
@@ -29,11 +31,23 @@ from typing import List, Optional
 
 from config import MODELS, DANGEROUS_PATTERNS, OllamaError, get_logger, EDITH_PATH
 from errors import Result
+from event_bus import bus, Topic
 
 log = get_logger("agent")
 
 _AGENT_DB = os.path.join(EDITH_PATH, "agent_runs.db")
 _db_lock = threading.Lock()
+_STOP_AGENT = threading.Event()
+
+
+def interrupt_agent():
+    """Signal the running agent to stop at the next step boundary."""
+    _STOP_AGENT.set()
+
+
+def clear_interrupt():
+    """Clear the interrupt signal (call before starting a new task)."""
+    _STOP_AGENT.clear()
 
 
 # ──────────────────────────────────────────────
@@ -156,6 +170,16 @@ def is_dangerous(cmd):
         return True
     if ">" in cmd and any(f in cmd_lower for f in ["/etc/", "/dev/", "/boot/", "/usr/", "/bin/", "/sbin/"]):
         return True
+    _DANGER_REGEX = [
+        r'\$\{[^}]+\}',                          # variable expansion ${VAR}
+        r'`[^`]+`',                               # backtick execution
+        r';\s*\w',                                # semicolon command chaining
+        r'\bnc\s+-\w*e\b|\bbash\s+-i\b|/dev/tcp', # reverse shells
+        r'curl\s+\S+.*\|\s*(ba)?sh|wget\s+\S+.*\|\s*(ba)?sh', # remote exec
+    ]
+    for pattern in _DANGER_REGEX:
+        if re.search(pattern, cmd):
+            return True
     return False
 
 
@@ -194,11 +218,25 @@ def compute_confidence(cmd: str, step: str) -> float:
     return round(max(0.0, min(1.0, score)), 2)
 
 
+def _load_coding_style() -> str:
+    """Load Vaibhav's coding style personality if available."""
+    try:
+        from config import CODING_PERSONALITY_TXT
+        if os.path.exists(CODING_PERSONALITY_TXT):
+            with open(CODING_PERSONALITY_TXT) as _fh:
+                return _fh.read() + "\n\n"
+    except Exception:
+        pass
+    return ""
+
+
 def plan_task(task) -> str:
-    prompt = f"""You are EDITH, a Linux assistant on Manjaro.
+    style_prefix = _load_coding_style()
+    prompt = f"""{style_prefix}You are EDITH, a Linux assistant on Manjaro.
 Break the task into max 3 steps. Use only plain text, no markdown, no backticks, no code blocks.
 Use absolute paths like /home/vaibhav/
 Never include steps like "open terminal", "navigate to directory", or "cd" — just do the actual task directly.
+For bulk operations (create N files/folders, rename N items, etc.), use ONE step — do NOT list individual items.
 
 Task: {task}
 
@@ -221,6 +259,8 @@ Rules:
 - No cd commands alone
 - No markdown, no backticks, no code blocks
 - Reply with ONLY the raw bash command, nothing else
+- For bulk ops (create N folders/files), use bash brace expansion: mkdir -p /path/{{1..N}} or mkdir -p /path/name_{{1..N}}
+- Never loop with individual commands when brace expansion works
 
 Step: {step}"""
     try:
@@ -285,7 +325,7 @@ class AgentRunner:
             self._transition(AgentState.FAILED, str(e))
             return Result.from_exception(e)
 
-    def execute_next(self) -> Result:
+    async def execute_next(self) -> Result:
         """EXECUTING: run the next pending step. Returns Result with step output."""
         if self.run.state not in (AgentState.EXECUTING, AgentState.REPLANNING):
             return Result.failure(f"Cannot execute in state {self.run.state.value}", error_type="agent")
@@ -304,18 +344,45 @@ class AgentRunner:
             _persist(self.run)
             return Result.success(f"⛔ Step {idx+1} blocked (dangerous): `{step.command}`")
 
+        _MAX_OUTPUT = 1024 * 1024  # 1MB stdout cap
         try:
-            result = subprocess.run(
-                _get_sandboxed_command(shlex.split(step.command)),
-                capture_output=True, text=True, timeout=30, cwd="/home/vaibhav"
+            cmd_parts = _get_sandboxed_command(["bash", "-c", step.command])
+            proc = await asyncio.create_subprocess_exec(
+                *cmd_parts,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd="/home/vaibhav",
             )
-            step.output = (result.stdout or result.stderr or "").strip()[:500]
-            step.status = "ok" if result.returncode == 0 else "error"
-            if result.returncode != 0:
+            try:
+                stdout_chunks, stderr_chunks, total = [], [], 0
+                async for chunk in proc.stdout:
+                    total += len(chunk)
+                    if total > _MAX_OUTPUT:
+                        proc.kill()
+                        await proc.wait()
+                        step.status = "error"
+                        step.error = "Output exceeded 1MB limit — process killed"
+                        self.run.current_step += 1
+                        _persist(self.run)
+                        return Result.failure(f"Step {idx+1} error: {step.error}", error_type="agent")
+                    stdout_chunks.append(chunk)
+                stderr_data = await asyncio.wait_for(proc.stderr.read(_MAX_OUTPUT), timeout=30)
+                await asyncio.wait_for(proc.wait(), timeout=30)
+            except asyncio.TimeoutError:
+                proc.kill()
+                await proc.wait()
+                step.status = "error"
+                step.error = "Timeout (30s)"
+                self.run.current_step += 1
+                _persist(self.run)
+                return Result.failure(f"Step {idx+1} error: {step.error}", error_type="agent")
+
+            stdout_data = b"".join(stdout_chunks).decode(errors="replace")
+            stderr_str = stderr_data.decode(errors="replace")
+            step.output = (stdout_data or stderr_str or "").strip()[:500]
+            step.status = "ok" if proc.returncode == 0 else "error"
+            if proc.returncode != 0:
                 step.error = step.output
-        except subprocess.TimeoutExpired:
-            step.status = "error"
-            step.error = "Timeout (30s)"
         except Exception as e:
             step.status = "error"
             step.error = str(e)
@@ -327,11 +394,15 @@ class AgentRunner:
             return Result.success(f"✅ Step {idx+1}: {step.description[:50]}\n{step.output}")
         return Result.failure(f"Step {idx+1} error: {step.error}", error_type="agent")
 
-    def execute_all(self) -> Result:
+    async def execute_all(self) -> Result:
         """Run all steps in sequence. Returns summary Result."""
         outputs = []
         while self.run.current_step < len(self.run.steps):
-            r = self.execute_next()
+            if _STOP_AGENT.is_set():
+                _STOP_AGENT.clear()
+                self._transition(AgentState.FAILED, "Interrupted by user")
+                return Result.failure("Agent interrupted by user", error_type="interrupted")
+            r = await self.execute_next()
             outputs.append(r.value if r.ok else r.error)
         self._transition(AgentState.VALIDATING)
         return self.validate()
@@ -439,7 +510,7 @@ def get_task_status(task_id: str) -> Result:
 
 
 def execute_agent_task(task_id: str) -> Result:
-    """Execute all steps for a planned task. Returns summary."""
+    """Start execution in background thread. Returns task_id immediately; caller polls get_task_status()."""
     run = _load_run(task_id)
     if not run:
         return Result.failure(f"Task {task_id} not found", error_type="not_found")
@@ -448,13 +519,32 @@ def execute_agent_task(task_id: str) -> Result:
 
     runner = AgentRunner.__new__(AgentRunner)
     runner.run = run
-    return runner.execute_all()
+
+    def _run():
+        try:
+            result = asyncio.run(runner.execute_all())
+            while runner.run.state == AgentState.REPLANNING:
+                replan_result = runner.replan()
+                if not replan_result.ok:
+                    result = replan_result
+                    break
+                result = asyncio.run(runner.execute_all())
+            if result.ok:
+                bus.publish(Topic.AGENT_DONE, {"task_id": task_id, "summary": str(result.value)[:200]})
+            else:
+                bus.publish(Topic.AGENT_ERROR, {"task_id": task_id, "error": result.error})
+        except Exception as e:
+            log.error(f"Agent thread [{task_id}] failed: {e}")
+            bus.publish(Topic.AGENT_ERROR, {"task_id": task_id, "error": str(e)})
+
+    threading.Thread(target=_run, daemon=True, name=f"agent-{task_id}").start()
+    return Result.success({"task_id": task_id, "state": "executing"})
 
 
 # ──────────────────────────────────────────────
 # Dry-run (preserved from Phase 4.8)
 # ──────────────────────────────────────────────
-def dry_run_agent(task: str) -> dict:
+def dry_run_agent(task: str) -> Result:
     log.info(f"Agent dry-run: {task}")
     plan = plan_task(task)
     steps = []
@@ -474,25 +564,26 @@ def dry_run_agent(task: str) -> dict:
             "dangerous": dangerous,
             "status": "blocked" if dangerous else "ready",
         })
-    return {
+    return Result.success({
         "task": task, "plan": plan, "steps": results,
         "avg_confidence": round(sum(r["confidence"] for r in results) / max(len(results), 1), 2),
         "any_dangerous": any(r["dangerous"] for r in results),
         "dry_run": True,
-    }
+    })
 
 
-def format_dry_run(result: dict) -> str:
-    lines = [f"🔍 Agent Dry-Run: {result['task']}\n"]
-    lines.append(f"Plan:\n{result['plan']}\n")
-    for i, step in enumerate(result["steps"], 1):
+def format_dry_run(result) -> str:
+    data = result.value if isinstance(result, Result) else result
+    lines = [f"🔍 Agent Dry-Run: {data['task']}\n"]
+    lines.append(f"Plan:\n{data['plan']}\n")
+    for i, step in enumerate(data["steps"], 1):
         icon = "⛔" if step["dangerous"] else "✅"
         conf = f"({step['confidence']:.0%})"
         lines.append(f"  {icon} Step {i}: {step['step'][:60]}")
         lines.append(f"     → {step['command']}")
         lines.append(f"     Confidence: {conf} | Status: {step['status']}")
-    lines.append(f"\nOverall Confidence: {result['avg_confidence']:.0%}")
-    if result["any_dangerous"]:
+    lines.append(f"\nOverall Confidence: {data['avg_confidence']:.0%}")
+    if data["any_dangerous"]:
         lines.append("⚠️ Some steps were flagged as DANGEROUS")
     return "\n".join(lines)
 
@@ -514,7 +605,7 @@ def run_agent(task):
     if input().strip().lower() != "y":
         print("Cancelled.")
         return
-    result = runner.execute_all()
+    result = asyncio.run(runner.execute_all())
     print(f"\n{result.value if result.ok else result.error}")
 
 

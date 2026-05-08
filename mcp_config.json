@@ -1,0 +1,54 @@
+{
+  "servers": {
+    "filesystem": {
+      "enabled": true,
+      "command": "node",
+      "args": [
+        "/home/vaibhav/.nvm/versions/node/v20.20.2/lib/node_modules/@modelcontextprotocol/server-filesystem/dist/index.js",
+        "/home/vaibhav"
+      ],
+      "description": "Local filesystem access \u2014 read, write, list files under /home/vaibhav",
+      "allowed_intents": [
+        "mcp",
+        "file_query",
+        "create_file",
+        "rag"
+      ],
+      "env_vars": {}
+    },
+    "github": {
+      "enabled": true,
+      "command": "node",
+      "args": [
+        "/home/vaibhav/.nvm/versions/node/v20.20.2/lib/node_modules/@modelcontextprotocol/server-github/dist/index.js"
+      ],
+      "description": "GitHub API \u2014 repos, issues, PRs, code search",
+      "allowed_intents": [
+        "mcp",
+        "code"
+      ],
+      "env_vars": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "required"
+      }
+    },
+    "cloudflare": {
+      "enabled": true,
+      "command": "node",
+      "args": [
+        "/home/vaibhav/.nvm/versions/node/v20.20.2/lib/node_modules/@cloudflare/mcp-server-cloudflare/dist/index.js",
+        "run",
+        "c51d5cf5c7c78d123c5ce4404d9040b1"
+      ],
+      "description": "Cloudflare \u2014 workers, DNS, analytics",
+      "allowed_intents": [
+        "mcp",
+        "code",
+        "agent"
+      ],
+      "env_vars": {
+        "CLOUDFLARE_API_TOKEN": "required",
+        "CLOUDFLARE_ACCOUNT_ID": "required"
+      }
+    }
+  }
+}

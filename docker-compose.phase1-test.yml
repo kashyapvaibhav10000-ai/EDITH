@@ -1,0 +1,142 @@
+version: '3.8'
+
+services:
+  # ────────────────────────────────────────────────
+  # Local Node: Hardware access (voice I/O, mic control)
+  # ────────────────────────────────────────────────
+  local-node:
+    container_name: edith-local-node
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+    restart: unless-stopped
+    networks:
+      - edith-net
+    ports:
+      - "8002:8002"
+    # ✅ CRITICAL: Device passthrough for audio
+    devices:
+      - /dev/snd:/dev/snd
+    environment:
+      BRIDGE_SECRET: ${BRIDGE_SECRET:-change_me_to_secure_token}
+      CLOUD_URL: http://cloud-node:8001
+      LOCAL_BRIDGE_PORT: 8002
+      PYTHONUNBUFFERED: 1
+      # X11 for PyQt6 widget
+      DISPLAY: ${DISPLAY:-:0}
+    volumes:
+      # Mount EDITH source code
+      - ./:/edith
+      # ✅ CRITICAL: X11 socket for PyQt6 widget display
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      # Mount config/keys
+      - ./.env.local:/edith/.env.local:ro
+    expose:
+      - "8002"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "-H", "X-Bridge-Token: ${BRIDGE_SECRET:-change_me_to_secure_token}", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 2
+      start_period: 10s
+    depends_on:
+      - cloud-node
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ────────────────────────────────────────────────
+  # Cloud Node: LLM routing, memory, scheduling
+  # ────────────────────────────────────────────────
+  cloud-node:
+    container_name: edith-cloud-node
+    build:
+      context: .
+      dockerfile: Dockerfile.cloud
+    restart: unless-stopped
+    networks:
+      - edith-net
+    ports:
+      - "8001:8001"
+    environment:
+      # Bridge auth
+      LOCAL_BRIDGE_URL: http://local-node:8002
+      BRIDGE_SECRET: ${BRIDGE_SECRET:-change_me_to_secure_token}
+      
+      # LLM providers (from .env)
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      
+      # Telegram bot
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      
+      # Gmail OAuth
+      GMAIL_SERVICE_ACCOUNT_JSON: ${GMAIL_SERVICE_ACCOUNT_JSON}
+      
+      # Config
+      PYTHONUNBUFFERED: 1
+      LOG_LEVEL: INFO
+    volumes:
+      # Mount EDITH source code
+      - ./:/edith
+      # Persistent memory volumes
+      - edith-chromadb:/edith/memory_db
+      - edith-sqlite:/edith/memory_db
+      # Config
+      - ./.env.cloud:/edith/.env.cloud:ro
+    expose:
+      - "8001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 2
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ────────────────────────────────────────────────
+  # Optional: Local Ollama (if running in Docker)
+  # ────────────────────────────────────────────────
+  # Uncomment to run Ollama in a container instead of host machine
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: edith-ollama
+  #   restart: unless-stopped
+  #   networks:
+  #     - edith-net
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama-data:/root/.ollama
+  #   environment:
+  #     OLLAMA_HOST: 0.0.0.0:11434
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags || exit 1"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 3
+
+networks:
+  edith-net:
+    driver: bridge
+    name: edith-net
+
+volumes:
+  # ChromaDB persistent storage
+  edith-chromadb:
+    driver: local
+  # SQLite memory archive
+  edith-sqlite:
+    driver: local
+  # Ollama models (if using container)
+  # ollama-data:
+  #   driver: local

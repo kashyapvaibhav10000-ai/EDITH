@@ -1,0 +1,4 @@
+whisper.cpp/
+edith-env/
+__pycache__/
+*.pyc

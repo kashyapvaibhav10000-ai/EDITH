@@ -1,0 +1,88 @@
+# Dockerfile.local — Local Node (Hardware Access)
+# GPU optional. PyAudio + PyQt6 required.
+
+FROM python:3.11-slim
+
+WORKDIR /edith
+
+# ────────────────────────────────────────────────
+# System Dependencies (audio + display)
+# ────────────────────────────────────────────────
+RUN apt-get update && apt-get install -y \
+    # Audio: PyAudio + ALSA
+    libasound2 \
+    libasound2-dev \
+    portaudio19-dev \
+    alsa-utils \
+    \
+    # PyQt6 + X11
+    libxkbcommon0 \
+    libxkbcommon-x11-0 \
+    libdbus-1-3 \
+    libfontconfig1 \
+    libfreetype6 \
+    libxcb-icccm4 \
+    libxcb-image0 \
+    libxcb-keysyms1 \
+    libxcb-render-util0 \
+    libxcb-xfixes0 \
+    libxcb-xinerama0 \
+    libxcb-xkb1 \
+    libxkbcommon-x11-0 \
+    libgl1-mesa-glx \
+    \
+    # Utilities
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# ────────────────────────────────────────────────
+# Python Dependencies
+# ────────────────────────────────────────────────
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# ────────────────────────────────────────────────
+# Copy Local Node Files Only
+# ────────────────────────────────────────────────
+# Hardware-facing modules
+COPY local_bridge.py .
+COPY wake_listener.py .
+COPY voice.py .
+COPY chatterbox_worker.py .
+COPY edith_widget.py .
+
+# Shared config/utilities (voice.py needs these)
+COPY config.py .
+COPY context.py .
+COPY shared_state.py .
+COPY session.py .
+COPY smart_memory.py .
+COPY episodic_memory.py .
+COPY vault.py .
+COPY vault.enc .
+COPY vault.salt .
+
+# Logging
+COPY trace_logger.py .
+
+# Data directories (empty, will be mounted)
+RUN mkdir -p memory_db memory_db_archive logs data
+
+# ────────────────────────────────────────────────
+# Environment
+# ────────────────────────────────────────────────
+ENV PYTHONUNBUFFERED=1
+ENV LOG_LEVEL=INFO
+ENV DISPLAY=:0
+
+# ────────────────────────────────────────────────
+# Health Check
+# ────────────────────────────────────────────────
+HEALTHCHECK --interval=30s --timeout=5s --retries=2 --start-period=10s \
+    CMD curl -f -H "X-Bridge-Token: ${BRIDGE_SECRET}" http://localhost:8002/health || exit 1
+
+# ────────────────────────────────────────────────
+# Entry Point
+# ────────────────────────────────────────────────
+CMD ["python", "-u", "local_bridge.py"]

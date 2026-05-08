@@ -12,7 +12,7 @@ import subprocess
 import requests
 import psutil
 
-from config import OLLAMA_URL, MODELS, KDE_DEVICE_ID, EDITH_PATH, get_logger
+from config import OLLAMA_URL, MODELS, KDE_DEVICE_ID, EDITH_PATH, CHATTERBOX_VENV_PYTHON, get_logger
 from errors import Result
 
 log = get_logger("validator")
@@ -142,18 +142,32 @@ def validate_vision_model() -> Result:
         return Result.failure(f"Ollama not reachable for vision check: {e}", error_type="connection")
 
 
+def validate_chatterbox() -> Result:
+    """Check Chatterbox TTS venv is available."""
+    if not os.path.exists(CHATTERBOX_VENV_PYTHON):
+        return Result.failure(
+            f"Chatterbox venv missing at {CHATTERBOX_VENV_PYTHON}",
+            error_type="not_found"
+        )
+    voices_dir = os.path.join(EDITH_PATH, "voices", "friend.wav")
+    if not os.path.exists(voices_dir):
+        return Result.failure("friend.wav missing — voice cloning unavailable", error_type="not_found")
+    return Result.success("Chatterbox venv and friend.wav present")
+
+
 # ──────────────────────────────────────────────
 # Full System Snapshot
 # ──────────────────────────────────────────────
 
 _VALIDATORS = [
-    ("network",  validate_network),
-    ("ollama",   validate_ollama),
-    ("phone",    validate_phone),
-    ("calendar", validate_calendar),
-    ("disk",     validate_disk),
-    ("memory",   validate_memory),
-    ("vision",   validate_vision_model),
+    ("network",     validate_network),
+    ("ollama",      validate_ollama),
+    ("phone",       validate_phone),
+    ("calendar",    validate_calendar),
+    ("disk",        validate_disk),
+    ("memory",      validate_memory),
+    ("vision",      validate_vision_model),
+    ("chatterbox",  validate_chatterbox),
 ]
 
 

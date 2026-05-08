@@ -1,0 +1,15 @@
+[Unit]
+Description=EDITH Architecture Auto-Updater v2.0
+After=graphical-session.target network-online.target edith.service
+Wants=network-online.target graphical-session.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /home/vaibhav/EDITH/edith_arch_boot.sh
+User=vaibhav
+Environment=DISPLAY=:0
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=graphical-session.target

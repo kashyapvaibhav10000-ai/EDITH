@@ -1,0 +1,23 @@
+{
+  "language_preference": "Python + TypeScript (Next.js)",
+  "function_style": "detailed",
+  "avg_function_length": 21,
+  "uses_async": false,
+  "uses_type_hints": false,
+  "comment_density": "moderate",
+  "prefers_classes": false,
+  "py_files_written": 56,
+  "ts_files_written": 392,
+  "frameworks": [
+    "Next.js 14",
+    "FastAPI",
+    "Prisma",
+    "TailwindCSS"
+  ],
+  "patterns": [
+    "REST APIs",
+    "React components",
+    "Database ORM",
+    "JWT auth"
+  ]
+}

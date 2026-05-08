@@ -213,8 +213,294 @@ def _handle_unread_email(ctx) -> Result:
         return Result.from_exception(e)
 
 
+# Kept for stream-endpoint backward compat — real logic lives in _run_local_exec
+_LOCAL_SYSINFO = []
+
+
+# ── _SYSINFO_TERMS: each entry (compiled_re, label, shell_cmd) ──────────────
+_SYSINFO_TERMS = [
+    (re.compile(r"\b(os|operating system|distro|linux version|what os)\b", re.I),
+     "OS", "lsb_release -d 2>/dev/null || grep PRETTY_NAME /etc/os-release | cut -d= -f2 | tr -d '\"'"),
+    (re.compile(r"\bkernel\b", re.I),
+     "Kernel", "uname -r"),
+    (re.compile(r"\b(cpu|processor)\b", re.I),
+     "CPU", "lscpu | grep 'Model name' | sed 's/.*: *//' | head -1"),
+    (re.compile(r"\b(ram|memory|mem)\b", re.I),
+     "RAM", "free -h | grep ^Mem"),
+    (re.compile(r"\bdisk\b", re.I),
+     "Disk", "df -h -x tmpfs -x devtmpfs 2>/dev/null"),
+    (re.compile(r"\bhostname\b", re.I),
+     "Hostname", "hostname"),
+    (re.compile(r"\buptime\b", re.I),
+     "Uptime", "uptime -p"),
+    (re.compile(r"\b(local|network|private|lan)\s+(ip|address|addr)\b|\bmy\s+ip\b|\bwhat.*my.*ip\b", re.I),
+     "Network", "ip -br addr show"),
+    (re.compile(r"\bmtu\b", re.I),
+     "MTU", "ip link show | grep -E 'mtu|UP'"),
+    (re.compile(r"\bnetwork interfaces?\b|\bshow.*interfaces?\b|\blist.*interfaces?\b", re.I),
+     "Interfaces", "ip -br link show"),
+]
+
+
+def _run_local_exec(user_input: str):
+    """
+    Detect and execute local system/file ops. Never web-search, never hallucinate.
+    Returns result string or None if query is not a local op.
+    """
+    import random as _random
+    import shutil as _shutil
+
+    lower = user_input.lower()
+
+    # ── 1. Process / resource monitoring — checked BEFORE sysinfo to avoid cpu/mem conflict ──
+    _PROC_PAT = re.compile(
+        r"\b(process(?:es)?|running apps?|applications?)\b.{0,40}\b(cpu|memory|ram|consuming|usage)\b"
+        r"|\b(cpu|memory|ram)\b.{0,40}\b(process(?:es)?|consuming|usage)\b"
+        r"|\bps\b.{0,30}\b(cpu|mem|process)\b"
+        r"|\b(running processes|active processes|top processes)\b",
+        re.I
+    )
+    if _PROC_PAT.search(user_input):
+        thresh_m = re.search(r"(\d+)\s*%", user_input)
+        threshold = float(thresh_m.group(1)) if thresh_m else 0
+        by_mem = bool(re.search(r"\b(memory|ram|mem)\b", lower))
+        sort_col = "-%mem" if by_mem else "-%cpu"
+        col_idx = "4" if by_mem else "3"
+        if threshold > 0:
+            cmd = f"ps aux --sort={sort_col} | awk 'NR==1 || ${col_idx}>{threshold}' | head -30"
+        else:
+            cmd = f"ps aux --sort={sort_col} | head -25"
+        r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=10)
+        out = (r.stdout or r.stderr or "").strip()
+        if out:
+            return f"```\n{out}\n```"
+
+    # ── 2. Compound sysinfo: >=2 sysinfo keywords → run all matched commands ──
+    matched_sys = [(label, cmd) for pat, label, cmd in _SYSINFO_TERMS if pat.search(user_input)]
+    if len(matched_sys) >= 2:
+        parts = []
+        for label, cmd in matched_sys:
+            r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=5)
+            v = (r.stdout or r.stderr or "").strip()
+            if v:
+                parts.append(f"**{label}:**\n```\n{v}\n```")
+        if parts:
+            return "\n\n".join(parts)
+
+    # ── 3. Single sysinfo term ──────────────────────────────────────────────
+    if len(matched_sys) == 1:
+        label, cmd = matched_sys[0]
+        r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=5)
+        v = (r.stdout or r.stderr or "").strip()
+        if v:
+            return f"```\n{v}\n```"
+
+    # ── 4. Duplicate file finding ───────────────────────────────────────────
+    _DUP_PAT = re.compile(
+        r"\b(duplicate|identical|same)\b.{0,20}\bfiles?\b"
+        r"|\bfiles?\b.{0,20}\b(duplicate|identical)\b"
+        r"|\bfind.*\bduplicate\b|\bduplicate.*\bfind\b",
+        re.I
+    )
+    if _DUP_PAT.search(user_input):
+        dir_keywords = {"downloads": "/home/vaibhav/Downloads", "documents": "/home/vaibhav/Documents",
+                        "home": "/home/vaibhav", "desktop": "/home/vaibhav/Desktop"}
+        search_dir = "/home/vaibhav"
+        for kw, path in dir_keywords.items():
+            if kw in lower:
+                search_dir = path
+                break
+        abs_m = re.search(r"(/[^\s]+)", user_input)
+        if abs_m:
+            search_dir = abs_m.group(1)
+        r = subprocess.run(
+            f"fdupes -r '{search_dir}' 2>/dev/null | head -50",
+            shell=True, capture_output=True, text=True, timeout=30
+        )
+        out = (r.stdout or "").strip()
+        if not out:
+            r2 = subprocess.run(
+                f"find '{search_dir}' -type f -not -empty 2>/dev/null | xargs md5sum 2>/dev/null "
+                f"| sort | awk '{{if(prev==$1)print $0; prev=$1}}' | head -20",
+                shell=True, capture_output=True, text=True, timeout=30
+            )
+            out = (r2.stdout or "").strip() or "No duplicate files found."
+        return f"```\n{out}\n```"
+
+    # ── 5. Find files by extension / size / date ────────────────────────────
+    _FIND_PAT = re.compile(
+        r"\b(find all|find|locate|search for|list all)\b.{0,40}\bfiles?\b"
+        r"|\bfiles?\b.{0,10}\b(larger|bigger|over|more than|smaller)\b"
+        r"|\b\.(log|py|txt|pdf|jpg|png|mp4|csv|sh|conf|json|zip|mp3|tar|gz)\b.{0,20}\b(larger|smaller|files?|find)\b"
+        r"|\bfind.{0,20}\b\.(log|py|txt|pdf|jpg|png|mp4|csv|sh|conf|json|zip|mp3|tar|gz)\b",
+        re.I
+    )
+    if _FIND_PAT.search(user_input):
+        ext_m = re.search(r"\.(log|py|txt|pdf|jpg|jpeg|png|mp4|csv|sh|conf|json|zip|tar|gz|mp3|wav|docx|xlsx)\b", lower)
+        ext = ext_m.group(0) if ext_m else None
+        size_m = re.search(r"(larger|bigger|greater|over|more than|>)\s*(\d+)\s*(mb|gb|kb)", lower)
+        size_flag = None
+        if size_m:
+            n = int(size_m.group(2))
+            unit = size_m.group(3)
+            size_flag = f"+{n}M" if unit == "mb" else (f"+{n}G" if unit == "gb" else f"+{n}k")
+        sort_desc = bool(re.search(r"\b(descend|largest|biggest|sort.*desc)\b", lower))
+        name_part = f'-name "*{ext}"' if ext else '-type f'
+        size_part = f"-size {size_flag}" if size_flag else ""
+        cmd = (
+            f"find /home/vaibhav {name_part} {size_part} 2>/dev/null "
+            f"-exec ls -lh {{}} \\; 2>/dev/null"
+        )
+        if sort_desc or size_flag:
+            cmd += " | sort -k5 -rh"
+        cmd += " | head -30"
+        r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=20)
+        out = (r.stdout or r.stderr or "").strip()
+        if out:
+            return f"```\n{out}\n```"
+        return f"No {ext or ''} files found matching criteria in /home/vaibhav."
+
+    # ── 6. Random file selection + actual copy ──────────────────────────────
+    _RAND_PAT = re.compile(
+        r"\b(random(ly)?|select|pick|sample)\b.{0,50}\b(copy|move|put)\b"
+        r"|\b(copy|move)\b.{0,30}\brandom\b"
+        r"|\brandomly\s+(select|pick|choose|copy)\b",
+        re.I
+    )
+    if _RAND_PAT.search(user_input):
+        count_m = re.search(r"\b(\d+)\b", user_input)
+        count = int(count_m.group(1)) if count_m else 10
+
+        dir_map = {"downloads": "/home/vaibhav/Downloads", "download": "/home/vaibhav/Downloads",
+                   "documents": "/home/vaibhav/Documents", "desktop": "/home/vaibhav/Desktop",
+                   "pictures": "/home/vaibhav/Pictures", "home": "/home/vaibhav"}
+        dest_dir = "/home/vaibhav/Downloads"
+        for kw, path in dir_map.items():
+            if kw in lower:
+                dest_dir = path
+                break
+
+        # "test folder" / "folder named X" → subdirectory
+        test_m = re.search(r"\btest\s+folder\b|\btest_folder\b", lower)
+        named_m = re.search(r"\bfolder\s+named\s+(\w+)\b|\bfolder\s+called\s+(\w+)\b", lower)
+        if test_m:
+            dest_dir = os.path.join(dest_dir, "test")
+        elif named_m:
+            folder_name = named_m.group(1) or named_m.group(2)
+            dest_dir = os.path.join(dest_dir, folder_name)
+
+        # Source dir — "from X" or default to home
+        src_dir = "/home/vaibhav"
+        src_m = re.search(r"\bfrom\s+(\w+)\b", lower)
+        if src_m:
+            src_dir = dir_map.get(src_m.group(1), "/home/vaibhav")
+
+        try:
+            all_files = [f for f in os.listdir(src_dir) if os.path.isfile(os.path.join(src_dir, f))]
+        except OSError as e:
+            return f"❌ Cannot access `{src_dir}`: {e}"
+        if not all_files:
+            return f"❌ No files in `{src_dir}`."
+
+        selected = _random.sample(all_files, min(count, len(all_files)))
+        os.makedirs(dest_dir, exist_ok=True)
+        copied, failed = [], []
+        for f in selected:
+            src_path = os.path.join(src_dir, f)
+            dst_path = os.path.join(dest_dir, f)
+            try:
+                _shutil.copy2(src_path, dst_path)
+                if os.path.isfile(dst_path):
+                    copied.append(f)
+                else:
+                    failed.append(f"{f}: not found after copy")
+            except Exception as e:
+                failed.append(f"{f}: {e}")
+
+        summary = f"📁 Copied {len(copied)}/{len(selected)} files to `{dest_dir}`:\n"
+        summary += "\n".join(f"  • {f}" for f in copied)
+        if failed:
+            summary += f"\n\n❌ Failed: {', '.join(failed[:5])}"
+        return summary
+
+    # ── 7. Network connectivity / ping / DNS ────────────────────────────────
+    _NET_PAT = re.compile(
+        r"\b(ping|network access|internet connectivity|dns resolution|resolve dns|"
+        r"validate network|check.*internet|check.*connectivity|network.*test|"
+        r"pinging.*server|check.*ping|am i online|test.*network)\b",
+        re.I
+    )
+    if _NET_PAT.search(user_input):
+        parts = []
+        r1 = subprocess.run("ping -c 3 -W 2 8.8.8.8 2>&1", shell=True, capture_output=True, text=True, timeout=15)
+        if r1.stdout.strip():
+            parts.append(f"**Ping (8.8.8.8):**\n```\n{r1.stdout.strip()}\n```")
+        r2 = subprocess.run("ping -c 2 -W 2 google.com 2>&1 | tail -3", shell=True, capture_output=True, text=True, timeout=10)
+        if r2.stdout.strip():
+            parts.append(f"**DNS + Ping (google.com):**\n```\n{r2.stdout.strip()}\n```")
+        r3 = subprocess.run("nslookup google.com 2>/dev/null | tail -4", shell=True, capture_output=True, text=True, timeout=8)
+        if r3.stdout.strip():
+            parts.append(f"**DNS Lookup:**\n```\n{r3.stdout.strip()}\n```")
+        if parts:
+            return "\n\n".join(parts)
+        return "❌ All network checks failed — likely offline."
+
+    # ── 8. Privilege / permission check ────────────────────────────────────
+    _PRIV_PAT = re.compile(
+        r"\b(privilege|permission|sudo access|current user|whoami|user permissions|"
+        r"restricted director|groups?\b.*user|check.*permission|my.*user.*info|"
+        r"id\s+command|who am i|check.*sudo)\b",
+        re.I
+    )
+    if _PRIV_PAT.search(user_input):
+        parts = []
+        r1 = subprocess.run("whoami && id && groups", shell=True, capture_output=True, text=True, timeout=5)
+        if r1.stdout.strip():
+            parts.append(f"**User / Groups:**\n```\n{r1.stdout.strip()}\n```")
+        r2 = subprocess.run("sudo -l 2>&1 | head -20", shell=True, capture_output=True, text=True, timeout=8)
+        if r2.stdout.strip():
+            parts.append(f"**Sudo Permissions:**\n```\n{r2.stdout.strip()}\n```")
+        r3 = subprocess.run(
+            "ls -ld /root /etc/sudoers /etc/shadow 2>&1 | awk '{print $1, $3, $4, $NF}'",
+            shell=True, capture_output=True, text=True, timeout=5
+        )
+        if r3.stdout.strip():
+            parts.append(f"**Restricted Paths:**\n```\n{r3.stdout.strip()}\n```")
+        if parts:
+            return "\n\n".join(parts)
+
+    # ── 9. "Test execution / run multiple commands" ─────────────────────────
+    _TEST_CMDS_PAT = re.compile(
+        r"\b(test|check|verify|validate)\b.{0,50}\b(command|execution|capability|terminal)\b"
+        r"|\brunning\s+(linux\s+)?commands?\s+(like|such as|including)\b"
+        r"|\brun\s+(ls|pwd|df|free|ps|uname|whoami|id|hostname|uptime)\b",
+        re.I
+    )
+    if _TEST_CMDS_PAT.search(user_input):
+        # Extract known safe commands from the sentence
+        _KNOWN_CMDS = ["ls", "pwd", "df", "free", "ps", "uname", "whoami", "id", "hostname", "uptime", "date", "env", "who"]
+        found_cmds = [c for c in _KNOWN_CMDS if re.search(r'\b' + c + r'\b', user_input, re.I)]
+        if not found_cmds:
+            found_cmds = ["ls", "pwd", "df", "free", "ps"]  # default set
+        parts = []
+        for c in found_cmds:
+            r = subprocess.run(c, shell=True, capture_output=True, text=True, timeout=5)
+            out = (r.stdout or r.stderr or "").strip()
+            if out:
+                parts.append(f"**`{c}`:**\n```\n{out[:300]}\n```")
+        if parts:
+            return "\n\n".join(parts)
+
+    return None
+
+
 def _handle_search(ctx) -> Result:
     try:
+        # Always try local execution before web search
+        _local = _run_local_exec(ctx.user_input)
+        if _local:
+            return Result.success(_local)
+
         from search import web_search, format_results
         _ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
         _now = datetime.datetime.now(_ist)
@@ -374,6 +660,11 @@ def _handle_open_app(ctx) -> Result:
 
 def _handle_shell(ctx) -> Result:
     try:
+        # Intercept descriptive/natural-language queries before treating as raw shell
+        _local = _run_local_exec(ctx.user_input)
+        if _local:
+            return Result.success(_local)
+
         cmd = ctx.user_input
         for prefix in ["run ", "execute ", "terminal ", "shell ", "command "]:
             if cmd.lower().startswith(prefix):
@@ -673,10 +964,20 @@ def _handle_whatsapp(ctx) -> Result:
 
 
 def _handle_mcp(ctx) -> Result:
+    def _safe_path(raw: str) -> tuple:
+        """Expand and jail path to /home/vaibhav. Returns (resolved, error_str)."""
+        expanded = os.path.expanduser(raw.strip())
+        resolved = os.path.realpath(expanded)
+        if not resolved.startswith("/home/vaibhav"):
+            return None, f"Access denied — path outside /home/vaibhav: `{resolved}`"
+        return resolved, None
+
     try:
         import mcp_bridge
+        import secrets
         lower = ctx.user_input.lower()
 
+        # ── MCP server status / tool listing ─────────────────────────────
         if re.search(r"\b(status|servers?|list servers?)\b", lower) and "mcp" in lower:
             status = mcp_bridge.get_mcp_status()
             if not status:
@@ -701,32 +1002,282 @@ def _handle_mcp(ctx) -> Result:
                 lines.append(f"• **{t.get('name', '?')}** — {desc}")
             return Result.success("\n".join(lines))
 
+        # ── Filesystem: create_directory ──────────────────────────────────
+        _create_dir_pat = re.search(
+            r"\b(create|make|mkdir)\b.{0,30}?(\d+)?.{0,20}?\b(folder|directory|dir)s?\b",
+            lower
+        )
+        if _create_dir_pat or re.search(r"\bmkdir\b", lower):
+            # Words that describe naming *style*, not the literal folder name
+            _naming_noise = {"random", "using", "hash", "bit", "names", "named", "called",
+                             "unique", "generated", "auto", "temp", "tmp"}
+
+            def _resolve_base(raw_base: str) -> tuple:
+                """Resolve base path with 4-step fallback. Returns (resolved, err_or_None).
+                err sentinel values: None=ok, __fuzzy__:typed:matched, __notfound__:typed:csv_of_dirs"""
+                if not raw_base.startswith("/") and not raw_base.startswith("~"):
+                    candidate = f"/home/vaibhav/{raw_base}"
+                else:
+                    candidate = raw_base
+                resolved, err = _safe_path(candidate)
+                if err:
+                    return None, err
+                # Step 0: exact path exists
+                if os.path.isdir(resolved):
+                    return resolved, None
+
+                import difflib
+                typed_leaf = os.path.basename(resolved)
+                try:
+                    actual_dirs = [d for d in os.listdir("/home/vaibhav/")
+                                   if os.path.isdir(f"/home/vaibhav/{d}")]
+                except OSError:
+                    actual_dirs = []
+
+                # Step 1: case-insensitive exact match ("downloads" → "Downloads")
+                lower_map = {d.lower(): d for d in actual_dirs}
+                if typed_leaf.lower() in lower_map:
+                    matched = lower_map[typed_leaf.lower()]
+                    return f"/home/vaibhav/{matched}", f"__fuzzy__:{typed_leaf}:{matched}"
+
+                # Step 2: case-insensitive startswith ("down" → "Downloads")
+                sw = [d for d in actual_dirs if d.lower().startswith(typed_leaf.lower())]
+                if len(sw) == 1:
+                    return f"/home/vaibhav/{sw[0]}", f"__fuzzy__:{typed_leaf}:{sw[0]}"
+
+                # Step 3: difflib fuzzy (handles typos like "Downlaods")
+                fuzzy = difflib.get_close_matches(typed_leaf, actual_dirs, n=1, cutoff=0.6)
+                if fuzzy:
+                    return f"/home/vaibhav/{fuzzy[0]}", f"__fuzzy__:{typed_leaf}:{fuzzy[0]}"
+
+                # Step 4: total fail — surface available dirs to user
+                top = ", ".join(sorted(actual_dirs)[:10])
+                return None, f"__notfound__:{typed_leaf}:{top}"
+
+            # How many folders?
+            count_m = re.search(r"\b(\d+)\b", ctx.user_input)
+            count = int(count_m.group(1)) if count_m else 1
+            if count > 100:
+                return Result.success("⚠️ Max 100 folders per request.")
+
+            # Named folder? e.g. "create folder named test" / "mkdir test_folder"
+            named_m = re.search(
+                r"(?:named?|called|as)\s+([\w._-]+)|mkdir\s+([\w._-]+)",
+                ctx.user_input, re.IGNORECASE
+            )
+            # Strip naming-instruction words from extracted name
+            if named_m:
+                _extracted = (named_m.group(1) or named_m.group(2) or "").strip().lower()
+                if _extracted in _naming_noise:
+                    named_m = None
+
+            # Base path from message
+            path_m = re.search(r"in\s+(/[^\s]+|~/[^\s]+|[\w]+)",
+                               ctx.user_input, re.IGNORECASE)
+            if path_m:
+                raw_base = path_m.group(1)
+            else:
+                raw_base = "/home/vaibhav"
+
+            base, base_err = _resolve_base(raw_base)
+            if base_err and base_err.startswith("__fuzzy__:"):
+                _, typed, matched = base_err.split(":", 2)
+                # Auto-correct silently (case-only difference)
+                if typed.lower() == matched.lower():
+                    base_err = None
+                else:
+                    _named = None
+                    if named_m:
+                        _named = (named_m.group(1) or named_m.group(2) or "").strip()
+                    set_pending_action({
+                        "type": "fuzzy_confirm",
+                        "resolved_path": base,
+                        "count": count,
+                        "named": _named,
+                    })
+                    return Result.success(
+                        f"⚠️ No folder named `{typed}` found in /home/vaibhav/.\n"
+                        f"Did you mean `{matched}`? Reply YES to confirm or give the full path."
+                    )
+            elif base_err and base_err.startswith("__notfound__:"):
+                parts = base_err.split(":", 2)
+                typed = parts[1]
+                available = parts[2] if len(parts) > 2 else ""
+                msg = f"⚠️ No folder called `{typed}` found in /home/vaibhav/."
+                if available:
+                    msg += f"\nAvailable folders: {available}"
+                msg += f"\nProvide full path or correct name."
+                return Result.success(msg)
+            elif base_err:
+                return Result.success(f"❌ {base_err}")
+
+            def _create_one(full_path: str) -> tuple:
+                """Create a single directory. Returns (success: bool, message: str)."""
+                safe, err = _safe_path(full_path)
+                if err:
+                    return False, f"path_error: {err}"
+                result = mcp_bridge.call_mcp_server(
+                    "filesystem", "create_directory", {"path": safe}, context_intent=ctx.intent
+                )
+                if "error" in result.lower() or "failed" in result.lower():
+                    try:
+                        os.makedirs(safe, exist_ok=True)
+                    except Exception as fe:
+                        return False, f"MCP error: {result.strip()} | fallback error: {fe}"
+                # Verify directory actually exists on disk
+                if not os.path.isdir(safe):
+                    return False, f"MCP reported success but `{safe}` not found on disk"
+                return True, safe
+
+            if named_m:
+                name = (named_m.group(1) or named_m.group(2)).strip()
+                ok, msg = _create_one(os.path.join(base, name))
+                if not ok:
+                    return Result.success(f"❌ Failed to create `{name}`: {msg}")
+                return Result.success(f"📁 Created `{msg}`")
+            else:
+                # Create N folders with random names
+                created = []
+                failed = []
+                for _ in range(count):
+                    name = secrets.token_hex(4)
+                    ok, msg = _create_one(os.path.join(base, name))
+                    if ok:
+                        created.append(name)
+                    else:
+                        failed.append(f"{name}: {msg}")
+                if not created and failed:
+                    return Result.success(
+                        f"❌ All {count} folder(s) failed to create in `{base}`:\n"
+                        + "\n".join(f"  • {f}" for f in failed[:5])
+                    )
+                summary = f"📁 Created {len(created)}/{count} folders in `{base}`:\n"
+                summary += "\n".join(f"  • {n}" for n in created)
+                if failed:
+                    summary += f"\n\n❌ Failed ({len(failed)}): {', '.join(failed[:5])}"
+                return Result.success(summary)
+
+        # ── Filesystem: delete (HITL — never auto-execute) ────────────────
+        if re.search(r"\b(delete|remove|rm)\b", lower) and re.search(r"(/[^\s]+|\S+\.\w+)", ctx.user_input):
+            path_m = re.search(r"(/[^\s]+|\b[\w./~-]+\.\w+)", ctx.user_input)
+            if not path_m:
+                return Result.success("🗑️ I need a file path to delete.")
+            safe, err = _safe_path(path_m.group(1))
+            if err:
+                return Result.success(f"❌ {err}")
+            set_pending_action({"type": "delete_file", "path": safe})
+            return Result.success(
+                f"⚠️ **Delete `{safe}`?**\n\nThis cannot be undone. Type **YES** to confirm or **NO** to cancel."
+            )
+
+        # ── Filesystem: move / rename ─────────────────────────────────────
+        if re.search(r"\b(move|rename|mv)\b", lower):
+            paths = re.findall(r"(/[^\s]+|\b[\w./~-]+\.\w+)", ctx.user_input)
+            if len(paths) < 2:
+                return Result.success("📦 Need source and destination. Try: 'move /home/vaibhav/a.txt /home/vaibhav/b.txt'")
+            src, err = _safe_path(paths[0])
+            if err:
+                return Result.success(f"❌ {err}")
+            dst, err = _safe_path(paths[1])
+            if err:
+                return Result.success(f"❌ {err}")
+            result = mcp_bridge.call_mcp_server(
+                "filesystem", "move_file", {"source": src, "destination": dst}, context_intent=ctx.intent
+            )
+            if "error" in result.lower() or "failed" in result.lower():
+                try:
+                    import shutil
+                    shutil.move(src, dst)
+                    result = f"Moved `{src}` → `{dst}` (fallback)"
+                except Exception as fe:
+                    return Result.success(f"❌ Failed: {fe}")
+            return Result.success(f"📦 {result}")
+
+        # ── Filesystem: search files ──────────────────────────────────────
+        if re.search(r"\b(find|search for file|search file|locate)\b", lower):
+            path_m = re.search(r"in\s+(/[^\s]+)", ctx.user_input)
+            base = os.path.expanduser(path_m.group(1)) if path_m else "/home/vaibhav"
+            safe_base, err = _safe_path(base)
+            if err:
+                return Result.success(f"❌ {err}")
+            pattern_m = re.search(r"(?:find|search for?|locate)\s+(\S+)", ctx.user_input, re.IGNORECASE)
+            pattern = pattern_m.group(1) if pattern_m else "*"
+            result = mcp_bridge.call_mcp_server(
+                "filesystem", "search_files",
+                {"path": safe_base, "pattern": pattern},
+                context_intent=ctx.intent
+            )
+            return Result.success(f"🔍 **Search `{pattern}` in `{safe_base}`**\n\n{result}")
+
+        # ── Filesystem: file info ─────────────────────────────────────────
+        if re.search(r"\b(info|size|modified|stat)\b", lower) and re.search(r"(/[^\s]+|\S+\.\w+)", ctx.user_input):
+            path_m = re.search(r"(/[^\s]+|\b[\w./~-]+\.\w+)", ctx.user_input)
+            if not path_m:
+                return Result.success("ℹ️ I need a file path.")
+            safe, err = _safe_path(path_m.group(1))
+            if err:
+                return Result.success(f"❌ {err}")
+            result = mcp_bridge.call_mcp_server(
+                "filesystem", "get_file_info", {"path": safe}, context_intent=ctx.intent
+            )
+            return Result.success(f"ℹ️ **{safe}**\n\n{result}")
+
+        # ── Filesystem: read file ─────────────────────────────────────────
         if re.search(r"\b(read|open|show|cat)\b", lower) and re.search(r"(/[^\s]+|\S+\.\w+)", ctx.user_input):
             path_m = re.search(r"(/[^\s]+|\b[\w./~-]+\.\w+)", ctx.user_input)
             if not path_m:
-                return Result.success("📄 I need a file path. Try: 'mcp read /home/vaibhav/notes/todo.txt'")
-            path = os.path.expanduser(path_m.group(1))
-            result = mcp_bridge.call_mcp_server("filesystem", "read_file", {"path": path}, context_intent=ctx.intent)
-            return Result.success(f"📄 **{path}**\n\n{result}")
+                return Result.success("📄 I need a file path. Try: 'read /home/vaibhav/notes/todo.txt'")
+            safe, err = _safe_path(path_m.group(1))
+            if err:
+                return Result.success(f"❌ {err}")
+            result = mcp_bridge.call_mcp_server("filesystem", "read_file", {"path": safe}, context_intent=ctx.intent)
+            if "error" in result.lower() or "failed" in result.lower():
+                try:
+                    with open(safe) as f:
+                        result = f.read()
+                except Exception as fe:
+                    return Result.success(f"❌ Failed: {fe}")
+            return Result.success(f"📄 **{safe}**\n\n{result}")
 
-        if re.search(r"\b(list|ls|dir)\b", lower):
+        # ── Filesystem: list directory ────────────────────────────────────
+        if re.search(r"\b(list|ls|dir|what.s in|show files)\b", lower):
             path_m = re.search(r"(/[^\s]+)", ctx.user_input)
-            path = os.path.expanduser(path_m.group(1)) if path_m else "/home/vaibhav"
-            result = mcp_bridge.call_mcp_server("filesystem", "list_directory", {"path": path}, context_intent=ctx.intent)
-            return Result.success(f"📂 **{path}**\n\n{result}")
+            raw = path_m.group(1) if path_m else "/home/vaibhav"
+            safe, err = _safe_path(raw)
+            if err:
+                return Result.success(f"❌ {err}")
+            result = mcp_bridge.call_mcp_server("filesystem", "list_directory", {"path": safe}, context_intent=ctx.intent)
+            if "error" in result.lower() or "failed" in result.lower():
+                try:
+                    entries = os.listdir(safe)
+                    result = "\n".join(sorted(entries))
+                except Exception as fe:
+                    return Result.success(f"❌ Failed: {fe}")
+            return Result.success(f"📂 **{safe}**\n\n{result}")
 
-        if re.search(r"\b(write|save|create)\b", lower):
+        # ── Filesystem: write file ────────────────────────────────────────
+        if re.search(r"\b(write|save|create)\b", lower) and not re.search(r"\b(folder|directory|dir)\b", lower):
             path_m = re.search(r"(/[^\s]+|\b[\w./~-]+\.\w+)", ctx.user_input)
             if not path_m:
-                return Result.success("📄 I need a file path. Try: 'mcp write /home/vaibhav/notes/test.txt with content Hello'")
-            path = os.path.expanduser(path_m.group(1))
+                return Result.success("📄 I need a file path. Try: 'write /home/vaibhav/notes/test.txt with content Hello'")
+            safe, err = _safe_path(path_m.group(1))
+            if err:
+                return Result.success(f"❌ {err}")
             content_m = re.search(r"(?:with content|content|containing|text)\s+(.+)$", ctx.user_input, re.IGNORECASE | re.DOTALL)
             content = content_m.group(1).strip() if content_m else ""
             if not content:
-                return Result.success(f"📄 What should I write to `{path}`? Try: 'mcp write {path} with content Hello'")
-            result = mcp_bridge.call_mcp_server("filesystem", "write_file", {"path": path, "content": content}, context_intent=ctx.intent)
+                return Result.success(f"📄 What should I write to `{safe}`? Try: 'write {safe} with content Hello'")
+            result = mcp_bridge.call_mcp_server("filesystem", "write_file", {"path": safe, "content": content}, context_intent=ctx.intent)
+            if "error" in result.lower() or "failed" in result.lower():
+                try:
+                    with open(safe, "w") as f:
+                        f.write(content)
+                    result = f"Written to `{safe}` (fallback)"
+                except Exception as fe:
+                    return Result.success(f"❌ Failed: {fe}")
             return Result.success(f"📄 {result}")
 
+        # ── Non-filesystem MCP: web search, github, gdrive ───────────────
         if re.search(r"\b(search|brave|web search)\b", lower):
             query_m = re.search(r"(?:search|brave search|web search)\s+(?:for\s+)?(.+)$", ctx.user_input, re.IGNORECASE)
             query = query_m.group(1).strip() if query_m else ctx.user_input
@@ -753,13 +1304,20 @@ def _handle_mcp(ctx) -> Result:
             )
         return Result.success(
             f"🔌 MCP active servers: {', '.join(enabled)}\n\n"
-            "Commands:\n"
-            "• `mcp read /path/to/file` — read a file\n"
-            "• `mcp list /path/` — list directory\n"
-            "• `mcp write /path content …` — write file\n"
-            "• `mcp search <query>` — Brave web search\n"
-            "• `mcp github <query>` — GitHub search\n"
-            "• `mcp drive <query>` — Google Drive search\n"
+            "Filesystem commands:\n"
+            "• `create 5 folders in Downloads` — create N folders with random names\n"
+            "• `create folder named test in Downloads` — named folder\n"
+            "• `list /home/vaibhav/Downloads` — list directory\n"
+            "• `read /path/to/file` — read file contents\n"
+            "• `write /path/to/file with content ...` — write file\n"
+            "• `move /src /dst` — move or rename\n"
+            "• `find *.py in /home/vaibhav/EDITH` — search files\n"
+            "• `info /path/to/file` — file metadata\n"
+            "• `delete /path/to/file` — delete (requires confirmation)\n\n"
+            "Other:\n"
+            "• `search <query>` — Brave web search\n"
+            "• `github <query>` — GitHub search\n"
+            "• `drive <query>` — Google Drive search\n"
             "• `mcp status` — server status"
         )
     except Exception as e:
@@ -826,6 +1384,10 @@ def _handle_system_health(ctx) -> Result:
 
 def _handle_chat_fallback(ctx) -> Result:
     try:
+        _local = _run_local_exec(ctx.user_input)
+        if _local:
+            return Result.success(_local)
+
         from search import web_search, format_results
 
         feat_query = ctx.user_input.lower()
@@ -1117,5 +1679,34 @@ def execute_pending_action(action) -> str:
             except Exception as e:
                 results.append(f"❌ Step {i}: `{cmd}` -> ERROR ({e})")
         return "🤖 Agent Execution Summary:\n\n" + "\n".join(results)
+
+    elif atype == "fuzzy_confirm":
+        import secrets as _sec
+        base = action["resolved_path"]
+        count = action.get("count", 1)
+        named = action.get("named")
+        created = []
+        failed = []
+        targets = [named] if named else [_sec.token_hex(4) for _ in range(count)]
+        for name in targets:
+            full = os.path.join(base, name)
+            try:
+                os.makedirs(full, exist_ok=True)
+                if os.path.isdir(full):
+                    created.append(name)
+                else:
+                    failed.append(f"{name}: created but not found on disk")
+            except Exception as e:
+                failed.append(f"{name}: {e}")
+        if not created and failed:
+            return (
+                f"❌ All {count} folder(s) failed in `{base}`:\n"
+                + "\n".join(f"  • {f}" for f in failed[:5])
+            )
+        summary = f"📁 Created {len(created)}/{count} folder(s) in `{base}`:\n"
+        summary += "\n".join(f"  • {n}" for n in created)
+        if failed:
+            summary += f"\n\n❌ Failed ({len(failed)}): {', '.join(failed[:5])}"
+        return summary
 
     return "Unknown action type."

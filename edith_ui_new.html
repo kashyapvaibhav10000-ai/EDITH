@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>E.D.I.T.H — Cognitive OS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:       #0a0a0a;
+    --sidebar:  #111111;
+    --card:     #1a1a1a;
+    --card2:    #222222;
+    --border:   #2a2a2a;
+    --blue:     #2563eb;
+    --blue-dim: #1d4ed8;
+    --blue-lt:  #3b82f6;
+    --green:    #22c55e;
+    --orange:   #f59e0b;
+    --text:     #f1f5f9;
+    --muted:    #64748b;
+    --muted2:   #94a3b8;
+    --font-ui:  system-ui, -apple-system, sans-serif;
+    --font-mono:'JetBrains Mono', monospace;
+    --font-head:'Syne', system-ui, sans-serif;
+  }
+
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font-ui); overflow: hidden; }
+
+  /* ── Layout ── */
+  .app { display: flex; height: 100vh; }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width: 210px; min-width: 210px; height: 100vh;
+    background: var(--sidebar);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    overflow-y: auto; overflow-x: hidden;
+    transition: width 0.25s cubic-bezier(0.4,0,0.2,1),
+                min-width 0.25s cubic-bezier(0.4,0,0.2,1),
+                transform 0.25s cubic-bezier(0.4,0,0.2,1);
+  }
+  .sidebar.collapsed { width: 0; min-width: 0; transform: translateX(-210px); }
+  .sidebar::-webkit-scrollbar { width: 3px; }
+  .sidebar::-webkit-scrollbar-thumb { background: var(--border); }
+
+  .sb-top {
+    padding: 16px 14px 12px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+  }
+  .sb-brand { font-size: 12px; font-weight: 700; letter-spacing: 0.5px; color: var(--text); }
+  .sb-badge {
+    font-size: 9px; background: #1e3a5f; color: var(--blue-lt);
+    padding: 2px 6px; border-radius: 4px; font-weight: 600; letter-spacing: 0.5px;
+  }
+
+  .sb-body { flex: 1; padding: 12px 10px; display: flex; flex-direction: column; gap: 4px; }
+
+  .btn-new-session {
+    width: 100%; padding: 8px 12px; margin-bottom: 12px;
+    background: var(--blue); color: #fff; border: none; border-radius: 6px;
+    font-size: 12px; font-weight: 600; cursor: pointer; letter-spacing: 0.3px;
+    transition: background 0.15s; text-align: center; font-family: var(--font-ui);
+  }
+  .btn-new-session:hover { background: var(--blue-dim); }
+
+  .sb-section {
+    font-size: 9px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+    color: var(--muted); padding: 8px 4px 4px; margin-top: 4px;
+  }
+
+  .nav-item {
+    display: flex; align-items: center; gap: 9px;
+    padding: 7px 8px; border-radius: 6px; cursor: pointer;
+    font-size: 12px; color: var(--muted2);
+    transition: background 0.12s, color 0.12s;
+    position: relative; border-left: 2px solid transparent;
+  }
+  .nav-item:hover { background: #1e1e1e; color: var(--text); }
+  .nav-item.active {
+    background: #1e3a5f; color: var(--blue-lt);
+    border-left-color: var(--blue-lt); border-radius: 0 6px 6px 0;
+  }
+  .nav-item .icon { font-size: 13px; width: 16px; text-align: center; flex-shrink: 0; }
+
+  .sb-history-sub {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 9px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+    color: var(--muted); padding: 6px 4px 2px; margin-top: 2px;
+  }
+  .sb-history-sub .icon { font-size: 10px; }
+
+  .hist-item {
+    padding: 5px 8px; font-size: 11px; color: var(--muted);
+    cursor: pointer; border-radius: 4px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    transition: background 0.12s, color 0.12s;
+  }
+  .hist-item:hover { background: #1e1e1e; color: var(--text); }
+
+  /* Sidebar health */
+  .sb-health {
+    padding: 10px 14px 8px;
+    border-top: 1px solid var(--border);
+    display: flex; flex-direction: column; gap: 7px;
+  }
+  .health-row { display: flex; align-items: center; gap: 6px; font-size: 10px; }
+  .health-label { color: var(--muted); width: 28px; flex-shrink: 0; font-weight: 600; letter-spacing: 0.5px; }
+  .health-bar-wrap { flex: 1; height: 4px; background: #2a2a2a; border-radius: 2px; overflow: hidden; }
+  .health-bar { height: 100%; border-radius: 2px; width: 0; transition: width 1s ease; }
+  .bar-blue   { background: var(--blue-lt); }
+  .bar-orange { background: var(--orange); }
+  .health-pct { font-size: 10px; color: var(--muted2); width: 28px; text-align: right; flex-shrink: 0; font-family: var(--font-mono); }
+  .health-llm { display: flex; align-items: center; gap: 5px; }
+  .health-llm .gear     { font-size: 11px; color: var(--muted); }
+  .health-llm .provider { font-size: 10px; font-weight: 700; color: var(--text); letter-spacing: 0.5px; font-family: var(--font-mono); }
+  .dot-green { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 5px var(--green); margin-left: auto; }
+
+  /* Sidebar user row */
+  .sb-user {
+    display: flex; align-items: center; gap: 9px;
+    padding: 10px 14px; border-top: 1px solid var(--border); cursor: pointer;
+    transition: background 0.12s;
+  }
+  .sb-user:hover { background: #161616; }
+  .user-avatar {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--blue); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700; flex-shrink: 0;
+  }
+  .user-info { flex: 1; min-width: 0; }
+  .user-name  { font-size: 12px; font-weight: 600; color: var(--text); }
+  .user-email { font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .user-gear  { font-size: 14px; color: var(--muted); transition: color 0.15s; }
+  .sb-user:hover .user-gear { color: var(--text); }
+
+  /* ── Main ── */
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* Top bar */
+  .topbar {
+    display: flex; align-items: center;
+    padding: 0 20px; height: 48px; flex-shrink: 0;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+  }
+  .topbar-left   { flex: 1; display: flex; align-items: center; }
+  .topbar-center { flex: 1; text-align: center; }
+  .topbar-right  { flex: 1; display: flex; align-items: center; gap: 10px; justify-content: flex-end; }
+
+  .hamburger { font-size: 18px; color: var(--muted2); cursor: pointer; line-height: 1; user-select: none; }
+  .topbar-title {
+    font-family: var(--font-mono); font-size: 11px; font-weight: 700;
+    letter-spacing: 3px; text-transform: uppercase; color: var(--muted2);
+  }
+  .status-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: #0f2a0f; border: 1px solid #2d4a2d;
+    padding: 4px 12px; border-radius: 20px;
+    font-size: 10px; font-family: var(--font-mono); color: #86efac; letter-spacing: 0.5px;
+  }
+  .status-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 5px var(--green); flex-shrink: 0; }
+  .topbar-avatar {
+    width: 28px; height: 28px; border-radius: 50%; background: var(--blue);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; color: #fff; cursor: pointer; flex-shrink: 0;
+  }
+
+  /* Scroll area */
+  .main-scroll {
+    flex: 1; overflow-y: auto; padding: 24px 20px;
+    display: flex; flex-direction: column; align-items: center; gap: 16px;
+  }
+  .main-scroll::-webkit-scrollbar { width: 4px; }
+  .main-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .cards-col { width: 100%; max-width: 580px; display: flex; flex-direction: column; gap: 16px; }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 20px; position: relative; overflow: hidden;
+    opacity: 0; transform: translateY(12px);
+    animation: fadeUp 0.4s ease forwards;
+  }
+  .card:nth-child(1) { animation-delay: 0ms; }
+  .card:nth-child(2) { animation-delay: 100ms; }
+  .card:nth-child(3) { animation-delay: 200ms; }
+  .card:nth-child(4) { animation-delay: 300ms; }
+
+  @keyframes fadeUp { to { opacity: 1; transform: translateY(0); } }
+
+  .card-header {
+    display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;
+  }
+  .card-label {
+    font-size: 10px; font-weight: 700; letter-spacing: 2px;
+    text-transform: uppercase; color: var(--muted2);
+  }
+
+  /* Card 1 — System Alert */
+  .alert-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .alert-badge {
+    font-size: 9px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+    background: #1e3a5f; color: var(--blue-lt); padding: 3px 10px; border-radius: 20px;
+    border: 1px solid #2563eb55;
+  }
+  .alert-time { font-family: var(--font-mono); font-size: 10px; color: var(--muted); }
+  .alert-heading {
+    font-family: var(--font-head); font-size: 30px; font-weight: 800;
+    color: var(--text); line-height: 1.05; margin-bottom: 10px; letter-spacing: -0.5px;
+  }
+  .alert-sub { font-size: 12px; color: var(--muted2); line-height: 1.6; max-width: 340px; }
+  .alert-orb {
+    position: absolute; right: -30px; top: 50%; transform: translateY(-50%);
+    width: 140px; height: 140px; border-radius: 50%;
+    background: radial-gradient(circle, #2563eb22 0%, #2563eb08 50%, transparent 70%);
+    border: 1px solid #2563eb20;
+    animation: orbPulse 3s ease-in-out infinite; pointer-events: none;
+  }
+  .alert-orb::after {
+    content: ''; position: absolute; inset: 14px; border-radius: 50%;
+    background: radial-gradient(circle, #2563eb18 0%, transparent 70%);
+    border: 1px solid #2563eb15;
+  }
+  @keyframes orbPulse {
+    0%, 100% { box-shadow: 0 0 20px #2563eb22; }
+    50%       { box-shadow: 0 0 55px #2563eb55; }
+  }
+
+  /* Card 2 — Active Nodes */
+  .signal-icon { font-size: 16px; }
+  .node-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+  .node-row { display: flex; align-items: center; gap: 12px; }
+  .node-icon {
+    width: 36px; height: 36px; border-radius: 8px;
+    background: var(--card2); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; flex-shrink: 0;
+  }
+  .node-info { flex: 1; }
+  .node-name { font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
+  .node-sub  { font-size: 10px; color: var(--muted); font-family: var(--font-mono); }
+  .conf-label { font-size: 9px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+  .conf-bars { display: flex; gap: 4px; }
+  .conf-bar  { flex: 1; height: 5px; border-radius: 3px; }
+  .cb1 { background: #2563eb; }
+  .cb2 { background: #3b82f6; }
+  .cb3 { background: #3b82f699; }
+  .cb4 { background: #3b82f666; }
+  .cb5 { background: #3b82f633; }
+
+  /* Card 3 — Decision Log */
+  .log-entries { display: flex; flex-direction: column; gap: 8px; }
+  .log-entry {
+    background: var(--card2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 14px;
+  }
+  .log-entry.accent { border-left: 3px solid var(--blue-lt); }
+  .log-meta { font-size: 9px; font-family: var(--font-mono); letter-spacing: 0.5px; color: var(--muted); margin-bottom: 6px; }
+  .log-meta .src-blue { color: var(--blue-lt); }
+  .log-text { font-size: 12px; color: var(--muted2); line-height: 1.5; }
+
+  /* Card 4 — Active Context */
+  .tokens-label { font-family: var(--font-mono); font-size: 11px; color: var(--blue-lt); }
+  .terminal {
+    background: #0d0d0d; border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px 16px; margin-bottom: 12px; position: relative;
+    font-family: var(--font-mono); font-size: 11px; line-height: 1.9;
+  }
+  .terminal-init { color: var(--blue-lt); font-weight: 700; margin-bottom: 4px; }
+  .terminal-line { color: #86efac; }
+  .terminal-line .ok { color: #4ade80; font-weight: 700; }
+  .cursor {
+    display: inline-block; width: 7px; height: 12px;
+    background: #86efac; vertical-align: middle; margin-left: 2px;
+    animation: blink 0.5s step-end infinite;
+  }
+  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+  .spinner {
+    position: absolute; top: 12px; right: 14px;
+    font-size: 15px; color: var(--blue-lt);
+    animation: spin 2s linear infinite; display: inline-block;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .cmd-pills { display: flex; gap: 8px; flex-wrap: wrap; }
+  .cmd-pill {
+    font-family: var(--font-mono); font-size: 11px;
+    background: var(--card2); border: 1px solid var(--border);
+    color: var(--blue-lt); padding: 5px 14px; border-radius: 20px;
+    cursor: pointer; transition: background 0.15s, border-color 0.15s; font-weight: 500;
+  }
+  .cmd-pill:hover { background: #1e3a5f; border-color: var(--blue); }
+  .cmd-pill.loading { opacity: 0.6; pointer-events: none; }
+
+  .cmd-response {
+    margin-top: 10px; background: #0d0d0d; border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 14px;
+    font-family: var(--font-mono); font-size: 11px; color: #86efac;
+    line-height: 1.7; display: none; max-height: 160px; overflow-y: auto;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .cmd-response.visible { display: block; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ── SIDEBAR ── -->
+  <aside class="sidebar">
+    <div class="sb-top">
+      <span class="sb-brand">COGNITIVE OS</span>
+      <span class="sb-badge">v2.4</span>
+    </div>
+
+    <div class="sb-body">
+      <button class="btn-new-session" id="btn-new-session">+ New Session</button>
+
+      <div class="sb-section">Menu</div>
+      <div class="nav-item active" data-nav="chat"><span class="icon">💬</span> Chat</div>
+      <div class="nav-item" data-nav="voice"><span class="icon">🎙️</span> Voice</div>
+      <div class="nav-item" data-nav="lifeos"><span class="icon">🔮</span> Life OS</div>
+      <div class="nav-item" data-nav="phone"><span class="icon">📱</span> Phone</div>
+
+      <div class="sb-section">Customize</div>
+      <div class="nav-item" data-nav="connectors"><span class="icon">🧩</span> Connectors</div>
+      <div class="nav-item" data-nav="skills"><span class="icon">⚡</span> Skills</div>
+      <div class="nav-item" data-nav="plugins"><span class="icon">⊞</span> Plugins</div>
+      <div class="nav-item" data-nav="commands"><span class="icon">🖥️</span> Commands</div>
+
+      <div class="sb-section">History</div>
+
+      <div class="sb-history-sub"><span class="icon">🕐</span> Today</div>
+      <div class="hist-item" id="hist-today-1">MCP setup plan</div>
+      <div class="hist-item" id="hist-today-2">Council decision</div>
+
+      <div class="sb-history-sub"><span class="icon">📅</span> Yesterday</div>
+      <div class="hist-item">Orchestrator refactor</div>
+      <div class="hist-item">Email draft</div>
+
+      <div class="sb-history-sub"><span class="icon">📊</span> This Week</div>
+      <div class="hist-item">Weekly briefing</div>
+    </div>
+
+    <!-- Health -->
+    <div class="sb-health">
+      <div class="health-row">
+        <span class="health-label">RAM</span>
+        <div class="health-bar-wrap"><div class="health-bar bar-blue" id="ram-bar"></div></div>
+        <span class="health-pct" id="ram-pct">—%</span>
+      </div>
+      <div class="health-row">
+        <span class="health-label">CPU</span>
+        <div class="health-bar-wrap"><div class="health-bar bar-orange" id="cpu-bar"></div></div>
+        <span class="health-pct" id="cpu-pct">—%</span>
+      </div>
+      <div class="health-row health-llm">
+        <span class="health-label">LLM</span>
+        <span class="gear">⚙️</span>
+        <span class="provider" id="llm-provider">LOCAL</span>
+        <span class="dot-green"></span>
+      </div>
+    </div>
+
+    <!-- User row -->
+    <div class="sb-user">
+      <div class="user-avatar">V</div>
+      <div class="user-info">
+        <div class="user-name">Vaibhav</div>
+        <div class="user-email">vaibhav@edith</div>
+      </div>
+      <span class="user-gear">⚙️</span>
+    </div>
+  </aside>
+
+  <!-- ── MAIN ── -->
+  <div class="main">
+
+    <!-- Top bar -->
+    <div class="topbar">
+      <div class="topbar-left">
+        <span class="hamburger">&#9776;</span>
+      </div>
+      <div class="topbar-center">
+        <span class="topbar-title">System Terminal</span>
+      </div>
+      <div class="topbar-right">
+        <div class="status-pill">
+          <span class="dot"></span>
+          ACTIVE: NEURAL_ORCHESTRATOR_V4
+        </div>
+        <div class="topbar-avatar">V</div>
+      </div>
+    </div>
+
+    <!-- Scrollable cards -->
+    <div class="main-scroll">
+      <div class="cards-col">
+
+        <!-- Card 1: System Alert -->
+        <div class="card">
+          <div class="alert-top">
+            <span class="alert-badge">SYSTEMALERT</span>
+            <span class="alert-time" id="alert-time">--:--:-- GMT</span>
+          </div>
+          <div class="alert-heading">NEURAL LINK STABLE.</div>
+          <div class="alert-sub">E.D.I.T.H. has synchronized with all MCP servers. Terminal ready for high-level cognitive tasks.</div>
+          <div class="alert-orb"></div>
+        </div>
+
+        <!-- Card 2: Active Nodes -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-label">Active Nodes</span>
+            <span class="signal-icon">📡</span>
+          </div>
+          <div class="node-list">
+            <div class="node-row">
+              <div class="node-icon">🗄️</div>
+              <div class="node-info">
+                <div class="node-name">Local Vector DB</div>
+                <div class="node-sub" id="node-db">Latency: 4ms • 1.2M Records</div>
+              </div>
+            </div>
+            <div class="node-row">
+              <div class="node-icon">📲</div>
+              <div class="node-info">
+                <div class="node-name">KDE Connect</div>
+                <div class="node-sub" id="node-kde">Status: Paired • 1 device active</div>
+              </div>
+            </div>
+            <div class="node-row">
+              <div class="node-icon">⚙️</div>
+              <div class="node-info">
+                <div class="node-name">MCP Orchestrator</div>
+                <div class="node-sub">Clusters: 04 • Threads: 128</div>
+              </div>
+            </div>
+          </div>
+          <div class="conf-label">Confidence Level</div>
+          <div class="conf-bars">
+            <div class="conf-bar cb1"></div>
+            <div class="conf-bar cb2"></div>
+            <div class="conf-bar cb3"></div>
+            <div class="conf-bar cb4"></div>
+            <div class="conf-bar cb5"></div>
+          </div>
+        </div>
+
+        <!-- Card 3: Decision Log -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-label">Decision Log</span>
+          </div>
+          <div class="log-entries" id="log-entries">
+            <div class="log-entry">
+              <div class="log-meta">09:15 AM • LIFE_OS</div>
+              <div class="log-text">Rescheduled 'Weekly Briefing' to 14:00 based on current CPU load.</div>
+            </div>
+            <div class="log-entry accent">
+              <div class="log-meta">09:12 AM • <span class="src-blue">BOT_ACTION</span></div>
+              <div class="log-text">Generated refactor plan for Orchestrator module. 14 critical paths identified.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 4: Active Context -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-label">Active Context</span>
+            <span class="tokens-label">Tokens Remaining: <span id="tokens-val">42,810</span></span>
+          </div>
+          <div class="terminal">
+            <span class="spinner">&#10227;</span>
+            <div class="terminal-init">&gt;&gt; INITIALIZING_MCP_SESSION</div>
+            <div class="terminal-line">&gt; Loading environment variables... <span class="ok">[OK]</span></div>
+            <div class="terminal-line">&gt; Connecting to groq-llama-3-70b-v2... <span class="ok">[OK]</span></div>
+            <div class="terminal-line">&gt; Memory context depth: 12,000 tokens</div>
+            <div class="terminal-line">&gt; Status: Awaiting user input<span class="cursor"></span></div>
+          </div>
+          <div class="cmd-pills">
+            <div class="cmd-pill" data-cmd="/refactor">/refactor</div>
+            <div class="cmd-pill" data-cmd="/summarize">/summarize</div>
+            <div class="cmd-pill" data-cmd="/deploy">/deploy</div>
+          </div>
+          <div class="cmd-response" id="cmd-response"></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = 'http://127.0.0.1:8001';
+
+// ── Live clock ──
+function updateClock() {
+  const now = new Date();
+  const t = now.toUTCString().match(/(\d{2}:\d{2}:\d{2})/);
+  if (t) document.getElementById('alert-time').textContent = t[1] + ' GMT';
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── Sidebar toggle ──
+(function() {
+  const sidebar = document.querySelector('.sidebar');
+  const burger  = document.querySelector('.hamburger');
+  const stored  = localStorage.getItem('edith_sb');
+  if (stored === '0') sidebar.classList.add('collapsed');
+  burger.addEventListener('click', () => {
+    const collapsed = sidebar.classList.toggle('collapsed');
+    localStorage.setItem('edith_sb', collapsed ? '0' : '1');
+  });
+})();
+
+// ── Sidebar nav ──
+document.querySelectorAll('.nav-item').forEach(el => {
+  el.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    el.classList.add('active');
+  });
+});
+
+// ── New Session ──
+document.getElementById('btn-new-session').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-new-session');
+  btn.textContent = 'Session cleared ✓';
+  btn.style.background = '#166534';
+  try {
+    await fetch(API + '/api/chat', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({message: '__reset__'})
+    });
+  } catch(e) {}
+  setTimeout(() => {
+    btn.textContent = '+ New Session';
+    btn.style.background = '';
+  }, 2000);
+});
+
+// ── System status — poll every 10s ──
+async function fetchSystemStatus() {
+  try {
+    const res = await fetch(API + '/api/system-status');
+    if (!res.ok) throw new Error();
+    const d = await res.json();
+    const sys = d.system || d;
+    const ram = Math.round(sys.ram_percent ?? 0);
+    const cpu = Math.round(sys.cpu_percent ?? 0);
+    document.getElementById('ram-bar').style.width = ram + '%';
+    document.getElementById('ram-pct').textContent = ram + '%';
+    document.getElementById('cpu-bar').style.width = cpu + '%';
+    document.getElementById('cpu-pct').textContent = cpu + '%';
+  } catch(e) {
+    document.getElementById('ram-pct').textContent = '0%';
+    document.getElementById('cpu-pct').textContent = '0%';
+  }
+}
+fetchSystemStatus();
+setInterval(fetchSystemStatus, 10000);
+
+// ── Active provider — poll every 30s ──
+async function fetchProvider() {
+  try {
+    const res = await fetch(API + '/api/status');
+    if (!res.ok) throw new Error();
+    const d = await res.json();
+    const p = (d.active_provider || 'LOCAL').toUpperCase();
+    document.getElementById('llm-provider').textContent = p;
+  } catch(e) {
+    document.getElementById('llm-provider').textContent = 'LOCAL';
+  }
+}
+fetchProvider();
+setInterval(fetchProvider, 30000);
+
+// ── KDE Connect — poll every 30s ──
+async function fetchPhone() {
+  try {
+    const res = await fetch(API + '/api/phone');
+    if (!res.ok) throw new Error();
+    const d = await res.json();
+    const paired = d.status === 'online' ? 'Paired • 1 device active' : 'Offline';
+    const bat = d.battery ? ' • Battery: ' + d.battery + '%' : '';
+    document.getElementById('node-kde').textContent = 'Status: ' + paired + bat;
+  } catch(e) {
+    document.getElementById('node-kde').textContent = 'Status: Unknown';
+  }
+}
+fetchPhone();
+setInterval(fetchPhone, 30000);
+
+// ── Decision log — poll every 30s ──
+async function fetchTraces() {
+  try {
+    const res = await fetch(API + '/api/traces/recent?limit=2');
+    if (!res.ok) throw new Error();
+    const d = await res.json();
+    const traces = (d.traces || []).slice(0, 2);
+    if (!traces.length) return;
+    const container = document.getElementById('log-entries');
+    container.innerHTML = traces.map((t, i) => {
+      const intent = (t.intent || 'SYSTEM').toUpperCase();
+      const input = (t.user_input || '—').slice(0, 120);
+      let timeStr = '--:-- --';
+      try {
+        const dt = new Date(t.created_at);
+        timeStr = dt.toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit'});
+      } catch(e) {}
+      const accent = i === 1 ? ' accent' : '';
+      const srcClass = i === 1 ? ' class="src-blue"' : '';
+      return `<div class="log-entry${accent}">
+        <div class="log-meta">${timeStr} • <span${srcClass}>${intent}</span></div>
+        <div class="log-text">${input}</div>
+      </div>`;
+    }).join('');
+  } catch(e) {}
+}
+fetchTraces();
+setInterval(fetchTraces, 30000);
+
+// ── History — poll every 30s ──
+async function fetchHistory() {
+  try {
+    const res = await fetch(API + '/api/recent_traces?limit=5');
+    if (!res.ok) throw new Error();
+    const d = await res.json();
+    const traces = d.traces || [];
+    if (traces[0]) document.getElementById('hist-today-1').textContent = (traces[0].user_input || 'MCP setup plan').slice(0, 26);
+    if (traces[1]) document.getElementById('hist-today-2').textContent = (traces[1].user_input || 'Council decision').slice(0, 26);
+  } catch(e) {}
+}
+fetchHistory();
+setInterval(fetchHistory, 30000);
+
+// ── Command pills ──
+document.querySelectorAll('.cmd-pill').forEach(pill => {
+  pill.addEventListener('click', async () => {
+    const cmd = pill.dataset.cmd;
+    const resp = document.getElementById('cmd-response');
+    resp.textContent = '> Running ' + cmd + '...';
+    resp.classList.add('visible');
+    pill.classList.add('loading');
+    try {
+      const res = await fetch(API + '/api/chat', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({message: cmd})
+      });
+      const d = await res.json();
+      resp.textContent = '> ' + (d.reply || d.response || 'Done.').slice(0, 400);
+    } catch(e) {
+      resp.textContent = '> Error: EDITH server unreachable.';
+    }
+    pill.classList.remove('loading');
+  });
+});
+</script>
+</body>
+</html>

@@ -29,6 +29,12 @@ SHELL_PATTERNS = [
     r"\b(install|uninstall|apt|pip|npm|pacman|yay)\s+\w+",
     r"(start|stop|restart|kill)\s+(service|process|server|daemon)",
     r"\b(htop|neofetch|systemctl|journalctl|dmesg)\b",
+    r"\brun\s+the\s+(bash|shell|python|script)\b",
+]
+
+OPEN_APP_PATTERNS = [
+    r"^(open|launch|start)\s+(chrome|chromium|firefox|brave|opera|browser|terminal|konsole|spotify|vlc|code|vscode|files|dolphin|nautilus|calculator|kcalc|steam|discord|slack|telegram|notion|obsidian|gimp|inkscape|blender|thunderbird|libreoffice|okular|mpv|celluloid|audacity|kdenlive|handbrake|virtualbox|postman|insomnia|dbeaver)\b",
+    r"^(open|launch|start)\s+\w+\s*$",
 ]
 
 FILE_QUERY_PATTERNS = [
@@ -96,6 +102,9 @@ AGENT_PATTERNS = [
     r"(agent|multi.step|plan and|execute|automate).*(task|this|it)",
     r"(do|complete|finish|handle).*(for me|this task|multiple|steps)",
     r"(fix|organize|set up|build|create).*(project|folder|files|system)",
+    r"\byou\s+run\b",
+    r"\bexecute\s+this\b",
+    r"\brun\s+the\s+code\b",
 ]
 
 DATA_PATTERNS = [
@@ -133,6 +142,13 @@ BRIEFING_PATTERNS = [
     r"(weekly|briefing|status report|week.*review)",
     r"(open loops|priorities|drift|alignment)",
     r"(how am i doing|my progress|am i on track)",
+]
+
+# UPGRADE #2: Morning Briefing Patterns
+MORNING_BRIEFING_PATTERNS = [
+    r"(good morning|morning briefing|morning report)",
+    r"(morning update|daily briefing|daily digest)",
+    r"\bwhat do i have today\b",
 ]
 
 PROFILE_PATTERNS = [
@@ -192,6 +208,32 @@ MCP_PATTERNS = [
     r"(mcp|model context protocol)\s+(status|tools?|call|server)",
 ]
 
+COMPACT_PATTERNS = [
+    r"\b(compact|compress|clear context|reset context|free memory)\b",
+    r"\b/compact\b",
+]
+
+THINK_LEVEL_PATTERNS = [
+    r"\b/(think|reason)\s+(high|deep|hard|max|low|fast|quick)\b",
+    r"\bthink\s+(high|deep|hard|max|level)\b",
+    r"\bthink\s+(low|fast|quick|shallow)\b",
+]
+
+TRACE_PATTERNS = [
+    r"\b/(trace|tracing)\s+(on|off)\b",
+    r"\btrace\s+(on|off)\b",
+]
+
+AGENT_STOP_PATTERNS = [
+    r"\b(stop|cancel|abort|interrupt)\s+(agent|task|that|it)\b",
+    r"\bstop\s+what\s+you.re\s+doing\b",
+]
+
+LIST_SKILLS_PATTERNS = [
+    r"\b(list|show|what).*(skills?|capabilities)\b",
+    r"\bskills?\b",
+]
+
 def is_coding_request(text):
     text = text.lower()
     return any(re.search(p, text) for p in CODING_PATTERNS)
@@ -232,9 +274,27 @@ def detect_intent(text):
     text_lower = text.lower()
     word_count = len(text_lower.split())
 
+    # High-priority command intents (before domain patterns)
+    if any(re.search(p, text_lower) for p in COMPACT_PATTERNS):
+        return "compact"
+    if any(re.search(p, text_lower) for p in THINK_LEVEL_PATTERNS):
+        return "think_level"
+    if any(re.search(p, text_lower) for p in TRACE_PATTERNS):
+        return "trace_toggle"
+    if any(re.search(p, text_lower) for p in AGENT_STOP_PATTERNS):
+        return "agent_stop"
+    if any(re.search(p, text_lower) for p in LIST_SKILLS_PATTERNS):
+        return "list_skills"
+
     # System health — high priority before general search
     if any(re.search(p, text_lower) for p in SYSTEM_HEALTH_PATTERNS):
         return "system_health"
+
+    # Morning briefing — check before wake (more specific)
+    if any(re.search(p, text_lower) for p in MORNING_BRIEFING_PATTERNS):
+        # Only trigger if it's a briefing request, not a bare wake word
+        if not re.match(r"^(good morning|morning)\s*edith\s*$", text_lower):
+            return "morning_briefing"
 
     # Wake word (highest priority)
     if any(re.search(p, text_lower) for p in WAKE_PATTERNS):
@@ -264,9 +324,37 @@ def detect_intent(text):
     if any(re.search(p, text_lower) for p in UPGRADE_PATTERNS):
         return "self_improve"
 
+    # Early-exit: filesystem ops → mcp, execution ops → agent (before code check)
+    # (CODING_PATTERNS matches "create"/"script"/"bash" too broadly)
+    if re.search(r"\bmkdir\b", text_lower):
+        return "mcp"
+    _EARLY_MCP = [
+        r"\bcreate\s+\S+\s+(folder|directory|dir)s?\b",   # "create 16 folders"
+        r"\bcreate\s+(folder|directory|dir)s?\b",           # "create folder"
+        r"\bmake\s+\S*\s*(folder|directory|dir)s?\b",       # "make a directory"
+    ]
+    if any(re.search(p, text_lower) for p in _EARLY_MCP) and word_count >= MIN_WORDS_FOR_ACTION:
+        return "mcp"
+    _EARLY_AGENT = [
+        r"\byou\s+run\b",
+        r"\bexecute\s+this\b",
+        r"\brun\s+the\s+code\b",
+    ]
+    if any(re.search(p, text_lower) for p in _EARLY_AGENT) and word_count >= MIN_WORDS_FOR_ACTION:
+        return "agent"
+    _EARLY_SHELL = [
+        r"\brun\s+the\s+(bash|shell|python|script)\b",
+    ]
+    if any(re.search(p, text_lower) for p in _EARLY_SHELL) and word_count >= MIN_WORDS_FOR_ACTION:
+        return "shell"
+
     # Original intents — multi-pattern for code (needs good confidence)
     code_score = _count_matches(text_lower, CODING_PATTERNS)
-    if code_score >= 2 or (code_score == 1 and word_count >= 4):
+    agent_score = _count_matches(text_lower, AGENT_PATTERNS)
+    if code_score >= 2:
+        return "code"
+    # Low-confidence code (1 pattern) only wins if no agent signals present
+    if code_score == 1 and word_count >= 4 and agent_score == 0:
         return "code"
     # Call intent — check BEFORE sms/phone to prevent misrouting
     if any(re.search(p, text_lower) for p in CALL_PATTERNS):
@@ -285,7 +373,6 @@ def detect_intent(text):
         return "file_query"
 
     # Agent — needs higher confidence (multi-step, avoid false positives)
-    agent_score = _count_matches(text_lower, AGENT_PATTERNS)
     if agent_score >= 1 and word_count >= MIN_WORDS_FOR_ACTION:
         return "agent"
 
@@ -317,6 +404,10 @@ def detect_intent(text):
             return "calendar_week"
     if any(re.search(p, text_lower) for p in SEARCH_PATTERNS):
         return "search"
+
+    # Open app — no word count gate (2-word commands like "open chrome" valid)
+    if any(re.search(p, text_lower) for p in OPEN_APP_PATTERNS):
+        return "open_app"
 
     # Shell — require higher confidence for dangerous intents
     shell_score = _count_matches(text_lower, SHELL_PATTERNS)

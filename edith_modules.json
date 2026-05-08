@@ -1,0 +1,362 @@
+[
+  {
+    "id": "agent",
+    "name": "agent.py",
+    "lines": 286,
+    "doc": "EDITH Agent \u2014 Enhanced with Confidence Score + Dry-Run Sandbox\n\nPhase 4.6: Per-step confidence scori"
+  },
+  {
+    "id": "background_daemon",
+    "name": "background_daemon.py",
+    "lines": 563,
+    "doc": "EDITH Background Daemon \u2014 v2.0 Hardened\n\nResponsibilities:\n  - Manages Chat Server (FastAPI) and Wak"
+  },
+  {
+    "id": "calendar_reader",
+    "name": "calendar_reader.py",
+    "lines": 97,
+    "doc": ""
+  },
+  {
+    "id": "chat_server",
+    "name": "chat_server.py",
+    "lines": 771,
+    "doc": ""
+  },
+  {
+    "id": "circuit_breaker",
+    "name": "circuit_breaker.py",
+    "lines": 179,
+    "doc": "EDITH Circuit Breaker \u2014 Phase 4.7\n\nChecks health of Ollama, SearXNG, and cloud providers BEFORE firi"
+  },
+  {
+    "id": "cleanup",
+    "name": "cleanup.py",
+    "lines": 27,
+    "doc": ""
+  },
+  {
+    "id": "code_rag",
+    "name": "code_rag.py",
+    "lines": 138,
+    "doc": ""
+  },
+  {
+    "id": "coding_style",
+    "name": "coding_style.py",
+    "lines": 139,
+    "doc": ""
+  },
+  {
+    "id": "cognitive_profile",
+    "name": "cognitive_profile.py",
+    "lines": 345,
+    "doc": "EDITH Vision 1 \u2014 Cognitive Profile\nMaintains a growing model of the user: goals, patterns, blind spo"
+  },
+  {
+    "id": "compound_dag",
+    "name": "compound_dag.py",
+    "lines": 147,
+    "doc": "EDITH Compound Intent DAG \u2014 Phase 3.2\n\nDetects \"AND\", \"then\", \"after that\" chains in one message.\nBu"
+  },
+  {
+    "id": "config",
+    "name": "config.py",
+    "lines": 286,
+    "doc": "EDITH Configuration \u2014 Single source of truth for all paths, models, and constants."
+  },
+  {
+    "id": "consolidation",
+    "name": "consolidation.py",
+    "lines": 201,
+    "doc": "EDITH Memory Consolidation \u2014 \"Dream State\"\n\nTriggered when EDITH detects idle time (no user input fo"
+  },
+  {
+    "id": "context",
+    "name": "context.py",
+    "lines": 25,
+    "doc": "EDITH Dispatch Context \u2014 shared dataclass passed to all intent handlers.\n\nThis eliminates circular i"
+  },
+  {
+    "id": "conversation_dna",
+    "name": "conversation_dna.py",
+    "lines": 204,
+    "doc": "EDITH Conversation DNA Engine \u2014 Phase 2.6\n\nReads contextual signals (device, time-of-day, recent emo"
+  },
+  {
+    "id": "council",
+    "name": "council.py",
+    "lines": 184,
+    "doc": "EDITH Vision 4 \u2014 Council of Minds\n4 distinct reasoning personas that debate complex queries.\nStrateg"
+  },
+  {
+    "id": "dashboard",
+    "name": "dashboard.py",
+    "lines": 1214,
+    "doc": ""
+  },
+  {
+    "id": "data_analyst",
+    "name": "data_analyst.py",
+    "lines": 142,
+    "doc": ""
+  },
+  {
+    "id": "devlog",
+    "name": "devlog.py",
+    "lines": 308,
+    "doc": ""
+  },
+  {
+    "id": "edith",
+    "name": "edith.py",
+    "lines": 156,
+    "doc": ""
+  },
+  {
+    "id": "edith_arch_updater",
+    "name": "edith_arch_updater.py",
+    "lines": 776,
+    "doc": "EDITH Architecture Auto-Updater v2.0\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\nBoot script: AST scan \u2192 Gro"
+  },
+  {
+    "id": "edith_email",
+    "name": "edith_email.py",
+    "lines": 122,
+    "doc": ""
+  },
+  {
+    "id": "edith_scanner",
+    "name": "edith_scanner.py",
+    "lines": 560,
+    "doc": "EDITH Flow Scanner \u2014 drop in ~/EDITH, run: python edith_scanner.py\nAuto-scans all .py files. Re-run "
+  },
+  {
+    "id": "edith_widget",
+    "name": "edith_widget.py",
+    "lines": 890,
+    "doc": ""
+  },
+  {
+    "id": "email_reader",
+    "name": "email_reader.py",
+    "lines": 120,
+    "doc": ""
+  },
+  {
+    "id": "episodic_memory",
+    "name": "episodic_memory.py",
+    "lines": 118,
+    "doc": "EDITH Episodic Memory \u2014 Session Timelines\n\nStores entire session conversations as \"episodes\" so EDIT"
+  },
+  {
+    "id": "errors",
+    "name": "errors.py",
+    "lines": 23,
+    "doc": ""
+  },
+  {
+    "id": "feedback_tagger",
+    "name": "feedback_tagger.py",
+    "lines": 85,
+    "doc": "EDITH Feedback Tagger \u2014 Phase 7.2\n\nLinks \ud83d\udc4d\ud83d\udc4e to the trace entry's context: tier used, agents fired,\nc"
+  },
+  {
+    "id": "graph_memory",
+    "name": "graph_memory.py",
+    "lines": 229,
+    "doc": "EDITH Graph Memory \u2014 Knowledge Graph (GraphRAG)\n\nMaintains a persistent entity-relationship graph us"
+  },
+  {
+    "id": "image_gen",
+    "name": "image_gen.py",
+    "lines": 65,
+    "doc": ""
+  },
+  {
+    "id": "intent",
+    "name": "intent.py",
+    "lines": 479,
+    "doc": ""
+  },
+  {
+    "id": "intent_dispatch",
+    "name": "intent_dispatch.py",
+    "lines": 813,
+    "doc": "EDITH Intent Dispatch Table \u2014 Phase 4 Architecture Refactor\n\nCentral dispatch table. Each handler re"
+  },
+  {
+    "id": "life_os",
+    "name": "life_os.py",
+    "lines": 186,
+    "doc": "EDITH Vision 3 \u2014 Life OS\nDecision simulation (5 branches), weekly briefings, persistent open loop tr"
+  },
+  {
+    "id": "mcp_bridge",
+    "name": "mcp_bridge.py",
+    "lines": 453,
+    "doc": "EDITH MCP Bridge \u2014 Persistent subprocess pool with JSON-RPC 2.0 over stdio.\n\nEach enabled MCP server"
+  },
+  {
+    "id": "migrate_secrets_to_vault",
+    "name": "migrate_secrets_to_vault.py",
+    "lines": 186,
+    "doc": "EDITH Secret Migration \u2014 One-shot script to move .env secrets into the encrypted vault.\n\nUsage:\n    "
+  },
+  {
+    "id": "ml_router",
+    "name": "ml_router.py",
+    "lines": 110,
+    "doc": ""
+  },
+  {
+    "id": "model_manager",
+    "name": "model_manager.py",
+    "lines": 134,
+    "doc": "EDITH Model Manager \u2014 Phase 3.3\n\nModel lifecycle: switch, pre-warm, list loaded, per-intent override"
+  },
+  {
+    "id": "monitor",
+    "name": "monitor.py",
+    "lines": 267,
+    "doc": "EDITH Monitor \u2014 Proactive System Monitoring\n\nChecks: disk usage, phone battery, weather, break remin"
+  },
+  {
+    "id": "ocr",
+    "name": "ocr.py",
+    "lines": 108,
+    "doc": "EDITH OCR Module \u2014 Phase 5.2\n\nExtracts text from images using Tesseract OCR.\nFeeds extracted text in"
+  },
+  {
+    "id": "orchestrator",
+    "name": "orchestrator.py",
+    "lines": 866,
+    "doc": ""
+  },
+  {
+    "id": "phone",
+    "name": "phone.py",
+    "lines": 140,
+    "doc": "EDITH Phone Module \u2014 Enhanced with IP Fallback + Call Support\n\nPhase 4.9: KDE Connect IP fallback \u2014 "
+  },
+  {
+    "id": "rag",
+    "name": "rag.py",
+    "lines": 44,
+    "doc": ""
+  },
+  {
+    "id": "sandbox",
+    "name": "sandbox.py",
+    "lines": 34,
+    "doc": ""
+  },
+  {
+    "id": "search",
+    "name": "search.py",
+    "lines": 271,
+    "doc": ""
+  },
+  {
+    "id": "security_audit",
+    "name": "security_audit.py",
+    "lines": 58,
+    "doc": ""
+  },
+  {
+    "id": "self_improve",
+    "name": "self_improve.py",
+    "lines": 217,
+    "doc": "EDITH Vision 2 \u2014 Self-Improvement Loop\nReads ArXiv abstracts, proposes module rewrites and prompt up"
+  },
+  {
+    "id": "session",
+    "name": "session.py",
+    "lines": 382,
+    "doc": "EDITH Session Manager \u2014 v2.0 with Device Tracking + Continuity\n\nTies all 4 Visions together. Handles"
+  },
+  {
+    "id": "smart_memory",
+    "name": "smart_memory.py",
+    "lines": 327,
+    "doc": "Smart Memory Architecture - Hot RAM + Cold Disk Storage\nKeeps recent memories in RAM for speed, arch"
+  },
+  {
+    "id": "smart_router",
+    "name": "smart_router.py",
+    "lines": 720,
+    "doc": "EDITH Smart Router \u2014 4-Tier Privacy-Aware AI Routing\n\nRoutes requests through: Groq \u2192 Gemini \u2192 NVIDI"
+  },
+  {
+    "id": "telegram_bot",
+    "name": "telegram_bot.py",
+    "lines": 300,
+    "doc": "EDITH Telegram Bot \u2014 Full intent routing + scheduled weekly briefings.\nTurns your Telegram into a li"
+  },
+  {
+    "id": "test_harness",
+    "name": "test_harness.py",
+    "lines": 239,
+    "doc": "EDITH Test Harness \u2014 Phase 8.3\n\n20 pre-written test scenarios covering:\nintent detection, memory, co"
+  },
+  {
+    "id": "tools",
+    "name": "tools.py",
+    "lines": 74,
+    "doc": ""
+  },
+  {
+    "id": "trace_logger",
+    "name": "trace_logger.py",
+    "lines": 195,
+    "doc": "EDITH Trace Logger \u2014 Phase 7.1\n\nGenerates unique TRACE_ID at input layer, passed through every layer"
+  },
+  {
+    "id": "tuner",
+    "name": "tuner.py",
+    "lines": 169,
+    "doc": "EDITH Auto Router Tuner \u2014 Phase 7.3/7.4\n\nAnalyzes feedback-tagged traces weekly, adjusts routing/tie"
+  },
+  {
+    "id": "vault",
+    "name": "vault.py",
+    "lines": 173,
+    "doc": ""
+  },
+  {
+    "id": "video_summarizer",
+    "name": "video_summarizer.py",
+    "lines": 96,
+    "doc": ""
+  },
+  {
+    "id": "vision",
+    "name": "vision.py",
+    "lines": 215,
+    "doc": "EDITH Vision Module \u2014 Screenshot + Image Analysis\n\nSupports multiple screenshot tools (KDE Spectacle"
+  },
+  {
+    "id": "voice",
+    "name": "voice.py",
+    "lines": 184,
+    "doc": "EDITH Voice Module \u2014 v2.0 with VAD Mute + TTS Guard\n\nPhase 2 additions:\n  - _tts_active flag: preven"
+  },
+  {
+    "id": "wake_listener",
+    "name": "wake_listener.py",
+    "lines": 172,
+    "doc": "EDITH Wake Listener \u2014 Always-On Background Daemon (Vosk Version)\n\nContinuously listens to the microp"
+  },
+  {
+    "id": "weather",
+    "name": "weather.py",
+    "lines": 143,
+    "doc": "EDITH Weather Module \u2014 Open-Meteo (Free, No API key, High Privacy)\n\nUses Open-Meteo for weather data"
+  },
+  {
+    "id": "whatsapp",
+    "name": "whatsapp.py",
+    "lines": 82,
+    "doc": "EDITH WhatsApp Module \u2014 Phase 5.1 (Stub)\n\nPlaceholder for WhatsApp bridge integration.\nRequires what"
+  }
+]

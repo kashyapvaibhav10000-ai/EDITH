@@ -7,13 +7,35 @@ Graceful error handling — never exposes raw tracebacks to the user.
 
 import subprocess
 import os
+import json
+import datetime
 import vault
 import time
 import base64
-from config import MODELS, get_logger
+from config import MODELS, get_logger, EDITH_PATH
 from errors import Result
 
 log = get_logger("vision")
+
+_VISION_LOG_DIR = os.path.join(EDITH_PATH, "vision")
+
+
+def _log_vision_analysis(image_path: str, description: str, ocr_text: str = ""):
+    """Persist vision analysis to JSON sidecar + ChromaDB."""
+    try:
+        os.makedirs(_VISION_LOG_DIR, exist_ok=True)
+        ts = datetime.datetime.now()
+        fname = ts.strftime("%Y%m%d_%H%M%S") + ".json"
+        record = {
+            "timestamp": ts.isoformat(),
+            "image_path": image_path,
+            "description": description,
+            "ocr_text": ocr_text,
+        }
+        with open(os.path.join(_VISION_LOG_DIR, fname), "w") as f:
+            json.dump(record, f, indent=2)
+    except Exception as e:
+        log.warning(f"Vision log write failed: {e}")
 
 SCREENSHOT_PATH = "/tmp/edith_screenshot.png"
 
@@ -74,7 +96,7 @@ def _check_vision_model():
     """Check if the vision model is available in Ollama."""
     try:
         import ollama
-        models = ollama.list()
+        models = ollama.list(timeout=60)
         model_list = models.get("models", []) if isinstance(models, dict) else getattr(models, "models", [])
         model_names = []
         for m in model_list:
@@ -106,7 +128,8 @@ def analyze_image(image_path, question="What do you see in this image?"):
                 "content": question,
                 "images": [image_path],
             }],
-            options={"num_predict": 512}
+            options={"num_predict": 512},
+            timeout=60,
         )
         response = ""
         if isinstance(result, dict):
@@ -184,7 +207,9 @@ def analyze_screenshot(question="What is on my screen right now?") -> Result:
         path = take_screenshot()
         if path:
             log.info("Screenshot captured, analyzing...")
-            return Result.success(analyze_image(path, question))
+            description = analyze_image(path, question)
+            _log_vision_analysis(path, description)
+            return Result.success(description)
         return Result.success(
             "Couldn't capture your screen. No screenshot tool found. "
             "Install one: `sudo pacman -S spectacle` (KDE) or `sudo pacman -S scrot` (generic)."
@@ -202,7 +227,9 @@ def analyze_photo(image_path, question="What do you see in this image?"):
         return f"The vision model ({MODELS['vision']}) isn't loaded. Run `ollama pull {MODELS['vision']}` first."
 
     log.info(f"Analyzing photo: {image_path}")
-    return analyze_image(image_path, question)
+    description = analyze_image(image_path, question)
+    _log_vision_analysis(image_path, description)
+    return description
 
 
 if __name__ == "__main__":

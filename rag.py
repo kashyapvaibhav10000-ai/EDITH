@@ -31,6 +31,25 @@ def build_index() -> Result:
     except Exception as e:
         return Result.from_exception(e)
 
+def index_directory(path: str) -> Result:
+    """Index all supported files in given directory into a LlamaIndex VectorStoreIndex."""
+    from pathlib import Path
+    target = Path(path)
+    if not target.exists():
+        return Result.failure(f"Path does not exist: {path}", error_type="not_found")
+    files = [f for f in target.rglob("*") if f.suffix.lower() in SUPPORTED]
+    if not files:
+        return Result.failure(f"No supported files found in {path}", error_type="not_found")
+    try:
+        reader = SimpleDirectoryReader(str(target), required_exts=SUPPORTED, recursive=True)
+        documents = reader.load_data()
+        index = VectorStoreIndex.from_documents(documents)
+        log.info(f"index_directory: indexed {len(files)} files from {path}")
+        return Result.success({"index": index, "count": len(files), "path": path})
+    except Exception as e:
+        return Result.from_exception(e)
+
+
 def query_rag(question, index) -> Result:
     try:
         query_engine = index.as_query_engine()

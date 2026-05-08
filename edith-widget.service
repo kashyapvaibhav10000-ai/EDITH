@@ -1,0 +1,22 @@
+[Unit]
+Description=EDITH Cyberpunk Desktop Widget
+After=edith.service
+Wants=edith.service
+
+[Service]
+Type=simple
+ExecStartPre=/bin/sleep 3
+ExecStart=/home/vaibhav/edith-env/bin/python /home/vaibhav/EDITH/edith_widget.py
+WorkingDirectory=/home/vaibhav/EDITH
+Restart=on-failure
+RestartSec=5
+Environment=DISPLAY=:0
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=QT_QPA_PLATFORM=xcb
+
+# Logging
+StandardOutput=append:/home/vaibhav/EDITH/logs/widget.log
+StandardError=append:/home/vaibhav/EDITH/logs/widget.log
+
+[Install]
+WantedBy=default.target

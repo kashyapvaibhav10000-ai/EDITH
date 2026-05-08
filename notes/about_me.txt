@@ -1,0 +1,5 @@
+My name is Vaibhav. I am a developer working on AyurStock Pro.
+I live in Fatehpur, Uttar Pradesh, India.
+I am building a personal AI assistant called EDITH.
+EDITH stands for Even Dead I'm The Hero.
+My PC has an Intel i5-12400, 8GB RAM, 1TB SSD, running Manjaro Linux.

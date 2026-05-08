@@ -21,10 +21,13 @@ Usage:
 import threading
 import datetime
 import queue
+from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
 from typing import Callable, Dict, List, Any
 from config import get_logger
 from errors import Result
+
+_executor = ThreadPoolExecutor(max_workers=4)
 
 log = get_logger("event_bus")
 
@@ -38,6 +41,11 @@ class Topic(str, Enum):
     PHONE_NOTIFICATION    = "phone_notification"
     SELF_IMPROVE_PROPOSAL = "self_improve_proposal"
     WAKE                  = "wake"
+    INTENT_DETECTED       = "intent_detected"   # fired after intent classification
+    MEMORY_UPDATED        = "memory_updated"    # fired after remember() writes
+    SESSION_ENDED         = "session_ended"     # fired when user session closes
+    AGENT_ERROR           = "agent_error"       # fired when agent task fails
+    WATCHDOG_HEARTBEAT    = "watchdog_heartbeat" # fired by daemon watchdog cycle
 
 
 class Event:
@@ -105,8 +113,7 @@ class EventBus:
         for handler in handlers:
             try:
                 if self._async_dispatch:
-                    t = threading.Thread(target=handler, args=(payload,), daemon=True)
-                    t.start()
+                    _executor.submit(handler, payload)
                 else:
                     handler(payload)
             except Exception as e:
@@ -174,6 +181,28 @@ def calendar_reminder(event_title: str, start_time: str, minutes_until: int) -> 
     return bus.publish(Topic.CALENDAR_REMINDER, {
         "title": event_title, "start_time": start_time, "minutes_until": minutes_until
     }, source="calendar")
+
+
+def intent_detected(intent: str, user_input: str, emotion: str = "neutral", urgency: str = "LOW") -> Result:
+    """Publish an INTENT_DETECTED event."""
+    return bus.publish(Topic.INTENT_DETECTED, {
+        "intent": intent, "user_input": user_input[:200],
+        "emotion": emotion, "urgency": urgency,
+    }, source="orchestrator")
+
+
+def memory_updated(key: str, category: str = "edith_memory") -> Result:
+    """Publish a MEMORY_UPDATED event."""
+    return bus.publish(Topic.MEMORY_UPDATED, {
+        "key": key, "category": category,
+    }, source="orchestrator")
+
+
+def session_ended(session_id: str, summary: str = "") -> Result:
+    """Publish a SESSION_ENDED event."""
+    return bus.publish(Topic.SESSION_ENDED, {
+        "session_id": session_id, "summary": summary,
+    }, source="orchestrator")
 
 
 if __name__ == "__main__":

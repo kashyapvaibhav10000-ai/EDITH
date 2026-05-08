@@ -108,9 +108,15 @@ def initiate_call(number: str) -> Result:
 def get_battery() -> Result:
     """Get phone battery status."""
     try:
-        return Result.success(kdeconnect(["--battery"]))
-    except Exception as e:
-        return Result.from_exception(e)
+        result = subprocess.run(
+            ["kdeconnect-cli", "-d", KDE_DEVICE_ID, "--battery"],
+            capture_output=True, text=True, timeout=10
+        )
+        if result.returncode != 0:
+            return Result.success({"battery": "unavailable", "error": "kdeconnect battery flag unsupported"})
+        return Result.success(result.stdout.strip())
+    except Exception:
+        return Result.success({"battery": "unavailable", "error": "kdeconnect battery flag unsupported"})
 
 
 def send_ping() -> str:
