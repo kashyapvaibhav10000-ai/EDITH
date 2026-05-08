@@ -52,3 +52,6 @@ voices/
 *~
 .idea/
 .vscode/
+*.bin
+*.gguf
+models/
