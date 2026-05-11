@@ -887,7 +887,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-p
 // ══════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════
-const API = 'http://127.0.0.1:8001';
+const API = window.location.origin;
 const log = (...args) => console.log('[EDITH]', ...args);
 let currentPage = 'page-command';
 let chatOpen = false;
@@ -2101,7 +2101,7 @@ async function loadPluginsPanel() {
   const body = document.getElementById('plugins-body');
   body.innerHTML = '<div style="color:var(--text-dim);font-size:11px">Loading...</div>';
   try {
-    const res = await fetch('http://127.0.0.1:8001/api/mcp/status');
+    const res = await fetch('/api/mcp/status');
     const data = await res.json();
     const entries = Object.entries(data);
     if (!entries.length) { body.innerHTML = '<div style="color:var(--text-dim);font-size:11px">No MCP servers configured.</div>'; return; }
@@ -2133,7 +2133,7 @@ async function loadConnectorsPanel() {
   const body = document.getElementById('mcp-connectors-body');
   if (!body) return;
   try {
-    const res = await fetch('http://127.0.0.1:8001/api/mcp/status');
+    const res = await fetch('/api/mcp/status');
     const data = await res.json();
     const entries = Object.entries(data);
     if (!entries.length) { body.innerHTML = '<div style="color:var(--text-dim);font-size:11px">No MCP servers configured.</div>'; return; }
@@ -2167,7 +2167,7 @@ async function loadConnectorsPanel() {
 async function togglePlugin(name, checkbox) {
   checkbox.disabled = true;
   try {
-    const res = await fetch('http://127.0.0.1:8001/api/mcp/config/toggle/' + name, {method: 'POST'});
+    const res = await fetch('/api/mcp/config/toggle/' + name, {method: 'POST'});
     const d = await res.json();
     if (!d.ok) { checkbox.checked = !checkbox.checked; alert('Toggle failed: ' + d.error); }
   } catch(e) {
@@ -2192,7 +2192,7 @@ function closeSidebar() {
 
 async function sbFetchStats() {
   try {
-    const res = await fetch('http://127.0.0.1:8001/api/stats');
+    const res = await fetch('/api/stats');
     if (!res.ok) throw new Error();
     const d = await res.json();
     const ram = Math.round((d.system || {}).ram_percent || 0);
@@ -2203,7 +2203,7 @@ async function sbFetchStats() {
     document.getElementById('sb-cpu-pct').textContent = cpu + '%';
   } catch(e) {}
   try {
-    const res = await fetch('http://127.0.0.1:8001/api/status');
+    const res = await fetch('/api/status');
     if (!res.ok) throw new Error();
     const d = await res.json();
     const p = (d.active_provider || 'LOCAL').toUpperCase();
@@ -2213,7 +2213,7 @@ async function sbFetchStats() {
 
 async function sbFetchHistory() {
   try {
-    const res = await fetch('http://127.0.0.1:8001/api/traces/recent?limit=2');
+    const res = await fetch('/api/traces/recent?limit=2');
     if (!res.ok) throw new Error();
     const d = await res.json();
     const t = d.traces || [];

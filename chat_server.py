@@ -81,10 +81,10 @@ async def api_key_middleware(request: Request, call_next):
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost", "http://127.0.0.1", "http://localhost:3000", "http://localhost:8001", "http://127.0.0.1:8001"],
+    allow_origins=["*"],
     allow_methods=["POST", "GET", "DELETE"],
     allow_headers=["Content-Type", "X-Admin-Token"],
-    allow_credentials=True,
+    allow_credentials=False,
 )
 
 # Mount static files for AudioWorklet and perception engine
@@ -128,7 +128,7 @@ def _check_mcp_admin(req: Request):
 @app.get("/", response_class=HTMLResponse)
 def index():
     from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="http://127.0.0.1:8001/dashboard")
+    return RedirectResponse(url="/dashboard")
 
 # ────────────────────────────────────────────────────
 # Rate Limiting
