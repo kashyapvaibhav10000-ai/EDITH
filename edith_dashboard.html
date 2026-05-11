@@ -1883,8 +1883,9 @@ function updateClock() {
 async function fetchWeather() {
   try {
     const r=await fetch(`${API}/api/weather-status`); const d=await r.json();
-    if(d.error||!d.temp){document.getElementById('hud-weather').textContent='weather unavailable';return;}
-    document.getElementById('hud-weather').textContent=`${d.emoji||''} ${d.temp}°C ${d.description} · ${d.city}`;
+    const w=d.value||d;
+    if(d.error||!w.temp){document.getElementById('hud-weather').textContent='weather unavailable';return;}
+    document.getElementById('hud-weather').textContent=`${w.emoji||''} ${w.temp}°C ${w.description} · ${w.city}`;
   } catch(e){document.getElementById('hud-weather').textContent='--';}
 }
 
