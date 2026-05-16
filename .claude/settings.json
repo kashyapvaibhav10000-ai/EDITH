@@ -122,10 +122,19 @@
       "Bash(python -c \"import ast; ast.parse\\(open\\('/home/vaibhav/EDITH/smart_router.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
       "Bash(python3 -c \"import ast; ast.parse\\(open\\('/home/vaibhav/EDITH/agent.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
       "Skill(plan-eng-review)",
-      "Skill(plan-eng-review:*)"
+      "Skill(plan-eng-review:*)",
+      "Bash(grep -E \"\\\\.\\(txt|md|sh|yml|yaml|env|json|toml|cfg|ini|service|conf\\)$\")",
+      "Bash(\nSRC=/home/vaibhav/EDITH\nDST=/home/vaibhav/edith-source\n\n# All root-level .py files\ncp $SRC/agent.py $SRC/background_daemon.py $SRC/background_daemon_cloud.py $SRC/background_daemon_local.py \\\\\n   $SRC/calendar_reader.py $SRC/chat_server.py $SRC/chatterbox_worker.py $SRC/circuit_breaker.py \\\\\n   $SRC/cleanup.py $SRC/code_rag.py $SRC/coding_style.py $SRC/cognitive_profile.py \\\\\n   $SRC/compound_dag.py $SRC/config.py $SRC/consolidation.py $SRC/context.py \\\\\n   $SRC/conversation_dna.py $SRC/council.py $SRC/dashboard.py $SRC/data_analyst.py \\\\\n   $SRC/db_pool.py $SRC/devlog.py $SRC/edith_arch_updater.py $SRC/edith_email.py \\\\\n   $SRC/edith.py $SRC/edith_scanner.py $SRC/edith_widget.py $SRC/email_reader.py \\\\\n   $SRC/episodic_memory.py $SRC/errors.py $SRC/event_bus.py $SRC/feedback_tagger.py \\\\\n   $SRC/graph_memory.py $SRC/image_gen.py $SRC/intent.py $SRC/intent_dispatch.py \\\\\n   $SRC/life_os.py $SRC/local_bridge.py $SRC/mcp_bridge.py $SRC/migrate_secrets_to_vault.py \\\\\n   $SRC/ml_router.py $SRC/model_manager.py $SRC/monitor.py $SRC/ocr.py \\\\\n   $SRC/orchestrator.py $SRC/patch_devpanel.py $SRC/phone.py $SRC/proactive.py \\\\\n   $SRC/rag.py $SRC/sandbox.py $SRC/search.py $SRC/security_audit.py \\\\\n   $SRC/self_improve.py $SRC/session.py $SRC/shared_state.py $SRC/skills_loader.py \\\\\n   $SRC/smart_memory.py $SRC/smart_router.py $SRC/telegram_bot.py $SRC/test_harness.py \\\\\n   $SRC/tools.py $SRC/trace_logger.py $SRC/tuner.py $SRC/validator.py \\\\\n   $SRC/vault.py $SRC/video_summarizer.py $SRC/vision.py $SRC/voice.py \\\\\n   $SRC/wake_listener.py $SRC/weather.py $SRC/whatsapp.py \\\\\n   $DST/ && echo \"py: ok\")",
+      "Bash(grep -E \"\\\\.\\(py|html|js|sh|yml|yaml|json|md|txt|service|toml|cfg|csv|wav|onnx\\)$\")",
+      "Bash(~/.claude/skills/gstack/bin/gstack-config get *)",
+      "Bash(sed -n '82,90p' /home/vaibhav/EDITH/chat_server.py)",
+      "Bash(sed -n '128,132p' /home/vaibhav/EDITH/chat_server.py)",
+      "Bash(git push *)",
+      "Bash(ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no root@143.110.183.248 \"echo connected\")"
     ],
     "additionalDirectories": [
-      "/home/vaibhav/Downloads/bee8fbda"
+      "/home/vaibhav/Downloads/bee8fbda",
+      "/home/vaibhav/edith-source"
     ]
   }
 }

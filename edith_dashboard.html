@@ -406,6 +406,99 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-p
   50% { height: 12px; }
 }
 
+/* PAGE 3 — REPO DNA */
+#page-repo { display: grid; grid-template-columns: 260px 1fr; height: 100%; overflow: hidden; }
+#repo-sidebar { height: 100%; border-right: 1px solid var(--border-glow); display: flex; flex-direction: column; overflow: hidden; }
+#repo-main { height: 100%; overflow-y: auto; padding: 16px 20px; }
+#repo-main::-webkit-scrollbar { width: 3px; }
+#repo-main::-webkit-scrollbar-thumb { background: var(--border-glow); }
+#repo-sidebar-list { flex: 1; overflow-y: auto; padding: 6px; }
+#repo-sidebar-list::-webkit-scrollbar { width: 3px; }
+#repo-sidebar-list::-webkit-scrollbar-thumb { background: var(--border-glow); }
+.repo-hist-item { padding: 8px 10px; border-radius: 4px; cursor: pointer; font-size: 10px; color: var(--text-dim); margin-bottom: 4px; border: 1px solid transparent; transition: all 0.15s; }
+.repo-hist-item:hover { background: rgba(0,212,255,0.05); color: var(--text-primary); border-color: var(--border-glow); }
+.repo-hist-name { font-weight: 700; color: var(--text-primary); font-size: 11px; }
+.repo-hist-meta { font-size: 9px; color: var(--text-dim); margin-top: 2px; }
+.dna-input-row { display: flex; gap: 8px; margin-bottom: 16px; align-items: center; }
+.dna-url-input { flex: 1; background: rgba(0,212,255,0.04); border: 1px solid var(--border-glow); color: var(--text-primary); font-family: var(--font-mono); font-size: 11px; padding: 8px 12px; border-radius: 4px; outline: none; transition: border-color 0.2s; }
+.dna-url-input:focus { border-color: rgba(0,212,255,0.5); }
+.dna-url-input::placeholder { color: var(--text-dim); }
+.dna-btn { background: rgba(0,212,255,0.08); border: 1px solid var(--border-glow); color: var(--orb-color); font-family: var(--font-display); font-size: 9px; letter-spacing: 1px; padding: 8px 14px; border-radius: 4px; cursor: pointer; white-space: nowrap; transition: all 0.15s; }
+.dna-btn:hover { background: rgba(0,212,255,0.15); border-color: rgba(0,212,255,0.5); }
+.dna-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.dna-spinner { display: none; width: 14px; height: 14px; border: 2px solid var(--border-glow); border-top-color: var(--orb-color); border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
+.dna-spinner.active { display: block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.dna-section-label { font-family: var(--font-display); font-size: 8px; letter-spacing: 2px; color: var(--orb-color); margin: 14px 0 6px; }
+.dna-card { background: var(--bg-panel); border: 1px solid var(--border-glow); border-radius: 6px; padding: 10px 12px; margin-bottom: 6px; font-size: 11px; }
+.dna-card-steal { border-left: 3px solid #00ff88; }
+.dna-card-skip  { border-left: 3px solid #ff3333; }
+.dna-card-watch { border-left: 3px solid #ffaa00; }
+.dna-card-title { font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }
+.dna-card-desc  { color: var(--text-dim); font-size: 10px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.dna-card-hint  { font-size: 9px; color: rgba(74,85,104,0.6); margin-top: 4px; font-style: italic; }
+.dna-card-reason { color: rgba(74,85,104,0.7); font-size: 10px; font-style: italic; }
+.effort-badge { font-family: var(--font-display); font-size: 7px; letter-spacing: 1px; padding: 2px 6px; border-radius: 3px; text-transform: uppercase; margin-left: 6px; }
+.effort-low    { background: rgba(0,255,136,0.15); color: #00ff88; }
+.effort-medium { background: rgba(255,170,0,0.15); color: #ffaa00; }
+.effort-high   { background: rgba(255,51,51,0.15); color: #ff5555; }
+.dna-wins-box { background: rgba(0,100,200,0.08); border: 1px solid rgba(0,100,200,0.3); border-radius: 6px; padding: 12px 14px; margin-bottom: 10px; }
+.dna-wins-title { font-family: var(--font-display); font-size: 8px; letter-spacing: 2px; color: #60aaff; margin-bottom: 4px; }
+.dna-wins-sub { font-size: 9px; color: var(--text-dim); margin-bottom: 8px; }
+.dna-wins-item { font-size: 11px; font-weight: 700; color: var(--text-primary); padding: 3px 0; border-bottom: 1px solid rgba(0,100,200,0.15); }
+.dna-wins-item:last-child { border-bottom: none; }
+.dna-delta { background: var(--bg-panel); border: 1px solid var(--border-glow); border-radius: 6px; padding: 10px 14px; font-size: 10px; color: var(--text-dim); line-height: 1.5; cursor: pointer; }
+.dna-delta-head { font-family: var(--font-display); font-size: 8px; letter-spacing: 2px; color: var(--orb-color); margin-bottom: 6px; display: flex; justify-content: space-between; }
+.dna-delta-body { display: none; }
+.dna-delta.expanded .dna-delta-body { display: block; }
+.dna-summary { font-size: 11px; color: var(--text-primary); line-height: 1.5; background: rgba(0,212,255,0.03); border: 1px solid var(--border-glow); border-radius: 6px; padding: 10px 14px; margin-bottom: 10px; }
+.dna-empty { color: var(--text-dim); font-size: 11px; text-align: center; padding: 40px 20px; }
+
+/* ── Comparison card ── */
+.cmp-card { background: var(--bg-panel); border: 1px solid var(--border-glow); border-radius: 8px; overflow: hidden; margin-top: 14px; }
+.cmp-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid var(--border-glow); font-family: var(--font-display); font-size: 9px; letter-spacing: 2px; }
+.cmp-title { color: var(--orb-color); }
+.cmp-verdict-badge { padding: 2px 8px; border-radius: 3px; font-size: 8px; letter-spacing: 1px; }
+.cmp-win-edith { background: rgba(0,255,136,0.15); color: #00ff88; border: 1px solid rgba(0,255,136,0.3); }
+.cmp-win-repo  { background: rgba(255,51,51,0.15);  color: #ff5555; border: 1px solid rgba(255,51,51,0.3); }
+.cmp-win-tie   { background: rgba(255,170,0,0.15);  color: #ffaa00; border: 1px solid rgba(255,170,0,0.3); }
+.cmp-col-heads { display: grid; grid-template-columns: 160px 1fr 1fr 70px; gap: 8px; padding: 6px 14px; font-size: 9px; color: var(--text-dim); border-bottom: 1px solid var(--border-glow); font-family: var(--font-display); letter-spacing: 1px; }
+.cmp-row { display: grid; grid-template-columns: 160px 1fr 1fr 70px; gap: 8px; padding: 7px 14px; align-items: center; border-bottom: 1px solid rgba(0,212,255,0.06); font-size: 10px; transition: background 0.1s; }
+.cmp-row:last-child { border-bottom: none; }
+.cmp-row.edith-wins { background: rgba(0,255,136,0.04); }
+.cmp-row.repo-wins  { background: rgba(255,51,51,0.04); }
+.cmp-row.tie        { background: rgba(255,170,0,0.03); }
+.cmp-cat { font-weight: 700; color: var(--text-primary); font-size: 10px; }
+.cmp-score-wrap { display: flex; align-items: center; gap: 6px; }
+.cmp-bar-bg { flex: 1; height: 4px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden; }
+.cmp-bar-edith { height: 100%; border-radius: 2px; background: #00ff88; transition: width 0.6s ease; }
+.cmp-bar-repo  { height: 100%; border-radius: 2px; background: var(--orb-color); transition: width 0.6s ease; }
+.cmp-num { font-family: var(--font-mono); font-size: 9px; color: var(--text-dim); width: 28px; flex-shrink: 0; }
+.cmp-winner-cell { font-size: 9px; text-align: center; }
+.cmp-footer { padding: 10px 14px; border-top: 1px solid var(--border-glow); font-size: 10px; color: var(--text-dim); }
+.cmp-footer-row { margin-bottom: 4px; line-height: 1.4; }
+.cmp-adv-label { font-family: var(--font-display); font-size: 8px; letter-spacing: 1px; }
+.cmp-adv-edith { color: #00ff88; }
+.cmp-adv-repo  { color: #ff5555; }
+.cmp-verdict { font-size: 11px; color: var(--text-primary); margin-top: 6px; line-height: 1.5; font-style: italic; }
+.dna-watch-btn { background: none; border: 1px solid var(--border-glow); color: var(--text-dim); font-family: var(--font-display); font-size: 8px; letter-spacing: 1px; padding: 2px 7px; border-radius: 3px; cursor: pointer; margin-left: 4px; transition: all 0.15s; }
+.dna-watch-btn:hover { border-color: #ffaa00; color: #ffaa00; }
+.dna-watch-btn.watching { border-color: #00ff88; color: #00ff88; cursor: default; }
+.repo-watching-section { padding: 6px 6px 2px; border-top: 1px solid var(--border-glow); margin-top: 4px; }
+
+/* Strategic Gaps */
+.gap-card { background: rgba(255,255,255,0.03); border: 1px solid var(--border-glow); border-radius: 6px; padding: 10px 14px; margin-bottom: 8px; border-left: 3px solid #9966ff; }
+.gap-card-title { font-family: var(--font-display); font-size: 11px; letter-spacing: 0.5px; color: #e0e0ff; font-weight: 600; margin-bottom: 5px; display: flex; align-items: center; gap: 8px; }
+.gap-card-what { font-size: 10px; color: var(--text-dim); margin-bottom: 2px; }
+.gap-card-why  { font-size: 10px; color: rgba(255,255,255,0.5); margin-bottom: 6px; }
+.gap-steal-from { font-family: var(--font-mono); font-size: 9px; color: rgba(100,200,255,0.6); }
+.gap-effort { font-family: var(--font-display); font-size: 8px; letter-spacing: 1px; padding: 2px 6px; border-radius: 3px; }
+.gap-effort-quick { background: rgba(0,255,136,0.15); color: #00ff88; }
+.gap-effort-sprint { background: rgba(255,170,0,0.15); color: #ffaa00; }
+.gap-effort-roadmap { background: rgba(153,102,255,0.15); color: #9966ff; }
+.gap-loading { font-family: var(--font-display); font-size: 9px; letter-spacing: 1px; color: var(--text-dim); padding: 10px 0; animation: pulse 1.5s ease-in-out infinite; }
+@keyframes pulse { 0%,100% { opacity:0.4; } 50% { opacity:1; } }
+
 /* PAGE 2 — LOGS */
 #page-logs { display: grid; grid-template-columns: 320px 1fr 320px; height: 100%; }
 .log-col { height: 100%; overflow: hidden; border-right: 1px solid var(--border-glow); display: flex; flex-direction: column; }
@@ -583,6 +676,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-p
     <div class="sb-sec">Menu</div>
     <div class="sb-item active" onclick="switchPage('page-command');closeSidebar()"><span class="ico">🌐</span> Command</div>
     <div class="sb-item" onclick="switchPage('page-logs');closeSidebar()"><span class="ico">🧠</span> Brain Logs</div>
+    <div class="sb-item" onclick="switchPage('page-repo');closeSidebar()"><span class="ico">🧬</span> Repo DNA</div>
     <div class="sb-item"><span class="ico">🔮</span> Life OS</div>
     <div class="sb-item"><span class="ico">📱</span> Phone</div>
     <div class="sb-item" id="nav-devpanel" onclick="openDevPanel()"><span class="ico">🧠</span> Dev Panel</div>
@@ -878,6 +972,29 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-p
   <div class="log-col">
     <div class="log-col-header">// LIVE LOG STREAM</div>
     <div id="log-stream" class="log-col-body"></div>
+  </div>
+</div>
+
+<!-- PAGE 3: REPO DNA -->
+<div id="page-repo" class="page hidden">
+  <div id="repo-sidebar">
+    <div class="log-col-header">// PAST ANALYSES</div>
+    <div id="repo-sidebar-list"><div class="dna-empty" style="padding:20px 10px">No cached analyses</div></div>
+    <div class="repo-watching-section">
+      <div class="log-col-header" style="border:none;padding:4px 0 4px 6px;font-size:8px">// WATCHING</div>
+      <div id="repo-watching-list"><div style="font-size:9px;color:var(--text-dim);padding:4px 8px">None</div></div>
+    </div>
+  </div>
+  <div id="repo-main">
+    <div class="log-col-header" style="border:none;padding:0 0 12px">// REPO DNA — COMPETITIVE INTELLIGENCE</div>
+    <div class="dna-input-row">
+      <input id="dna-url-input" class="dna-url-input" type="text" placeholder="https://github.com/owner/repo" />
+      <div class="dna-spinner" id="dna-spinner"></div>
+      <button class="dna-btn" id="dna-btn-analyze" onclick="dnaAnalyze(false)">ANALYZE</button>
+      <button class="dna-btn" id="dna-btn-force" onclick="dnaAnalyze(true)">FORCE REFRESH</button>
+      <button class="dna-btn" id="dna-btn-compare" onclick="dnaCompare()" style="border-color:rgba(255,170,0,0.4);color:#ffaa00">⚔️ COMPARE</button>
+    </div>
+    <div id="dna-results"></div>
   </div>
 </div>
 
@@ -1243,11 +1360,13 @@ function switchPage(id) {
   currentPage = id;
   document.querySelectorAll('.nav-btn').forEach(btn => {
     const matches = (id === 'page-command' && btn.textContent.includes('COMMAND'))
-                 || (id === 'page-logs'    && btn.textContent.includes('BRAIN'));
+                 || (id === 'page-logs'    && btn.textContent.includes('BRAIN'))
+                 || (id === 'page-repo'    && btn.textContent.includes('DNA'));
     btn.classList.toggle('active', matches);
   });
 
   if (id === 'page-logs') { fetchTimeline(); fetchProviderBattle(); connectLogStream(); }
+  if (id === 'page-repo') { dnaLoadSidebar(); dnaLoadSidebarWatched(); }
 }
 
 // ══════════════════════════════════════════════
@@ -2221,6 +2340,302 @@ async function sbFetchHistory() {
     if (t[0]) document.getElementById('sb-h1').textContent = (t[0].user_input || '—').slice(0, 24);
     if (t[1]) document.getElementById('sb-h2').textContent = (t[1].user_input || '—').slice(0, 24);
   } catch(e) {}
+}
+
+// ── REPO DNA ──────────────────────────────────────────────────
+
+let _dnaCurrentAnalysis = null;
+
+async function dnaAnalyze(forceRefresh) {
+  const url = document.getElementById('dna-url-input').value.trim();
+  if (!url) { showToast('Paste a GitHub URL first'); return; }
+  if (!/^https:\/\/github\.com\/[\w\-]+\/[\w\-]+/.test(url)) {
+    showToast('Need full GitHub URL: https://github.com/owner/repo'); return;
+  }
+  const spinner = document.getElementById('dna-spinner');
+  const btnA = document.getElementById('dna-btn-analyze');
+  const btnF = document.getElementById('dna-btn-force');
+  spinner.classList.add('active');
+  btnA.disabled = true; btnF.disabled = true;
+  document.getElementById('dna-results').innerHTML = '<div class="dna-empty">Analyzing… this may take 30–60s</div>';
+  try {
+    const res = await fetch(`${API}/api/repo/analyze`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({repo_url: url, force_refresh: forceRefresh})
+    });
+    const data = await res.json();
+    if (!res.ok) { showToast(data.detail || data.error || 'Analysis failed'); document.getElementById('dna-results').innerHTML = `<div class="dna-empty" style="color:#ff5555">${data.detail || data.error}</div>`; return; }
+    _dnaCurrentAnalysis = data;
+    dnaRender(data);
+    dnaLoadSidebar();
+  } catch(e) {
+    showToast('Request failed: ' + e.message);
+    document.getElementById('dna-results').innerHTML = `<div class="dna-empty" style="color:#ff5555">Error: ${e.message}</div>`;
+  } finally {
+    spinner.classList.remove('active');
+    btnA.disabled = false; btnF.disabled = false;
+  }
+}
+
+function dnaEffortBadge(effort) {
+  const cls = {low:'effort-low', medium:'effort-medium', high:'effort-high'}[effort] || 'effort-medium';
+  return `<span class="effort-badge ${cls}">${effort||'?'}</span>`;
+}
+
+function dnaRender(data) {
+  let html = '';
+
+  // Summary
+  if (data.summary) {
+    html += `<div class="dna-summary">${data.summary}</div>`;
+  }
+
+  // Quick Wins
+  const wins = data.quick_wins || [];
+  if (wins.length) {
+    html += `<div class="dna-wins-box"><div class="dna-wins-title">⚡ QUICK WINS</div><div class="dna-wins-sub">Lowest effort adaptations</div>`;
+    wins.forEach(w => { html += `<div class="dna-wins-item">${w.title||''}</div>`; });
+    html += `</div>`;
+  }
+
+  // Steal This
+  const steal = data.steal_this || [];
+  if (steal.length) {
+    html += `<div class="dna-section-label">// STEAL THIS</div>`;
+    steal.forEach(s => {
+      html += `<div class="dna-card dna-card-steal">
+        <div class="dna-card-title">${s.title||''}${dnaEffortBadge(s.effort)}</div>
+        <div class="dna-card-desc">${s.description||''}</div>
+        ${s.file_hint ? `<div class="dna-card-hint">${s.file_hint}</div>` : ''}
+      </div>`;
+    });
+  }
+
+  // Watch This
+  const watch = data.watch_this || [];
+  if (watch.length) {
+    html += `<div class="dna-section-label">// WATCH THIS</div>`;
+    watch.forEach(w => {
+      html += `<div class="dna-card dna-card-watch">
+        <div class="dna-card-title">${w.title||''}</div>
+        <div class="dna-card-desc">${w.description||''}</div>
+      </div>`;
+    });
+  }
+
+  // Skip This
+  const skip = data.skip_this || [];
+  if (skip.length) {
+    html += `<div class="dna-section-label">// SKIP THIS</div>`;
+    skip.forEach(s => {
+      html += `<div class="dna-card dna-card-skip">
+        <div class="dna-card-title">${s.title||''}</div>
+        <div class="dna-card-reason">${s.reason||''}</div>
+      </div>`;
+    });
+  }
+
+  // Architecture Delta (collapsible)
+  if (data.architecture_delta) {
+    html += `<div class="dna-section-label">// ARCHITECTURE DELTA</div>
+    <div class="dna-delta" onclick="this.classList.toggle('expanded')">
+      <div class="dna-delta-head"><span>ARCH DELTA</span><span>▼</span></div>
+      <div class="dna-delta-body">${data.architecture_delta}</div>
+    </div>`;
+  }
+
+  // Strategic Gaps
+  const gaps = data.strategic_gaps || [];
+  if (gaps.length) {
+    html += `<div class="dna-section-label">// STRATEGIC GAPS</div>`;
+    gaps.forEach(g => {
+      const effort = (g.effort || '').toLowerCase().replace(/[^a-z_]/g, '');
+      const effortClass = effort === 'quick_win' ? 'gap-effort-quick' : effort === 'sprint' ? 'gap-effort-sprint' : 'gap-effort-roadmap';
+      const effortLabel = effort === 'quick_win' ? 'QUICK WIN' : effort === 'sprint' ? 'SPRINT' : 'ROADMAP';
+      html += `<div class="gap-card">
+        <div class="gap-card-title">${g.capability||''}<span class="gap-effort ${effortClass}">${effortLabel}</span></div>
+        <div class="gap-card-what">${g.what||''}</div>
+        <div class="gap-card-why">${g.why||''}</div>
+        ${g.steal_from ? `<div class="gap-steal-from">steal from: ${g.steal_from}</div>` : ''}
+      </div>`;
+    });
+  } else if (data.analyzed_at) {
+    html += `<div class="dna-section-label">// STRATEGIC GAPS</div><div class="dna-empty" style="font-size:9px;padding:8px 0">Strategic analysis unavailable for this repo.</div>`;
+  }
+
+  if (!html) html = '<div class="dna-empty">No data returned.</div>';
+  document.getElementById('dna-results').innerHTML = html;
+}
+
+async function dnaLoadSidebar() {
+  try {
+    const [analysesRes, watchedRes] = await Promise.all([
+      fetch(`${API}/api/repo/analyses`),
+      fetch(`${API}/api/repo/watched`).catch(() => ({ok:false}))
+    ]);
+    const items = await analysesRes.json();
+    const watchedList = watchedRes.ok ? (await watchedRes.json()) : [];
+    const watchedUrls = new Set((Array.isArray(watchedList) ? watchedList : []).map(w => w.repo_url));
+
+    const el = document.getElementById('repo-sidebar-list');
+    if (!Array.isArray(items) || !items.length) {
+      el.innerHTML = '<div class="dna-empty" style="padding:20px 10px">No cached analyses</div>';
+      dnaLoadSidebarWatched();
+      return;
+    }
+    el.innerHTML = items.map(item => {
+      const dt = item.analyzed_at ? new Date(item.analyzed_at).toLocaleDateString() : '';
+      const enc = encodeURIComponent(item.repo_url);
+      const isWatching = watchedUrls.has(item.repo_url);
+      const watchBtn = isWatching
+        ? `<button class="dna-watch-btn watching" disabled>👁 Watching ✓</button>`
+        : `<button class="dna-watch-btn" onclick="event.stopPropagation();dnaWatchRepo('${enc}',this)">👁 Watch</button>`;
+      return `<div class="repo-hist-item" onclick="dnaLoadCached('${enc}')">
+        <div class="repo-hist-name" style="display:flex;align-items:center;justify-content:space-between">
+          <span>${item.repo_name||item.repo_url}</span>${watchBtn}
+        </div>
+        <div class="repo-hist-meta">${dt} · ${item.steal_this_count||0} steal · ${item.quick_wins_count||0} wins</div>
+      </div>`;
+    }).join('');
+
+    dnaLoadSidebarWatched();
+  } catch(e) { /* sidebar load failure is non-critical */ }
+}
+
+async function dnaLoadCached(encodedUrl) {
+  const url = decodeURIComponent(encodedUrl);
+  document.getElementById('dna-url-input').value = url;
+  await dnaAnalyze(false);
+}
+
+async function dnaCompare() {
+  const url = document.getElementById('dna-url-input').value.trim();
+  if (!url) { showToast('Paste a GitHub URL first'); return; }
+  const btn = document.getElementById('dna-btn-compare');
+  const spinner = document.getElementById('dna-spinner');
+  btn.disabled = true;
+  spinner.classList.add('active');
+  const existing = document.getElementById('dna-comparison-card');
+  if (existing) existing.remove();
+  try {
+    const res = await fetch(`${API}/api/repo/compare`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({repo_url: url})
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.detail || data.error || 'Compare failed');
+      return;
+    }
+    dnaRenderComparison(data);
+  } catch(e) {
+    showToast('Compare request failed: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    spinner.classList.remove('active');
+  }
+}
+
+function dnaWinClass(winner) {
+  if (winner === 'edith') return 'edith-wins';
+  if (winner === 'repo')  return 'repo-wins';
+  return 'tie';
+}
+
+function dnaWinBadge(winner) {
+  const cls = winner === 'edith' ? 'cmp-win-edith' : winner === 'repo' ? 'cmp-win-repo' : 'cmp-win-tie';
+  const label = winner === 'edith' ? '✓ EDITH' : winner === 'repo' ? '✓ REPO' : '— TIE';
+  return `<span class="cmp-verdict-badge ${cls}">${label}</span>`;
+}
+
+function dnaRenderComparison(data) {
+  const categories = data.categories || [];
+  const repoName = data.repo_name || data.repo_url || 'REPO';
+  const ow = data.overall_winner || 'tie';
+
+  let rows = '';
+  for (const c of categories) {
+    const rowCls = dnaWinClass(c.winner);
+    const eScore = Math.min(10, Math.max(0, c.edith_score || 0));
+    const rScore = Math.min(10, Math.max(0, c.repo_score  || 0));
+    rows += `<div class="cmp-row ${rowCls}" title="EDITH: ${c.edith_note||''}\nRepo: ${c.repo_note||''}">
+      <div class="cmp-cat">${c.name}</div>
+      <div class="cmp-score-wrap">
+        <div class="cmp-bar-bg"><div class="cmp-bar-edith" style="width:${eScore*10}%"></div></div>
+        <span class="cmp-num">${eScore}/10</span>
+      </div>
+      <div class="cmp-score-wrap">
+        <div class="cmp-bar-bg"><div class="cmp-bar-repo" style="width:${rScore*10}%"></div></div>
+        <span class="cmp-num">${rScore}/10</span>
+      </div>
+      <div class="cmp-winner-cell">${dnaWinBadge(c.winner)}</div>
+    </div>`;
+  }
+
+  const eAdvs = (data.edith_advantages || []).join(', ') || '—';
+  const rAdvs = (data.repo_advantages  || []).join(', ') || '—';
+
+  const card = document.createElement('div');
+  card.id = 'dna-comparison-card';
+  card.className = 'cmp-card';
+  card.innerHTML = `
+    <div class="cmp-header">
+      <span class="cmp-title">⚔️ EDITH vs ${repoName.toUpperCase()}</span>
+      ${dnaWinBadge(ow)}
+    </div>
+    <div class="cmp-col-heads">
+      <span>CATEGORY</span><span>EDITH</span><span>${repoName.toUpperCase()}</span><span>WINNER</span>
+    </div>
+    ${rows}
+    <div class="cmp-footer">
+      <div class="cmp-footer-row"><span class="cmp-adv-label cmp-adv-edith">EDITH WINS: </span>${eAdvs}</div>
+      <div class="cmp-footer-row"><span class="cmp-adv-label cmp-adv-repo">REPO WINS: </span>${rAdvs}</div>
+      <div class="cmp-verdict">${data.verdict || ''}</div>
+    </div>`;
+
+  document.getElementById('dna-results').prepend(card);
+  card.scrollIntoView({behavior: 'smooth', block: 'start'});
+}
+
+async function dnaLoadSidebarWatched() {
+  try {
+    const res = await fetch(`${API}/api/repo/watched`);
+    const items = await res.json();
+    const el = document.getElementById('repo-watching-list');
+    if (!Array.isArray(items) || !items.length) {
+      el.innerHTML = '<div style="font-size:9px;color:var(--text-dim);padding:4px 8px">None</div>';
+      return;
+    }
+    el.innerHTML = items.map(w =>
+      `<div class="repo-hist-item" style="font-size:9px;padding:4px 8px" onclick="dnaLoadCached('${encodeURIComponent(w.repo_url)}')">
+        <span style="color:#00ff88">👁</span> ${w.repo_name || w.repo_url}
+      </div>`
+    ).join('');
+  } catch(e) {}
+}
+
+async function dnaWatchRepo(encodedUrl, btn) {
+  const url = decodeURIComponent(encodedUrl);
+  try {
+    const res = await fetch(`${API}/api/repo/watch`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({repo_url: url})
+    });
+    const data = await res.json();
+    if (res.ok) {
+      btn.textContent = '👁 Watching ✓';
+      btn.classList.add('watching');
+      btn.disabled = true;
+      dnaLoadSidebarWatched();
+    } else {
+      showToast(data.error || 'Watch failed');
+    }
+  } catch(e) {
+    showToast('Watch request failed');
+  }
 }
 
 // ── DEV PANEL ──────────────────────────────────────────────────

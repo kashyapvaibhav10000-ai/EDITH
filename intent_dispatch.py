@@ -1388,6 +1388,38 @@ def _handle_system_health(ctx) -> Result:
         return Result.from_exception(e)
 
 
+def _handle_repo_analyze(ctx) -> Result:
+    import re as _re
+    match = _re.search(r"https://github\.com/[\w\-]+/[\w\-]+", ctx.user_input)
+    if not match:
+        return Result.success(
+            "No GitHub URL found. Say: 'analyze repo https://github.com/owner/repo'"
+        )
+    url = match.group(0)
+    try:
+        from repo_dna import analyze_repo, RepoFetchError, RepoAnalysisError
+        analysis = analyze_repo(url)
+
+        steal = "\n".join(
+            f"  • [{i['effort'].upper()}] {i['title']}" for i in analysis.get("steal_this", [])
+        ) or "  none identified"
+        wins = "\n".join(
+            f"  • {i['title']}" for i in analysis.get("quick_wins", [])
+        ) or "  none identified"
+        summary = analysis.get("summary", "")
+
+        return Result.success(
+            f"**Repo DNA: {analysis.get('repo_name', url)}**\n\n"
+            f"**Steal This:**\n{steal}\n\n"
+            f"**Quick Wins:**\n{wins}\n\n"
+            f"**Summary:** {summary}"
+        )
+    except (RepoFetchError, RepoAnalysisError) as exc:
+        return Result.from_exception(exc)
+    except Exception as exc:
+        return Result.from_exception(exc)
+
+
 def _handle_chat_fallback(ctx) -> Result:
     try:
         _local = _run_local_exec(ctx.user_input)
@@ -1578,6 +1610,7 @@ INTENT_HANDLERS = {
     "image_gen":       _handle_image_gen,
     "video_summarize": _handle_video_summarize,
     "system_health":   _handle_system_health,
+    "repo_analyze":    _handle_repo_analyze,
     "compact":         _handle_compact,
     "think_level":     _handle_think_level,
     "trace_toggle":    _handle_trace_toggle,

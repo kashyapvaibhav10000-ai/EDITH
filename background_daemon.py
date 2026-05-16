@@ -534,6 +534,25 @@ def _prepare_weekly_briefing():
         log.error(f"Weekly briefing prep failed: {e}")
 
 
+def _run_repo_watch():
+    """Sunday 21:05 — check watched repos for changes, re-analyze if updated."""
+    log.info("[repo_watch] Starting weekly repo watch check...")
+    try:
+        from repo_dna import check_watched_repos
+        changed = check_watched_repos()
+        if changed:
+            log.info(f"[repo_watch] {len(changed)} repos updated — new findings available")
+            try:
+                from event_bus import publish
+                publish('repo_updated', {'repos': changed})
+            except Exception:
+                pass
+        else:
+            log.info("[repo_watch] No repo changes detected")
+    except Exception as e:
+        log.error(f"[repo_watch] weekly check failed: {e}")
+
+
 def _run_self_improve():
     """Tuesday/Friday 10 AM — scan ArXiv, propose upgrade, push via Telegram."""
     log.info("🧬 Running self-improvement scan...")
@@ -618,6 +637,7 @@ def _setup_schedule():
 
     # Weekly briefing prep on Sunday evening
     schedule.every().sunday.at("21:00").do(_prepare_weekly_briefing)
+    schedule.every().sunday.at("21:05").do(_run_repo_watch)
 
     # Self-improvement: ArXiv scan + Telegram push twice a week
     schedule.every().tuesday.at("10:00").do(_run_self_improve)

@@ -166,6 +166,11 @@ SESSION_PATTERNS = [
     r"(end session|session summary|wrap up|sign off|goodbye boss)",
 ]
 
+REPO_ANALYZE_PATTERNS = [
+    r"(analyze repo|check repo|analyze github|repo dna|study repo)",
+    r"(github\.com/[\w\-]+/[\w\-]+)",
+]
+
 SYSTEM_HEALTH_PATTERNS = [
     r"(system health|health check|status check|all systems|system status)",
     r"(are you (ok|okay|running|working|online)|everything (ok|working|fine))",
@@ -289,6 +294,9 @@ def detect_intent(text):
     # System health — high priority before general search
     if any(re.search(p, text_lower) for p in SYSTEM_HEALTH_PATTERNS):
         return "system_health"
+
+    if any(re.search(p, text_lower) for p in REPO_ANALYZE_PATTERNS):
+        return "repo_analyze"
 
     # Morning briefing — check before wake (more specific)
     if any(re.search(p, text_lower) for p in MORNING_BRIEFING_PATTERNS):

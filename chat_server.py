@@ -167,6 +167,22 @@ async def rate_limit_middleware(request: Request, call_next):
 from shared_state import _widget_history, _widget_history_lock, add_to_history, get_history
 _MAX_WIDGET_HISTORY = 10
 
+# ── Repo DNA — competitive intelligence engine ──
+try:
+    from repo_dna import (
+        analyze_repo as _analyze_repo,
+        get_cached_analyses as _get_cached_analyses,
+        clear_cache as _clear_repo_cache,
+        watch_repo as _watch_repo,
+        get_watched_repos as _get_watched_repos,
+        _build_edith_context_summary,
+        RepoFetchError,
+        RepoAnalysisError,
+    )
+    _REPO_DNA_OK = True
+except ImportError:
+    _REPO_DNA_OK = False
+
 
 def _get_last_exchange():
     """Get the last user→assistant exchange for follow-up context."""
@@ -1943,6 +1959,166 @@ async def get_session_messages(session_id: str):
     except Exception as e:
         log.warning(f"get_session_messages failed: {e}")
         return {"messages": []}
+
+
+# ── REPO DNA ENDPOINTS ──────────────────────────────────────────────────────
+
+_REPO_URL_RE = re.compile(r"^https://github\.com/[\w\-]+/[\w\-]+$")
+
+
+@app.post("/api/repo/analyze")
+async def repo_analyze(request: Request):
+    if not _REPO_DNA_OK:
+        return JSONResponse({"error": "repo_dna module not available"}, status_code=503)
+    try:
+        body = await request.json()
+        repo_url = (body.get("repo_url") or "").strip().rstrip("/")
+        force_refresh = bool(body.get("force_refresh", False))
+        if not _REPO_URL_RE.match(repo_url):
+            return JSONResponse({"error": "Invalid URL", "detail": "Must match https://github.com/owner/repo"}, status_code=400)
+        log.info(f"[repo_dna] analyze requested: {repo_url} force={force_refresh}")
+        analysis = _analyze_repo(repo_url, force_refresh=force_refresh)
+        return JSONResponse(analysis)
+    except RepoFetchError as exc:
+        log.warning(f"[repo_dna] fetch error: {exc}")
+        return JSONResponse({"error": "Fetch failed", "detail": str(exc)}, status_code=400)
+    except RepoAnalysisError as exc:
+        log.warning(f"[repo_dna] analysis error: {exc}")
+        return JSONResponse({"error": "Analysis failed", "detail": str(exc)}, status_code=500)
+    except Exception as exc:
+        log.warning(f"[repo_dna] unexpected: {exc}")
+        return JSONResponse({"error": "Internal error", "detail": str(exc)}, status_code=500)
+
+
+@app.get("/api/repo/analyses")
+async def repo_analyses():
+    if not _REPO_DNA_OK:
+        return JSONResponse({"error": "repo_dna module not available"}, status_code=503)
+    try:
+        all_analyses = _get_cached_analyses()
+        items = [
+            {
+                "repo_name": a.get("repo_name", ""),
+                "repo_url": a.get("repo_url", ""),
+                "analyzed_at": a.get("analyzed_at", ""),
+                "steal_this_count": len(a.get("steal_this", [])),
+                "quick_wins_count": len(a.get("quick_wins", [])),
+            }
+            for a in all_analyses
+        ]
+        return JSONResponse(items)
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+@app.post("/api/repo/watch")
+async def repo_watch(request: Request):
+    if not _REPO_DNA_OK:
+        return JSONResponse({"error": "repo_dna module not available"}, status_code=503)
+    try:
+        body = await request.json()
+        repo_url = (body.get("repo_url") or "").strip().rstrip("/")
+        if not _REPO_URL_RE.match(repo_url):
+            return JSONResponse({"error": "Invalid URL", "detail": "Must match https://github.com/owner/repo"}, status_code=400)
+        added = _watch_repo(repo_url)
+        return JSONResponse({"watching": True, "added": added, "repo_url": repo_url})
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+@app.get("/api/repo/watched")
+async def repo_watched():
+    if not _REPO_DNA_OK:
+        return JSONResponse({"error": "repo_dna module not available"}, status_code=503)
+    try:
+        return JSONResponse(_get_watched_repos())
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+_COMPARE_CATEGORIES = [
+    "Memory Systems", "LLM Routing", "Voice Pipeline", "Agent Capabilities",
+    "UI/Interface", "Integrations", "Security", "Reliability", "Code Quality", "Unique Features",
+]
+
+@app.post("/api/repo/compare")
+async def repo_compare(request: Request):
+    if not _REPO_DNA_OK:
+        return JSONResponse({"error": "repo_dna module not available"}, status_code=503)
+    try:
+        body = await request.json()
+        repo_url = (body.get("repo_url") or "").strip().rstrip("/")
+        if not _REPO_URL_RE.match(repo_url):
+            return JSONResponse({"error": "Invalid URL"}, status_code=400)
+
+        # Must have cached analysis
+        all_analyses = _get_cached_analyses()
+        cached = next((a for a in all_analyses if a.get("repo_url") == repo_url), None)
+        if not cached:
+            return JSONResponse({"error": "analyze first", "detail": "Run analyze before compare"}, status_code=404)
+
+        edith_summary = _build_edith_context_summary()
+        compare_prompt = f"""EDITH self-knowledge (live scan):
+{edith_summary}
+
+Target repo analysis:
+{json.dumps(cached, indent=2)}
+
+Produce a head-to-head comparison for these exact categories: {', '.join(_COMPARE_CATEGORIES)}
+
+Return ONLY valid JSON with no prose outside it:
+{{
+  "categories": [
+    {{
+      "name": "category name",
+      "edith_score": 1,
+      "repo_score": 1,
+      "edith_note": "what EDITH has",
+      "repo_note": "what repo has",
+      "winner": "edith|repo|tie"
+    }}
+  ],
+  "overall_winner": "edith|repo|tie",
+  "edith_advantages": ["..."],
+  "repo_advantages": ["..."],
+  "verdict": "2-3 sentence summary"
+}}
+
+Score 1-10. winner must be exactly edith, repo, or tie. Output exactly {len(_COMPARE_CATEGORIES)} categories."""
+
+        import smart_router as _sr
+        raw = _sr.smart_call(
+            prompt=compare_prompt,
+            intent="repo_analyze",
+            system="You are EDITH's competitive intelligence engine. Return ONLY valid JSON.",
+        )
+
+        try:
+            result = json.loads(raw)
+        except json.JSONDecodeError:
+            m = re.search(r"\{[\s\S]+\}", raw)
+            result = json.loads(m.group(0)) if m else {"error": "LLM returned non-JSON", "raw": raw}
+
+        result["repo_url"] = repo_url
+        result["repo_name"] = cached.get("repo_name", "")
+        return JSONResponse(result)
+    except json.JSONDecodeError as exc:
+        return JSONResponse({"error": "Parse failed", "detail": str(exc)}, status_code=500)
+    except Exception as exc:
+        log.warning(f"[repo_compare] {exc}")
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+@app.delete("/api/repo/cache")
+async def repo_clear_cache(repo_url: str = None):
+    if not _REPO_DNA_OK:
+        return JSONResponse({"error": "repo_dna module not available"}, status_code=503)
+    try:
+        url = (repo_url or "").strip() or None
+        _clear_repo_cache(url)
+        return JSONResponse({"cleared": True, "repo_url": url or "all"})
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=500)
 
 
 if __name__ == "__main__":
