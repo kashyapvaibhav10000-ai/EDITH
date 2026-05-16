@@ -222,6 +222,17 @@ def _get_db() -> sqlite3.Connection:
         )
     """)
     conn.commit()
+    # Session 8: idempotent column additions for success tracking
+    for _col_sql in [
+        "ALTER TABLE adapted_items ADD COLUMN outcome TEXT",
+        "ALTER TABLE adapted_items ADD COLUMN rated_at TEXT",
+        "ALTER TABLE adapted_items ADD COLUMN notes TEXT",
+    ]:
+        try:
+            conn.execute(_col_sql)
+            conn.commit()
+        except Exception:
+            pass
     return conn
 
 
@@ -794,6 +805,41 @@ def get_adapted_capabilities(repo_url: str) -> set:
     except Exception as exc:
         logger.warning("[repo_dna] get_adapted_capabilities failed: %s", exc)
         return set()
+
+
+def rate_adaptation(repo_url: str, capability: str, outcome: str, notes: str = "") -> None:
+    """Record thumbs-up/partial/down outcome for an adapted item."""
+    now = datetime.now(timezone.utc).isoformat()
+    with _get_db() as conn:
+        conn.execute(
+            "UPDATE adapted_items SET outcome=?, rated_at=?, notes=? "
+            "WHERE repo_url=? AND capability=?",
+            (outcome, now, notes, repo_url, capability),
+        )
+        conn.commit()
+    logger.info("[repo_dna] rated %s / %s → %s", repo_url, capability, outcome)
+
+
+def get_steal_success_rate(repo_url: Optional[str] = None) -> dict:
+    """Return success/partial/failure counts. Filter to repo_url when provided."""
+    with _get_db() as conn:
+        if repo_url:
+            rows = conn.execute(
+                "SELECT outcome FROM adapted_items WHERE repo_url=? AND outcome IS NOT NULL",
+                (repo_url,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT outcome FROM adapted_items WHERE outcome IS NOT NULL"
+            ).fetchall()
+    totals: dict = {"success": 0, "partial": 0, "failure": 0, "total": 0}
+    for row in rows:
+        o = (row["outcome"] or "").lower()
+        totals["total"] += 1
+        if o in totals:
+            totals[o] += 1
+    rate = round(totals["success"] / totals["total"] * 100) if totals["total"] else 0
+    return {**totals, "success_rate_pct": rate}
 
 
 def get_cached_analyses() -> list[dict]:

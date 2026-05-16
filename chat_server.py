@@ -2249,8 +2249,13 @@ async def repo_adapt_preview(request: Request):
             elif line.startswith("REASON:"):
                 reason = line.split(":", 1)[1].strip()
 
+        import re as _re
+        _code_match = _re.search(r'```python\n([\s\S]+?)\n```', raw)
+        new_code = _code_match.group(1).strip() if _code_match else ""
+
         return JSONResponse({
             "diff_preview": raw,
+            "new_code": new_code,
             "target_file": target_file,
             "task_description": task_description,
             "capability": capability,
@@ -2384,9 +2389,10 @@ _GAP_PLAN_SYSTEM = (
     "You are EDITH's code architect. Decompose a capability gap into 3-5 sub-tasks. "
     "Each sub-task adds ONE new Python function to the target file. "
     "Rules: ADD ONLY. Never modify existing functions. Python only. Max 40 lines per function. "
+    "depends_on is a list of sub-task ids that MUST be implemented first (use [] if no dependency). "
     "Return JSON only, no markdown fences:\n"
     '{"target_file":"filename.py","reason":"one sentence",'
-    '"subtasks":[{"id":1,"title":"...","function_name":"...","description":"...","lines_estimate":20}]}'
+    '"subtasks":[{"id":1,"title":"...","function_name":"...","description":"...","lines_estimate":20,"depends_on":[]}]}'
 )
 
 
@@ -2458,6 +2464,92 @@ async def repo_gap_plan(request: Request):
     except Exception as exc:
         log.warning(f"[repo_gap_plan] error: {exc}")
         return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+# ── Repo DNA — Subtask completion status ─────────────────────────────────────
+
+@app.get("/api/repo/subtask-status")
+async def repo_subtask_status(repo_url: str, capability: str):
+    """Return which sub-tasks (by subtask id suffix) are marked done in adapted_items."""
+    if not _REPO_DNA_OK:
+        return JSONResponse({"error": "repo_dna module not available"}, status_code=503)
+    try:
+        import repo_dna as _dna
+        db = _dna._get_db()
+        # Sub-tasks stored as "{parent_capability}::subtask::{id}"
+        prefix = f"{capability}::subtask::"
+        rows = db.execute(
+            "SELECT capability FROM adapted_items WHERE repo_url=? AND capability LIKE ?",
+            (repo_url.strip().rstrip("/"), prefix + "%"),
+        ).fetchall()
+        done_ids = set()
+        for row in rows:
+            cap = row[0]
+            suffix = cap[len(prefix):]
+            if suffix.isdigit():
+                done_ids.add(int(suffix))
+        return JSONResponse({"done_ids": sorted(done_ids)})
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+# ── Repo DNA — Success rate tracking ─────────────────────────────────────────
+
+class _RateBody(BaseModel):
+    repo_url: str = ""
+    capability: str = ""
+    outcome: str = "success"
+    notes: str = ""
+
+
+@app.post("/api/repo/rate-adaptation")
+async def repo_rate_adaptation(body: _RateBody):
+    if not _REPO_DNA_OK:
+        return JSONResponse({"error": "repo_dna module not available"}, status_code=503)
+    try:
+        import repo_dna as _dna
+        _dna.rate_adaptation(
+            repo_url=body.repo_url.strip().rstrip("/"),
+            capability=body.capability.strip(),
+            outcome=body.outcome.strip(),
+            notes=body.notes.strip(),
+        )
+        return JSONResponse({"ok": True})
+    except Exception as exc:
+        log.warning(f"[rate_adaptation] {exc}")
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+@app.get("/api/repo/success-rate")
+async def repo_success_rate(repo_url: str = ""):
+    if not _REPO_DNA_OK:
+        return JSONResponse({"error": "repo_dna module not available"}, status_code=503)
+    try:
+        import repo_dna as _dna
+        data = _dna.get_steal_success_rate(repo_url.strip().rstrip("/") or None)
+        return JSONResponse(data)
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+# ── Repo DNA — Proactive alert config ────────────────────────────────────────
+
+_alert_config: dict = {"enabled": True}
+
+
+class _AlertConfigBody(BaseModel):
+    enabled: bool = True
+
+
+@app.post("/api/repo/alert-config")
+async def repo_alert_config(body: _AlertConfigBody):
+    _alert_config["enabled"] = body.enabled
+    return JSONResponse({"enabled": _alert_config["enabled"]})
+
+
+@app.get("/api/repo/alert-config")
+async def repo_alert_config_get():
+    return JSONResponse({"enabled": _alert_config.get("enabled", True)})
 
 
 # ── Repo DNA — Trend tracking ────────────────────────────────────────────────
@@ -2616,13 +2708,51 @@ async def repo_self_audit():
         return JSONResponse({"error": str(exc)}, status_code=500)
 
 
+def _send_watch_alert(repo_url: str, items: list) -> None:
+    """Fire a Telegram alert when watched repo has new low-effort steal items."""
+    try:
+        from telegram_bot import send_telegram
+        lines = [f"🔔 *Repo Watch Alert*: {repo_url}\nNew low-effort steal items:"]
+        for item in items[:5]:
+            title = item.get("title") or item.get("capability") or "?"
+            lines.append(f"  • {title}")
+        if len(items) > 5:
+            lines.append(f"  …and {len(items) - 5} more")
+        send_telegram("\n".join(lines))
+    except Exception as exc:
+        log.warning(f"[watch_alert] failed to send Telegram: {exc}")
+
+
 @app.post("/api/repo/watch-check")
 async def repo_watch_check():
-    """Manual trigger for watched repo check."""
+    """Manual trigger for watched repo check — also fires proactive alerts."""
     if not _REPO_DNA_OK:
         return JSONResponse({"error": "repo_dna module not available"}, status_code=503)
     try:
+        import repo_dna as _dna
         updated = _check_watched_repos()
+        # Proactive alert: for each updated repo, diff and alert on new low-effort items
+        if _alert_config.get("enabled", True):
+            for entry in updated:
+                repo_url = entry["repo_url"] if isinstance(entry, dict) else entry
+                try:
+                    current = next(
+                        (a for a in _get_cached_analyses() if a.get("repo_url") == repo_url), None
+                    )
+                    if not current:
+                        continue
+                    previous = _get_prev_snapshot(repo_url)
+                    if not previous:
+                        continue
+                    diff = _diff_analyses(current, previous)
+                    quick_wins = [
+                        it for it in diff.get("new_steal_this", [])
+                        if (it.get("effort") or "").lower() == "low"
+                    ]
+                    if quick_wins:
+                        _send_watch_alert(repo_url, quick_wins)
+                except Exception as exc_inner:
+                    log.warning(f"[watch_check alert] {repo_url}: {exc_inner}")
         return JSONResponse({"updated": updated, "count": len(updated)})
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=500)

@@ -570,6 +570,30 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-p
 .adapt-meta-key { color: var(--orb-color); font-family: var(--font-display); font-size: 9px; letter-spacing: 1px; }
 #adapt-preview-code { background: rgba(0,0,0,0.4); border: 1px solid rgba(0,212,255,0.15); border-radius: 5px; padding: 12px; font-family: var(--font-mono); font-size: 10px; white-space: pre-wrap; word-break: break-word; color: #c8e6ff; line-height: 1.5; max-height: 340px; overflow-y: auto; }
 .adapt-modal-foot { padding: 12px 18px; border-top: 1px solid var(--border-glow); display: flex; gap: 10px; justify-content: flex-end; }
+.adapt-tab-bar { display: flex; gap: 0; margin-bottom: 8px; border-bottom: 1px solid rgba(0,212,255,0.15); }
+.adapt-tab { font-family: var(--font-display); font-size: 9px; letter-spacing: 1px; padding: 4px 12px; cursor: pointer; color: var(--text-dim); border: none; background: none; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.adapt-tab.active { color: var(--orb-color); border-bottom-color: var(--orb-color); }
+.adapt-tab-pane { display: none; }
+.adapt-tab-pane.active { display: block; }
+.adapt-code-extracted { background: rgba(0,20,0,0.5); border: 1px solid rgba(0,255,136,0.2); border-radius: 5px; padding: 12px; font-family: var(--font-mono); font-size: 10px; white-space: pre-wrap; word-break: break-word; color: #b9f5d0; line-height: 1.5; max-height: 300px; overflow-y: auto; }
+.adapt-code-disclaimer { font-size: 9px; color: var(--text-dim); margin-top: 6px; font-style: italic; }
+.gap-dep-label { font-size: 9px; color: #ffaa00; font-family: var(--font-display); letter-spacing: 0.5px; padding: 2px 6px; border: 1px solid rgba(255,170,0,0.3); border-radius: 3px; }
+.gap-done-label { font-size: 9px; color: #00ff88; font-family: var(--font-display); letter-spacing: 0.5px; }
+.adapt-rating-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+.adapt-rating-label { font-size: 9px; color: var(--text-dim); font-family: var(--font-display); }
+.adapt-rating-btn { font-size: 13px; background: none; border: none; cursor: pointer; padding: 0 2px; opacity: 0.6; transition: opacity 0.15s; }
+.adapt-rating-btn:hover { opacity: 1; }
+.adapt-outcome-badge { font-size: 9px; font-family: var(--font-display); letter-spacing: 0.5px; padding: 1px 6px; border-radius: 3px; }
+.adapt-outcome-badge.success { color: #00ff88; border: 1px solid rgba(0,255,136,0.3); }
+.adapt-outcome-badge.partial { color: #ffaa00; border: 1px solid rgba(255,170,0,0.3); }
+.adapt-outcome-badge.failure { color: #f87171; border: 1px solid rgba(248,113,113,0.3); }
+.dna-stats-panel { margin: 8px 0; padding: 8px 12px; background: rgba(0,0,0,0.3); border: 1px solid rgba(0,212,255,0.1); border-radius: 5px; display: flex; gap: 16px; align-items: center; font-size: 10px; }
+.dna-stat { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.dna-stat-val { font-family: var(--font-display); font-size: 14px; color: var(--orb-color); }
+.dna-stat-label { font-size: 8px; color: var(--text-dim); letter-spacing: 0.5px; }
+.dna-alert-toggle { font-family: var(--font-display); font-size: 9px; letter-spacing: 1px; padding: 3px 10px; border-radius: 10px; cursor: pointer; border: 1px solid rgba(0,212,255,0.3); background: none; color: var(--text-dim); }
+.dna-alert-toggle.on { color: #00ff88; border-color: rgba(0,255,136,0.4); }
+.dna-alert-toggle.off { color: #f87171; border-color: rgba(248,113,113,0.3); }
 .adapt-confirm-btn { font-family: var(--font-display); font-size: 9px; letter-spacing: 1px; padding: 6px 16px; border-radius: 4px; cursor: pointer; border: none; }
 .adapt-confirm-btn.yes { background: rgba(0,255,136,0.2); color: #00ff88; border: 1px solid #00ff88; }
 .adapt-confirm-btn.yes:hover { background: rgba(0,255,136,0.35); }
@@ -1072,7 +1096,9 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-p
       <button class="dna-btn" id="dna-btn-compare" onclick="dnaCompare()" style="border-color:rgba(255,170,0,0.4);color:#ffaa00">⚔️ COMPARE</button>
       <button class="dna-btn dna-btn-audit" id="dna-btn-audit" onclick="dnaAuditSelf()">🔍 SELF AUDIT</button>
       <button class="dna-btn" id="dna-btn-multi" onclick="multiModalOpen()" style="border-color:rgba(153,102,255,0.4);color:#9966ff">⚡ MULTI</button>
+      <button class="dna-alert-toggle" id="dna-alert-toggle" onclick="dnaAlertToggle()" title="Telegram alerts on/off for new low-effort items">🔔 ALERTS</button>
     </div>
+    <div id="dna-stats-panel" class="dna-stats-panel" style="display:none"></div>
     <div id="dna-results"></div>
   </div>
 </div>
@@ -1090,7 +1116,17 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-p
         <span><span class="adapt-meta-key">TARGET</span>&nbsp;<span id="adapt-target-file">—</span></span>
       </div>
       <div id="adapt-reason-row" style="display:none;padding:4px 0;font-size:12px;opacity:0.7;"></div>
-      <div id="adapt-preview-code">Loading preview…</div>
+      <div class="adapt-tab-bar">
+        <button class="adapt-tab active" onclick="adaptTabSwitch('preview')">PREVIEW</button>
+        <button class="adapt-tab" id="adapt-tab-code-btn" onclick="adaptTabSwitch('code')">CODE</button>
+      </div>
+      <div id="adapt-tab-preview" class="adapt-tab-pane active">
+        <div id="adapt-preview-code">Loading preview…</div>
+      </div>
+      <div id="adapt-tab-code" class="adapt-tab-pane">
+        <div id="adapt-code-extracted" class="adapt-code-extracted"></div>
+        <div class="adapt-code-disclaimer">PROPOSED CODE — actual placement determined by agent at runtime</div>
+      </div>
     </div>
     <div class="adapt-modal-foot">
       <button class="adapt-confirm-btn no" onclick="adaptConfirm(false)">✕ CANCEL</button>
@@ -1467,7 +1503,7 @@ function switchPage(id) {
   });
 
   if (id === 'page-logs') { fetchTimeline(); fetchProviderBattle(); connectLogStream(); }
-  if (id === 'page-repo') { dnaLoadSidebar(); dnaLoadSidebarWatched(); }
+  if (id === 'page-repo') { dnaLoadSidebar(); dnaLoadSidebarWatched(); dnaInitAlerts(); dnaInitStats(); }
 }
 
 // ══════════════════════════════════════════════
@@ -2446,6 +2482,53 @@ async function sbFetchHistory() {
 // ── REPO DNA ──────────────────────────────────────────────────
 
 let _dnaCurrentAnalysis = null;
+let _dnaAlertsEnabled = true;
+
+async function dnaInitAlerts() {
+  try {
+    const res = await fetch(`${API}/api/repo/alert-config`);
+    if (!res.ok) return;
+    const d = await res.json();
+    _dnaAlertsEnabled = d.enabled !== false;
+    const btn = document.getElementById('dna-alert-toggle');
+    if (btn) {
+      btn.classList.toggle('on', _dnaAlertsEnabled);
+      btn.classList.toggle('off', !_dnaAlertsEnabled);
+    }
+  } catch(_) {}
+}
+
+async function dnaAlertToggle() {
+  _dnaAlertsEnabled = !_dnaAlertsEnabled;
+  const btn = document.getElementById('dna-alert-toggle');
+  if (btn) { btn.classList.toggle('on', _dnaAlertsEnabled); btn.classList.toggle('off', !_dnaAlertsEnabled); }
+  try {
+    await fetch(`${API}/api/repo/alert-config`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({enabled: _dnaAlertsEnabled})
+    });
+  } catch(_) {}
+}
+
+async function dnaInitStats() {
+  const panel = document.getElementById('dna-stats-panel');
+  if (!panel) return;
+  try {
+    const res = await fetch(`${API}/api/repo/success-rate`);
+    if (!res.ok) return;
+    const d = await res.json();
+    if (!d.total) return;
+    panel.style.display = 'flex';
+    panel.innerHTML = `
+      <span style="font-size:9px;color:var(--text-dim);font-family:var(--font-display);letter-spacing:1px">// STEAL STATS</span>
+      <div class="dna-stat"><span class="dna-stat-val">${d.success_rate_pct ?? 0}%</span><span class="dna-stat-label">SUCCESS</span></div>
+      <div class="dna-stat"><span class="dna-stat-val">${d.total ?? 0}</span><span class="dna-stat-label">RATED</span></div>
+      <div class="dna-stat"><span class="dna-stat-val">${d.success ?? 0}</span><span class="dna-stat-label">👍</span></div>
+      <div class="dna-stat"><span class="dna-stat-val">${d.partial ?? 0}</span><span class="dna-stat-label">👌</span></div>
+      <div class="dna-stat"><span class="dna-stat-val">${d.failure ?? 0}</span><span class="dna-stat-label">👎</span></div>`;
+  } catch(_) {}
+}
 
 async function dnaAnalyze(forceRefresh) {
   const url = document.getElementById('dna-url-input').value.trim();
@@ -2978,7 +3061,10 @@ async function adaptPreview(cardIdx, encodedItem, encodedRepoUrl) {
   document.getElementById('adapt-cap-name').textContent = stealItem.title || stealItem.capability || '…';
   document.getElementById('adapt-target-file').textContent = '…';
   document.getElementById('adapt-preview-code').textContent = 'Generating preview…';
+  document.getElementById('adapt-code-extracted').textContent = '';
+  document.getElementById('adapt-tab-code-btn').style.display = 'none';
   document.getElementById('adapt-confirm-yes').disabled = true;
+  adaptTabSwitch('preview');
   document.getElementById('adapt-modal-overlay').classList.add('visible');
 
   try {
@@ -2996,6 +3082,17 @@ async function adaptPreview(cardIdx, encodedItem, encodedRepoUrl) {
     document.getElementById('adapt-target-file').textContent = applicable ? (data.target_file || '?') : 'N/A';
     document.getElementById('adapt-preview-code').textContent = data.diff_preview || '(no preview)';
     document.getElementById('adapt-confirm-yes').disabled = !applicable;
+    // Code tab — show extracted python block if available
+    const codeTabBtn = document.getElementById('adapt-tab-code-btn');
+    const codeEl = document.getElementById('adapt-code-extracted');
+    if (data.new_code) {
+      codeEl.textContent = data.new_code;
+      codeTabBtn.style.display = '';
+    } else {
+      codeEl.textContent = '';
+      codeTabBtn.style.display = 'none';
+    }
+    adaptTabSwitch('preview');
 
     if (data.reason) {
       reasonEl.textContent = (applicable ? '' : 'NOT APPLICABLE — ') + data.reason;
@@ -3062,6 +3159,15 @@ function adaptModalClose() {
   document.getElementById('adapt-modal-overlay').classList.remove('visible');
 }
 
+function adaptTabSwitch(tab) {
+  ['preview', 'code'].forEach(t => {
+    document.getElementById(`adapt-tab-${t}`).classList.toggle('active', t === tab);
+  });
+  document.querySelectorAll('.adapt-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.textContent.toLowerCase() === tab || btn.getAttribute('onclick').includes(`'${tab}'`));
+  });
+}
+
 async function pollAdaptStatus(taskId, cardIdx, capability) {
   const maxAttempts = 40; // 40 × 3s = 120s
   let attempts = 0;
@@ -3080,6 +3186,19 @@ async function pollAdaptStatus(taskId, cardIdx, capability) {
         if (btn) btn.textContent = 'DONE ✓';
         if (badge) { badge.className = 'adapt-status-badge done'; badge.textContent = 'DONE ✓'; }
         showToast(`✓ '${capability}' adapted`);
+        // Show rating row on the card
+        const card = document.getElementById(`steal-card-${cardIdx}`);
+        if (card && !card.querySelector('.adapt-rating-row')) {
+          const ratingRow = document.createElement('div');
+          ratingRow.className = 'adapt-rating-row';
+          ratingRow.dataset.capability = capability;
+          ratingRow.dataset.repo = _adaptState && _adaptState.repo_url || '';
+          ratingRow.innerHTML = `<span class="adapt-rating-label">RATE:</span>
+            <button class="adapt-rating-btn" title="Success" onclick="adaptRate(this,'success')">👍</button>
+            <button class="adapt-rating-btn" title="Partial" onclick="adaptRate(this,'partial')">👌</button>
+            <button class="adapt-rating-btn" title="Failure" onclick="adaptRate(this,'failure')">👎</button>`;
+          card.appendChild(ratingRow);
+        }
       } else if (d.status === 'failed') {
         if (btn) { btn.textContent = 'ADAPT →'; btn.classList.remove('adapted'); btn.disabled = false; }
         if (badge) { badge.className = 'adapt-status-badge failed'; badge.textContent = 'FAILED ✗'; }
@@ -3090,6 +3209,40 @@ async function pollAdaptStatus(taskId, cardIdx, capability) {
     } catch(_) { setTimeout(tick, 3000); }
   }
   setTimeout(tick, 3000);
+}
+
+async function adaptRate(btn, outcome) {
+  const row = btn.closest('.adapt-rating-row');
+  if (!row) return;
+  const capability = row.dataset.capability;
+  const repoUrl = row.dataset.repo;
+  try {
+    await fetch(`${API}/api/repo/rate-adaptation`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({repo_url: repoUrl, capability, outcome})
+    });
+    row.innerHTML = `<span class="adapt-outcome-badge ${outcome}">${outcome.toUpperCase()}</span>`;
+    dnaSyncStats();
+  } catch(e) { showToast(`Rate failed: ${e.message}`); }
+}
+
+async function dnaSyncStats() {
+  const el = document.getElementById('dna-stats-panel');
+  if (!el) return;
+  try {
+    const res = await fetch(`${API}/api/repo/success-rate`);
+    if (!res.ok) return;
+    const d = await res.json();
+    el.style.display = 'flex';
+    el.innerHTML = `
+      <span style="font-size:9px;color:var(--text-dim);font-family:var(--font-display);letter-spacing:1px">// STEAL STATS</span>
+      <div class="dna-stat"><span class="dna-stat-val">${d.success_rate_pct ?? 0}%</span><span class="dna-stat-label">SUCCESS</span></div>
+      <div class="dna-stat"><span class="dna-stat-val">${d.total ?? 0}</span><span class="dna-stat-label">RATED</span></div>
+      <div class="dna-stat"><span class="dna-stat-val">${d.success ?? 0}</span><span class="dna-stat-label">👍</span></div>
+      <div class="dna-stat"><span class="dna-stat-val">${d.partial ?? 0}</span><span class="dna-stat-label">👌</span></div>
+      <div class="dna-stat"><span class="dna-stat-val">${d.failure ?? 0}</span><span class="dna-stat-label">👎</span></div>`;
+  } catch(_) {}
 }
 
 // ── GAP PLAN (strategic gap → sub-task decomposition) ──────────
@@ -3136,17 +3289,37 @@ async function gapPlan(btn, gap, repoUrl) {
       return;
     }
 
+    // Fetch which subtasks are already done
+    let doneIds = new Set();
+    try {
+      const ssRes = await fetch(`${API}/api/repo/subtask-status?repo_url=${encodeURIComponent(repoUrl)}&capability=${encodeURIComponent(gap.capability || gap.what || '')}`);
+      if (ssRes.ok) { const ss = await ssRes.json(); doneIds = new Set(ss.done_ids || []); }
+    } catch(_) {}
+
+    // Build dep map: id → title
+    const idToTitle = {};
+    (data.subtasks || []).forEach(t => { idToTitle[t.id] = t.title; });
+
     let html = `<div class="gap-plan-meta">→ ${data.target_file}${data.pick_reason ? ' — ' + data.pick_reason : ''}</div>`;
     data.subtasks.forEach(t => {
+      const isDone = doneIds.has(t.id);
+      const deps = (t.depends_on || []).filter(d => !doneIds.has(d));
+      const blocked = deps.length > 0;
       const subtaskData = encodeURIComponent(JSON.stringify({
-        capability: t.title,
+        capability: `${gap.capability || gap.what || ''}::subtask::${t.id}`,
         description: t.description,
         steal_from: data.target_file,
       }));
+      const depLabel = blocked ? `Requires: Step ${deps.join(', ')}` : '';
       html += `<div class="gap-subtask">
-        <span class="gap-subtask-title">${t.id}. ${t.title}</span>
+        <span class="gap-subtask-title">${t.id}. ${t.title}${isDone ? ' ✓' : ''}</span>
         <span class="gap-subtask-meta">${t.function_name}() ~${t.lines_estimate}L</span>
-        <button class="gap-adapt-btn" data-subtask="${subtaskData}" data-repo="${encodeURIComponent(repoUrl)}">ADAPT →</button>
+        ${blocked
+          ? `<span class="gap-dep-label" title="${depLabel}">${depLabel}</span>`
+          : isDone
+            ? `<span class="gap-done-label">DONE ✓</span>`
+            : `<button class="gap-adapt-btn" data-subtask="${subtaskData}" data-repo="${encodeURIComponent(repoUrl)}">ADAPT →</button>`
+        }
       </div>`;
     });
     planEl.innerHTML = html;
