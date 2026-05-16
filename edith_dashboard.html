@@ -499,6 +499,28 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-p
 .gap-loading { font-family: var(--font-display); font-size: 9px; letter-spacing: 1px; color: var(--text-dim); padding: 10px 0; animation: pulse 1.5s ease-in-out infinite; }
 @keyframes pulse { 0%,100% { opacity:0.4; } 50% { opacity:1; } }
 
+/* Adapt button + modal */
+.dna-adapt-btn { background: none; border: 1px solid rgba(0,255,136,0.4); color: #00ff88; font-family: var(--font-display); font-size: 8px; letter-spacing: 1px; padding: 2px 8px; border-radius: 3px; cursor: pointer; margin-left: auto; flex-shrink: 0; transition: all 0.15s; }
+.dna-adapt-btn:hover { background: rgba(0,255,136,0.1); border-color: #00ff88; }
+.dna-adapt-btn.adapted { border-color: rgba(0,255,136,0.25); color: rgba(0,255,136,0.5); cursor: default; }
+.dna-adapt-btn.loading { border-color: rgba(255,170,0,0.5); color: #ffaa00; cursor: wait; }
+#adapt-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 9000; display: none; align-items: center; justify-content: center; }
+#adapt-modal-overlay.visible { display: flex; }
+#adapt-modal { background: var(--bg-panel); border: 1px solid var(--border-glow); border-radius: 8px; width: min(680px, 92vw); max-height: 80vh; display: flex; flex-direction: column; overflow: hidden; }
+.adapt-modal-head { padding: 14px 18px 10px; border-bottom: 1px solid var(--border-glow); display: flex; align-items: center; gap: 10px; }
+.adapt-modal-title { font-family: var(--font-display); font-size: 11px; letter-spacing: 1px; color: var(--orb-color); flex: 1; }
+.adapt-modal-close { background: none; border: none; color: var(--text-dim); font-size: 16px; cursor: pointer; padding: 0 4px; }
+.adapt-modal-body { flex: 1; overflow-y: auto; padding: 14px 18px; }
+.adapt-meta-row { display: flex; gap: 16px; margin-bottom: 10px; font-size: 10px; color: var(--text-dim); }
+.adapt-meta-key { color: var(--orb-color); font-family: var(--font-display); font-size: 9px; letter-spacing: 1px; }
+#adapt-preview-code { background: rgba(0,0,0,0.4); border: 1px solid rgba(0,212,255,0.15); border-radius: 5px; padding: 12px; font-family: var(--font-mono); font-size: 10px; white-space: pre-wrap; word-break: break-word; color: #c8e6ff; line-height: 1.5; max-height: 340px; overflow-y: auto; }
+.adapt-modal-foot { padding: 12px 18px; border-top: 1px solid var(--border-glow); display: flex; gap: 10px; justify-content: flex-end; }
+.adapt-confirm-btn { font-family: var(--font-display); font-size: 9px; letter-spacing: 1px; padding: 6px 16px; border-radius: 4px; cursor: pointer; border: none; }
+.adapt-confirm-btn.yes { background: rgba(0,255,136,0.2); color: #00ff88; border: 1px solid #00ff88; }
+.adapt-confirm-btn.yes:hover { background: rgba(0,255,136,0.35); }
+.adapt-confirm-btn.no  { background: rgba(255,51,51,0.15); color: #ff5555; border: 1px solid #ff5555; }
+.adapt-confirm-btn.no:hover  { background: rgba(255,51,51,0.3); }
+
 /* PAGE 2 — LOGS */
 #page-logs { display: grid; grid-template-columns: 320px 1fr 320px; height: 100%; }
 .log-col { height: 100%; overflow: hidden; border-right: 1px solid var(--border-glow); display: flex; flex-direction: column; }
@@ -995,6 +1017,27 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-p
       <button class="dna-btn" id="dna-btn-compare" onclick="dnaCompare()" style="border-color:rgba(255,170,0,0.4);color:#ffaa00">⚔️ COMPARE</button>
     </div>
     <div id="dna-results"></div>
+  </div>
+</div>
+
+<!-- Adapt modal overlay -->
+<div id="adapt-modal-overlay" onclick="if(event.target===this)adaptModalClose()">
+  <div id="adapt-modal">
+    <div class="adapt-modal-head">
+      <span class="adapt-modal-title">// ADAPT TO EDITH</span>
+      <button class="adapt-modal-close" onclick="adaptModalClose()">✕</button>
+    </div>
+    <div class="adapt-modal-body">
+      <div class="adapt-meta-row">
+        <span><span class="adapt-meta-key">CAPABILITY</span>&nbsp;<span id="adapt-cap-name">—</span></span>
+        <span><span class="adapt-meta-key">TARGET</span>&nbsp;<span id="adapt-target-file">—</span></span>
+      </div>
+      <div id="adapt-preview-code">Loading preview…</div>
+    </div>
+    <div class="adapt-modal-foot">
+      <button class="adapt-confirm-btn no" onclick="adaptConfirm(false)">✕ CANCEL</button>
+      <button class="adapt-confirm-btn yes" id="adapt-confirm-yes" onclick="adaptConfirm(true)">✓ CONFIRM ADAPT</button>
+    </div>
   </div>
 </div>
 
@@ -2401,11 +2444,16 @@ function dnaRender(data) {
 
   // Steal This
   const steal = data.steal_this || [];
+  const _repoUrl = data.repo_url || '';
   if (steal.length) {
     html += `<div class="dna-section-label">// STEAL THIS</div>`;
-    steal.forEach(s => {
-      html += `<div class="dna-card dna-card-steal">
-        <div class="dna-card-title">${s.title||''}${dnaEffortBadge(s.effort)}</div>
+    steal.forEach((s, i) => {
+      const enc = encodeURIComponent(JSON.stringify(s));
+      html += `<div class="dna-card dna-card-steal" id="steal-card-${i}">
+        <div class="dna-card-title" style="display:flex;align-items:center;gap:6px;">
+          <span>${s.title||''}${dnaEffortBadge(s.effort)}</span>
+          <button class="dna-adapt-btn" id="adapt-btn-${i}" onclick="adaptPreview(${i}, '${enc}', '${encodeURIComponent(_repoUrl)}')">ADAPT →</button>
+        </div>
         <div class="dna-card-desc">${s.description||''}</div>
         ${s.file_hint ? `<div class="dna-card-hint">${s.file_hint}</div>` : ''}
       </div>`;
@@ -2636,6 +2684,87 @@ async function dnaWatchRepo(encodedUrl, btn) {
   } catch(e) {
     showToast('Watch request failed');
   }
+}
+
+// ── ADAPT (click-to-adapt) ─────────────────────────────────────
+let _adaptState = {};  // stores preview data for confirm step
+
+async function adaptPreview(cardIdx, encodedItem, encodedRepoUrl) {
+  const btn = document.getElementById(`adapt-btn-${cardIdx}`);
+  if (btn && btn.classList.contains('adapted')) return;
+
+  const stealItem = JSON.parse(decodeURIComponent(encodedItem));
+  const repoUrl   = decodeURIComponent(encodedRepoUrl);
+
+  // Show loading on button
+  if (btn) { btn.textContent = '…'; btn.classList.add('loading'); btn.disabled = true; }
+
+  // Open modal with loading state
+  document.getElementById('adapt-cap-name').textContent = stealItem.title || stealItem.capability || '…';
+  document.getElementById('adapt-target-file').textContent = '…';
+  document.getElementById('adapt-preview-code').textContent = 'Generating preview…';
+  document.getElementById('adapt-confirm-yes').disabled = true;
+  document.getElementById('adapt-modal-overlay').classList.add('visible');
+
+  try {
+    const res = await fetch(`${API}/api/repo/adapt-preview`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({steal_item: stealItem, repo_url: repoUrl})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Preview failed');
+
+    document.getElementById('adapt-target-file').textContent = data.target_file || '?';
+    document.getElementById('adapt-preview-code').textContent = data.diff_preview || '(no preview)';
+    document.getElementById('adapt-confirm-yes').disabled = false;
+
+    // Stash state for confirm step
+    _adaptState = {
+      cardIdx,
+      task_description: data.task_description,
+      target_file: data.target_file,
+      capability: data.capability || stealItem.title || '',
+      repo_url: repoUrl,
+    };
+  } catch(e) {
+    document.getElementById('adapt-preview-code').textContent = `Error: ${e.message}`;
+  } finally {
+    if (btn) { btn.textContent = 'ADAPT →'; btn.classList.remove('loading'); btn.disabled = false; }
+  }
+}
+
+async function adaptConfirm(confirmed) {
+  adaptModalClose();
+  if (!confirmed) return;
+
+  const { cardIdx, task_description, target_file, capability, repo_url } = _adaptState;
+  const btn = document.getElementById(`adapt-btn-${cardIdx}`);
+
+  try {
+    const res = await fetch(`${API}/api/repo/adapt-confirm`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({confirmed: true, task_description, target_file, capability, repo_url})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Confirm failed');
+
+    showToast(`⚡ Adapting '${capability}' — agent running in background`);
+    if (btn) {
+      btn.textContent = 'ADAPTED ✓';
+      btn.classList.remove('loading');
+      btn.classList.add('adapted');
+      btn.disabled = true;
+    }
+  } catch(e) {
+    showToast(`Adapt failed: ${e.message}`);
+    if (btn) { btn.textContent = 'ADAPT →'; btn.disabled = false; }
+  }
+}
+
+function adaptModalClose() {
+  document.getElementById('adapt-modal-overlay').classList.remove('visible');
 }
 
 // ── DEV PANEL ──────────────────────────────────────────────────

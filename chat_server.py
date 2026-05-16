@@ -2121,6 +2121,136 @@ async def repo_clear_cache(repo_url: str = None):
         return JSONResponse({"error": str(exc)}, status_code=500)
 
 
+# ── Repo DNA — Click-to-adapt endpoints ──────────────────────────────────────
+
+try:
+    from agent import start_agent_task as _start_agent_task, execute_agent_task as _execute_agent_task
+    _AGENT_OK = True
+except ImportError:
+    _AGENT_OK = False
+
+try:
+    from devlog import add_entry as _devlog_add_entry
+    _DEVLOG_OK = True
+except ImportError:
+    _DEVLOG_OK = False
+
+_ADAPT_PREVIEW_SYSTEM = (
+    "You are EDITH's code architect. Given a capability to steal from a competitor repo, "
+    "produce a concise Python implementation sketch showing EXACTLY what code to add to EDITH. "
+    "Include: target file, function/class name, ~20-40 lines of real Python code. "
+    "Format as:\n"
+    "TARGET_FILE: <edith_module.py>\n"
+    "```python\n<code sketch>\n```\n"
+    "Keep it short, concrete, and directly usable."
+)
+
+
+@app.post("/api/repo/adapt-preview")
+async def repo_adapt_preview(request: Request):
+    if not _REPO_DNA_OK:
+        return JSONResponse({"error": "repo_dna module not available"}, status_code=503)
+    try:
+        body = await request.json()
+        steal_item = body.get("steal_item") or {}
+        repo_url = (body.get("repo_url") or "").strip()
+
+        capability = steal_item.get("capability") or steal_item.get("title") or "unknown"
+        description = steal_item.get("description") or steal_item.get("what") or ""
+        steal_from = steal_item.get("steal_from") or steal_item.get("file_hint") or ""
+
+        task_description = (
+            f"Implement '{capability}' in EDITH. "
+            f"Pattern source: {steal_from or 'see repo'}. "
+            f"Repo: {repo_url}. "
+            f"What it does: {description}"
+        )
+        prompt = (
+            f"Capability to steal: {capability}\n"
+            f"What it does: {description}\n"
+            f"Source file in their repo: {steal_from}\n"
+            f"Their repo: {repo_url}\n\n"
+            "Generate a Python implementation sketch for EDITH. "
+            "Pick the most appropriate EDITH module as the target file."
+        )
+
+        raw = smart_router.smart_call(
+            prompt=prompt,
+            intent="repo_analyze",
+            system=_ADAPT_PREVIEW_SYSTEM,
+        )
+
+        # Extract target file from response
+        target_file = "edith_utils.py"
+        for line in raw.splitlines():
+            if line.startswith("TARGET_FILE:"):
+                target_file = line.split(":", 1)[1].strip()
+                break
+
+        return JSONResponse({
+            "diff_preview": raw,
+            "target_file": target_file,
+            "task_description": task_description,
+            "capability": capability,
+        })
+    except Exception as exc:
+        log.warning(f"[repo_adapt] preview error: {exc}")
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+@app.post("/api/repo/adapt-confirm")
+async def repo_adapt_confirm(request: Request):
+    if not _AGENT_OK:
+        return JSONResponse({"error": "agent module not available"}, status_code=503)
+    try:
+        body = await request.json()
+        confirmed = bool(body.get("confirmed", False))
+        task_description = (body.get("task_description") or "").strip()
+        target_file = (body.get("target_file") or "").strip()
+        capability = (body.get("capability") or "").strip()
+        repo_url = (body.get("repo_url") or "").strip()
+
+        if not confirmed:
+            return JSONResponse({"status": "rejected"})
+
+        if not task_description:
+            return JSONResponse({"error": "task_description required"}, status_code=400)
+
+        # Plan the task
+        plan_result = _start_agent_task(task_description)
+        if not plan_result.ok:
+            return JSONResponse({"error": f"Planning failed: {plan_result.error}"}, status_code=500)
+
+        task_id = plan_result.value["task_id"]
+
+        # Execute async in background thread
+        exec_result = _execute_agent_task(task_id)
+        if not exec_result.ok:
+            return JSONResponse({"error": f"Execution failed: {exec_result.error}"}, status_code=500)
+
+        # Devlog entry
+        if _DEVLOG_OK:
+            try:
+                _devlog_add_entry(
+                    change=f"repo_dna: Adapted '{capability}' from {repo_url} → {target_file}",
+                    reason="repo_dna click-to-adapt HITL confirm",
+                    status="applied",
+                    error="",
+                    next_plan=f"verify changes in {target_file or 'EDITH'}",
+                )
+            except Exception as dl_exc:
+                log.warning(f"[repo_adapt] devlog write failed: {dl_exc}")
+
+        return JSONResponse({
+            "status": "queued",
+            "task_id": task_id,
+            "message": f"Agent executing '{capability}' adaptation in background.",
+        })
+    except Exception as exc:
+        log.warning(f"[repo_adapt] confirm error: {exc}")
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
 if __name__ == "__main__":
     import atexit
     import signal
