@@ -2136,15 +2136,21 @@ except ImportError:
     _DEVLOG_OK = False
 
 _ADAPT_PREVIEW_SYSTEM = (
-    "You are EDITH's code architect. Given a capability to steal from a competitor repo, "
-    "produce a concise Python implementation sketch showing EXACTLY what code to add to EDITH. "
-    "Include: target file, function/class name, ~20-40 lines of real Python code. "
-    "Format as:\n"
-    "TARGET_FILE: <edith_module.py>\n"
-    "```python\n<code sketch>\n```\n"
-    "Keep it short, concrete, and directly usable. "
-    "TARGET_FILE must be one of the EDITH files listed in the prompt. "
-    "If no existing file fits, use 'utils.py'."
+    "You are EDITH's code architect. Given a capability from a competitor repo "
+    "(may be JS, Rust, TypeScript, or any language), your job is to:\n"
+    "1. Understand the CONCEPT behind the capability — not the syntax.\n"
+    "2. Decide if EDITH actually needs this. EDITH is a Python backend AI daemon: "
+    "no browser, no UI state, no Node.js, no Redux, no DOM.\n"
+    "3. If applicable: implement in idiomatic Python using EDITH's existing patterns. "
+    "Translate concepts — never copy JS/Rust syntax, class names, or polyfills.\n"
+    "4. If not applicable: say so and explain why.\n\n"
+    "TARGET_FILE must be one of the EDITH Python files listed in the prompt. "
+    "If no existing file fits, use 'utils.py'.\n\n"
+    "Format your response EXACTLY as:\n"
+    "TARGET_FILE: <real_edith_file.py>\n"
+    "APPLICABLE: yes/no\n"
+    "REASON: <one line>\n"
+    "```python\n<Python implementation, or empty block if not applicable>\n```"
 )
 
 
@@ -2192,18 +2198,25 @@ async def repo_adapt_preview(request: Request):
         )
 
         target_file = "utils.py"
+        applicable = True
+        reason = ""
         for line in raw.splitlines():
             if line.startswith("TARGET_FILE:"):
                 candidate = line.split(":", 1)[1].strip()
                 if candidate in edith_files:
                     target_file = candidate
-                break
+            elif line.startswith("APPLICABLE:"):
+                applicable = line.split(":", 1)[1].strip().lower() == "yes"
+            elif line.startswith("REASON:"):
+                reason = line.split(":", 1)[1].strip()
 
         return JSONResponse({
             "diff_preview": raw,
             "target_file": target_file,
             "task_description": task_description,
             "capability": capability,
+            "applicable": applicable,
+            "reason": reason,
         })
     except Exception as exc:
         log.warning(f"[repo_adapt] preview error: {exc}")
