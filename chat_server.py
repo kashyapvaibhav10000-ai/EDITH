@@ -58,9 +58,8 @@ app = FastAPI()
 # ────────────────────────────────────────────────────
 # API Key Authentication Middleware (before CORS)
 # ────────────────────────────────────────────────────
-_VALID_API_KEYS = set(
-    filter(None, [os.getenv("EDITH_API_KEY", ""), os.getenv("EDITH_API_KEYS", "").split(",")])
-)
+_keys_raw = os.getenv("EDITH_API_KEYS", "") + "," + os.getenv("EDITH_API_KEY", "")
+_VALID_API_KEYS = set(filter(None, _keys_raw.split(",")))
 
 @app.middleware("http")
 async def api_key_middleware(request: Request, call_next):
@@ -436,6 +435,19 @@ async def chat_endpoint(req: Request):
     _track_widget_msg(user_input, "user", intent)
     _track_widget_msg(reply, "assistant", intent)
     used_sid = _persist_exchange(user_input, reply, req_session_id)
+
+    # Tag implicit feedback on the previous exchange (lazy import, never blocks response)
+    try:
+        from feedback_tagger import detect_implicit_feedback
+        from trace_logger import get_recent_traces
+        _recent = get_recent_traces(limit=2)
+        if len(_recent) >= 2:
+            _prev_trace_id = _recent[1].get("trace_id")
+            if _prev_trace_id:
+                detect_implicit_feedback(_prev_trace_id, user_input)
+    except Exception:
+        pass
+
     return {"reply": reply, "intent": intent, "session_id": used_sid}
 
 

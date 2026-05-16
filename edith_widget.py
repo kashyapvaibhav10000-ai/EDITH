@@ -18,9 +18,10 @@ from pynput import keyboard
 from voice import MIC_IN_USE
 import wake_listener
 
-API_URL    = "http://127.0.0.1:8001/api/chat"
-STREAM_URL = "http://127.0.0.1:8001/api/chat/stream"
-STATUS_URL = "http://127.0.0.1:8001/api/status"
+_BASE      = os.getenv("EDITH_BASE_URL", "http://127.0.0.1:8001")
+API_URL    = f"{_BASE}/api/chat"
+STREAM_URL = f"{_BASE}/api/chat/stream"
+STATUS_URL = f"{_BASE}/api/status"
 
 # ─── Neu Brutalism + Claymorphism Theme ───
 BG          = "#0a0a0f"
@@ -837,7 +838,7 @@ class EdithWidget(QWidget):
         def _post():
             try:
                 requests.post(
-                    "http://127.0.0.1:8001/api/feedback",
+                    f"{_BASE}/api/feedback",
                     json={"trace_id": trace_id, "feedback": fb},
                     timeout=4,
                 )

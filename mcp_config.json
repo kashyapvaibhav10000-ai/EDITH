@@ -7,7 +7,7 @@
         "/home/vaibhav/.nvm/versions/node/v20.20.2/lib/node_modules/@modelcontextprotocol/server-filesystem/dist/index.js",
         "/home/vaibhav"
       ],
-      "description": "Local filesystem access \u2014 read, write, list files under /home/vaibhav",
+      "description": "Local filesystem access — read, write, list files under /home/vaibhav",
       "allowed_intents": [
         "mcp",
         "file_query",
@@ -22,7 +22,7 @@
       "args": [
         "/home/vaibhav/.nvm/versions/node/v20.20.2/lib/node_modules/@modelcontextprotocol/server-github/dist/index.js"
       ],
-      "description": "GitHub API \u2014 repos, issues, PRs, code search",
+      "description": "GitHub API — repos, issues, PRs, code search",
       "allowed_intents": [
         "mcp",
         "code"
@@ -39,7 +39,7 @@
         "run",
         "c51d5cf5c7c78d123c5ce4404d9040b1"
       ],
-      "description": "Cloudflare \u2014 workers, DNS, analytics",
+      "description": "Cloudflare — workers, DNS, analytics",
       "allowed_intents": [
         "mcp",
         "code",
@@ -48,6 +48,36 @@
       "env_vars": {
         "CLOUDFLARE_API_TOKEN": "required",
         "CLOUDFLARE_ACCOUNT_ID": "required"
+      }
+    },
+    "gdrive": {
+      "enabled": true,
+      "command": "node",
+      "args": [
+        "/home/vaibhav/.nvm/versions/node/v20.20.2/lib/node_modules/@modelcontextprotocol/server-gdrive/dist/index.js"
+      ],
+      "description": "Google Drive — search, read, list files",
+      "allowed_intents": [
+        "mcp",
+        "file_query",
+        "agent"
+      ],
+      "env_vars": {
+        "GDRIVE_OAUTH_PATH": "/home/vaibhav/EDITH/credentials.json",
+        "GDRIVE_CREDENTIALS_PATH": "/home/vaibhav/EDITH/token.json"
+      }
+    },
+    "brave-search": {
+      "enabled": false,
+      "command": "node",
+      "args": [],
+      "description": "Brave Search — web search via Brave API. Needs BRAVE_API_KEY and npm install @modelcontextprotocol/server-brave-search",
+      "allowed_intents": [
+        "mcp",
+        "search"
+      ],
+      "env_vars": {
+        "BRAVE_API_KEY": "required"
       }
     }
   }

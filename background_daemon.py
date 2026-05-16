@@ -207,6 +207,10 @@ def _check_heartbeat_silence():
 # ──────────────────────────────────────────────
 def _send_telegram_alert(message: str):
     """Send a Telegram alert (non-blocking)."""
+    # Local node is voice/widget only — not a Telegram gateway
+    if os.getenv("EDITH_NODE_TYPE", "local") == "local":
+        log.debug(f"Telegram suppressed on local node: {message[:80]}")
+        return
     try:
         from telegram_bot import send_telegram
         send_telegram(f"🤖 EDITH DAEMON\n\n{message}")

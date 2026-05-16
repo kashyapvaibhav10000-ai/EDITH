@@ -247,6 +247,9 @@ def _run_local_exec(user_input: str):
     Detect and execute local system/file ops. Never web-search, never hallucinate.
     Returns result string or None if query is not a local op.
     """
+    # DISABLED on cloud: all shell=True subprocess calls below are local-only
+    if os.getenv("EDITH_NODE_TYPE", "local") == "cloud":
+        return None
     import random as _random
     import shutil as _shutil
 
@@ -659,6 +662,9 @@ def _handle_open_app(ctx) -> Result:
 
 
 def _handle_shell(ctx) -> Result:
+    # DISABLED on cloud: remote shell execution is an RCE vector
+    if os.getenv("EDITH_NODE_TYPE", "local") == "cloud":
+        return Result.success("Shell execution disabled on cloud node for security.")
     try:
         # Intercept descriptive/natural-language queries before treating as raw shell
         _local = _run_local_exec(ctx.user_input)

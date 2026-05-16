@@ -523,8 +523,8 @@ def _setup_schedule():
     # Email summary every 30 minutes
     schedule.every(30).minutes.do(_prefetch_email_summary)
 
-    # KDE heartbeat every 5 minutes
-    schedule.every(5).minutes.do(_kde_heartbeat)
+    # DISABLED: KDE heartbeat — cloud has no KDE device
+    # schedule.every(5).minutes.do(_kde_heartbeat)
 
     # Proactive checks every 10 minutes
     schedule.every(10).minutes.do(_proactive_checks)
