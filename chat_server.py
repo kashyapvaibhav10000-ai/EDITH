@@ -2162,8 +2162,9 @@ async def repo_adapt_preview(request: Request):
         description = steal_item.get("description") or steal_item.get("what") or ""
         steal_from = steal_item.get("steal_from") or steal_item.get("file_hint") or ""
 
+        _edith_dir = os.path.dirname(os.path.abspath(__file__))
         edith_files = sorted(
-            os.path.basename(f) for f in _glob.glob("/home/vaibhav/EDITH/*.py")
+            os.path.basename(f) for f in _glob.glob(os.path.join(_edith_dir, "*.py"))
         )
         file_list_str = ", ".join(edith_files)
 

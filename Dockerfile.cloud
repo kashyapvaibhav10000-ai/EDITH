@@ -34,6 +34,7 @@ COPY orchestrator.py .
 COPY intent_dispatch.py .
 COPY intent.py .
 COPY chat_server.py .
+COPY repo_dna.py .
 
 # Background daemon (scheduler)
 COPY background_daemon_cloud.py .
