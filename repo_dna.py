@@ -203,6 +203,15 @@ def _get_db() -> sqlite3.Connection:
             last_sha     TEXT
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS adapted_items (
+            repo_url    TEXT NOT NULL,
+            capability  TEXT NOT NULL,
+            adapted_at  TEXT NOT NULL,
+            target_file TEXT NOT NULL,
+            PRIMARY KEY (repo_url, capability)
+        )
+    """)
     conn.commit()
     return conn
 
@@ -567,6 +576,7 @@ def analyze_repo(repo_url: str, force_refresh: bool = False) -> dict:
         logger.info("[repo_dna] cache MISS for %s", repo_url)
 
         # ── Sample files ──
+        files_total = 0
         if not used_mcp:
             all_files = []
             for root, dirs, files in os.walk(clone_path):
@@ -574,9 +584,11 @@ def analyze_repo(repo_url: str, force_refresh: bool = False) -> dict:
                 for fname in files:
                     rel = os.path.relpath(os.path.join(root, fname), clone_path)
                     all_files.append(rel)
+            files_total = len(all_files)
             top = _top_files(all_files)
             file_contents = _read_files_from_clone(clone_path, top)
         else:
+            files_total = len(file_list_mcp)
             top = _top_files(file_list_mcp)
             match = re.search(r"github\.com/([\w\-]+)/([\w\-]+)", repo_url)
             if match:
@@ -613,6 +625,8 @@ def analyze_repo(repo_url: str, force_refresh: bool = False) -> dict:
         analysis["repo_url"] = repo_url
         analysis["repo_name"] = repo_name
         analysis["analyzed_at"] = datetime.now(timezone.utc).isoformat()
+        analysis["files_analyzed"] = len(file_contents)
+        analysis["files_total"] = files_total
         _cache_store(repo_url, repo_name, commit_sha, analysis)
         logger.info("[repo_dna] analysis stored for %s", repo_url)
         return analysis
@@ -623,13 +637,49 @@ def analyze_repo(repo_url: str, force_refresh: bool = False) -> dict:
             logger.info("[repo_dna] cleaned up %s", clone_path)
 
 
+def mark_adapted(repo_url: str, capability: str, target_file: str) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    with _get_db() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO adapted_items (repo_url, capability, adapted_at, target_file) "
+            "VALUES (?, ?, ?, ?)",
+            (repo_url, capability, now, target_file),
+        )
+        conn.commit()
+    logger.info("[repo_dna] marked adapted: %s / %s → %s", repo_url, capability, target_file)
+
+
+def get_adapted_capabilities(repo_url: str) -> set:
+    try:
+        with _get_db() as conn:
+            rows = conn.execute(
+                "SELECT capability FROM adapted_items WHERE repo_url = ?", (repo_url,)
+            ).fetchall()
+        return {r["capability"] for r in rows}
+    except Exception as exc:
+        logger.warning("[repo_dna] get_adapted_capabilities failed: %s", exc)
+        return set()
+
+
 def get_cached_analyses() -> list[dict]:
-    """Return all cached analyses, newest first."""
+    """Return all cached analyses, newest first. Enriches steal_this with adapted field."""
     with _get_db() as conn:
         rows = conn.execute(
             "SELECT analysis_json FROM repo_analyses ORDER BY created_at DESC"
         ).fetchall()
-    return [json.loads(r["analysis_json"]) for r in rows]
+    analyses = [json.loads(r["analysis_json"]) for r in rows]
+    for entry in analyses:
+        repo_url = entry.get("repo_url", "")
+        if not repo_url:
+            continue
+        try:
+            adapted_caps = get_adapted_capabilities(repo_url)
+            for item in entry.get("steal_this", []):
+                cap = item.get("capability") or item.get("title") or ""
+                item["adapted"] = cap in adapted_caps
+        except Exception:
+            pass
+    return analyses
 
 
 def clear_cache(repo_url: str = None) -> None:

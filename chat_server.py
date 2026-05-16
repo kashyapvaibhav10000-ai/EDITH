@@ -176,12 +176,46 @@ try:
         watch_repo as _watch_repo,
         get_watched_repos as _get_watched_repos,
         _build_edith_context_summary,
+        mark_adapted as _mark_adapted,
+        get_adapted_capabilities as _get_adapted_caps,
         RepoFetchError,
         RepoAnalysisError,
     )
     _REPO_DNA_OK = True
 except ImportError:
     _REPO_DNA_OK = False
+
+# ── Adapt status tracking (event-driven, module-level) ──
+_adapt_results: dict = {}   # task_id → {status, summary/error}
+_adapt_meta: dict = {}      # task_id → {capability, repo_url, target_file}
+
+try:
+    from event_bus import bus as _bus, Topic as _Topic
+
+    def _on_agent_done(payload: dict) -> None:
+        tid = payload.get("task_id", "")
+        _adapt_results[tid] = {"status": "done", "summary": payload.get("summary", "")}
+        if len(_adapt_results) > 200:
+            _adapt_results.pop(next(iter(_adapt_results)))
+        meta = _adapt_meta.pop(tid, None)
+        if meta and _REPO_DNA_OK:
+            try:
+                _mark_adapted(meta["repo_url"], meta["capability"], meta["target_file"])
+            except Exception as _me:
+                log.warning(f"[repo_adapt] mark_adapted failed: {_me}")
+
+    def _on_agent_error(payload: dict) -> None:
+        tid = payload.get("task_id", "")
+        _adapt_results[tid] = {"status": "failed", "error": payload.get("error", "")}
+        if len(_adapt_results) > 200:
+            _adapt_results.pop(next(iter(_adapt_results)))
+        _adapt_meta.pop(tid, None)
+
+    _bus.subscribe_fn(_Topic.AGENT_DONE, _on_agent_done)
+    _bus.subscribe_fn(_Topic.AGENT_ERROR, _on_agent_error)
+    _ADAPT_TRACKING_OK = True
+except Exception:
+    _ADAPT_TRACKING_OK = False
 
 
 def _get_last_exchange():
@@ -2248,9 +2282,17 @@ async def repo_adapt_confirm(request: Request):
 
         task_id = plan_result.value["task_id"]
 
+        # Stash metadata for AGENT_DONE handler to call mark_adapted on success
+        _adapt_meta[task_id] = {
+            "capability": capability,
+            "repo_url": repo_url,
+            "target_file": target_file,
+        }
+
         # Execute async in background thread
         exec_result = _execute_agent_task(task_id)
         if not exec_result.ok:
+            _adapt_meta.pop(task_id, None)
             return JSONResponse({"error": f"Execution failed: {exec_result.error}"}, status_code=500)
 
         # Devlog entry
@@ -2274,6 +2316,12 @@ async def repo_adapt_confirm(request: Request):
     except Exception as exc:
         log.warning(f"[repo_adapt] confirm error: {exc}")
         return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+@app.get("/api/repo/adapt-status/{task_id}")
+async def repo_adapt_status(task_id: str):
+    result = _adapt_results.get(task_id, {"status": "pending"})
+    return JSONResponse(result)
 
 
 # ── Repo DNA — Gap plan (strategic gap → sub-task decomposition) ──────────────
