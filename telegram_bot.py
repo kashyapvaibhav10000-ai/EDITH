@@ -320,6 +320,48 @@ def poll_telegram():
             time.sleep(10)
 
 
+def handle_telegram_update(update: dict) -> None:
+    """Process a single Telegram update dict (webhook mode entry point)."""
+    from session import start_session, track_query
+    msg = update.get("message", {})
+    text = msg.get("text", "").strip()
+    chat_id = str(msg.get("chat", {}).get("id", ""))
+
+    if not text or chat_id != str(CHAT_ID):
+        return
+
+    log.info(f"Telegram webhook received: {text[:80]}")
+    track_query(text)
+
+    if text.lower() in ["/start", "start"]:
+        send_telegram("🤖 *EDITH online.* Ready, Boss.")
+        return
+
+    if text.lower() == "/mcpstatus":
+        send_telegram(_handle_mcpstatus_cmd())
+        return
+
+    if text.lower().startswith("/mcp"):
+        send_telegram(_handle_mcp_cmd(text[4:].strip()))
+        return
+
+    msg_id = send_telegram_placeholder("⏳ On it, Boss...")
+    try:
+        response = process_message(text)
+        if msg_id:
+            if not edit_telegram_message(msg_id, response, parse_mode="Markdown"):
+                edit_telegram_message(msg_id, response)
+        else:
+            send_telegram(response, parse_mode=None)
+    except Exception as e:
+        log.error(f"Webhook processing failed: {e}")
+        err_msg = f"Something went wrong: {e}"
+        if msg_id:
+            edit_telegram_message(msg_id, err_msg)
+        else:
+            send_telegram(err_msg)
+
+
 def send_drift_alert():
     """Check for drift and alert on Telegram if detected."""
     from cognitive_profile import detect_drift, get_recent_queries

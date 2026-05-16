@@ -5,10 +5,11 @@ from errors import Result
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
+from config import EDITH_PATH
 
 SCOPES = ['https://www.googleapis.com/auth/calendar']
-CREDS_FILE = '/home/vaibhav/EDITH/credentials.json'
-TOKEN_FILE = '/home/vaibhav/EDITH/token.json'
+CREDS_FILE = os.path.join(EDITH_PATH, 'credentials.json')
+TOKEN_FILE = os.path.join(EDITH_PATH, 'token.json')
 
 def get_service():
     creds = None

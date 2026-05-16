@@ -10,6 +10,7 @@ import subprocess
 import json
 import os
 import datetime
+from config import EDITH_PATH
 
 app = FastAPI()
 
@@ -54,7 +55,7 @@ def get_ollama_models():
         return []
 
 def get_recent_logs():
-    log_path = "/home/vaibhav/EDITH/logs/security_audit.log"
+    log_path = os.path.join(EDITH_PATH, "logs", "security_audit.log")
     try:
         with open(log_path) as f:
             lines = f.readlines()
@@ -63,7 +64,7 @@ def get_recent_logs():
         return ["No logs yet"]
 
 def get_edith_modules():
-    edith_path = "/home/vaibhav/EDITH"
+    edith_path = EDITH_PATH
     modules = []
     key_files = [
         ("orchestrator.py", "Orchestrator"),

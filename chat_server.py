@@ -1473,7 +1473,8 @@ async def api_traces_recent(limit: int = 20):
 @app.get("/api/logs/stream")
 async def api_logs_stream():
     """SSE endpoint tailing edith.log. Sends last 100 lines on connect then streams new ones."""
-    log_path = "/home/vaibhav/EDITH/logs/edith.log"
+    from config import EDITH_PATH as _EDITH_PATH
+    log_path = os.path.join(_EDITH_PATH, "logs", "edith.log")
 
     async def _generate():
         try:
@@ -1711,6 +1712,27 @@ async def webhook_trigger(source: str, req: Request):
         pass
 
     return {"ok": True, "source": source, "event": event, "reply": reply}
+
+
+@app.post("/tg_webhook")
+async def tg_webhook(req: Request):
+    """
+    Telegram Bot API webhook endpoint.
+    nginx maps /<BOT_TOKEN> → http://127.0.0.1:8001/tg_webhook.
+    Only active on cloud node (EDITH_NODE_TYPE=cloud).
+    """
+    if os.getenv("EDITH_NODE_TYPE", "local") != "cloud":
+        return JSONResponse(status_code=403, content={"ok": False, "error": "Webhook only active on cloud node"})
+    try:
+        update = await req.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"ok": False})
+    try:
+        from telegram_bot import handle_telegram_update
+        await asyncio.to_thread(handle_telegram_update, update)
+    except Exception as e:
+        log.error(f"tg_webhook handler error: {e}")
+    return {"ok": True}
 
 
 def _graceful_shutdown():
