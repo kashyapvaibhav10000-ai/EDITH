@@ -510,6 +510,31 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-p
 .gap-adapt-btn { font-family: var(--font-display); font-size: 8px; letter-spacing: 1px; padding: 2px 6px; border-radius: 3px; border: 1px solid rgba(0,255,136,0.3); background: rgba(0,255,136,0.08); color: #00ff88; cursor: pointer; white-space: nowrap; }
 .gap-adapt-btn:hover { background: rgba(0,255,136,0.18); }
 .dna-card.adapted { opacity: 0.55; }
+/* Trend panel */
+.trend-badge { font-family: var(--font-display); font-size: 7px; letter-spacing: 1px; padding: 1px 5px; border-radius: 2px; margin-left: 6px; }
+.trend-badge.new  { background: rgba(0,255,136,0.2); color: #00ff88; }
+.trend-badge.gone { background: rgba(255,51,51,0.15); color: #ff5555; }
+.trend-badge.gap  { background: rgba(153,102,255,0.2); color: #9966ff; }
+.dna-card-trend-new  { border-left: 2px solid rgba(0,255,136,0.5)  !important; }
+.dna-card-trend-gone { border-left: 2px solid rgba(255,51,51,0.4)  !important; opacity: 0.6; }
+.dna-card-trend-gap  { border-left: 2px solid rgba(153,102,255,0.4) !important; }
+.trend-delta { font-size: 9px; font-family: var(--font-mono); margin: 4px 0 8px; }
+.trend-delta.pos { color: #00ff88; }
+.trend-delta.neg { color: #ff5555; }
+/* Multi-compare modal */
+#multi-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 9100; display: none; align-items: center; justify-content: center; }
+#multi-modal-overlay.visible { display: flex; }
+#multi-modal { background: var(--bg-panel); border: 1px solid var(--border-glow); border-radius: 8px; width: min(560px, 92vw); display: flex; flex-direction: column; overflow: hidden; }
+.multi-modal-head { padding: 14px 18px 10px; border-bottom: 1px solid var(--border-glow); display: flex; align-items: center; gap: 10px; }
+.multi-modal-title { font-family: var(--font-display); font-size: 11px; letter-spacing: 1px; color: #ffaa00; flex: 1; }
+.multi-modal-body { padding: 14px 18px; }
+#multi-url-input { width: 100%; background: rgba(0,0,0,0.4); border: 1px solid var(--border-glow); border-radius: 4px; color: var(--text-primary); font-family: var(--font-mono); font-size: 10px; padding: 8px 10px; resize: vertical; min-height: 70px; }
+.multi-modal-foot { padding: 10px 18px 14px; display: flex; align-items: center; gap: 10px; }
+.multi-refresh-label { font-size: 9px; color: var(--text-dim); display: flex; align-items: center; gap: 4px; flex: 1; cursor: pointer; }
+.freq-badge { font-family: var(--font-display); font-size: 7px; letter-spacing: 1px; padding: 1px 5px; border-radius: 2px; margin-left: 6px; }
+.freq-3 { background: rgba(255,51,51,0.2); color: #ff5555; }
+.freq-2 { background: rgba(255,170,0,0.15); color: #ffaa00; }
+.freq-1 { background: rgba(100,100,100,0.2); color: #888; }
 .severity-critical { border-color: rgba(255,51,51,0.5) !important; }
 .severity-medium   { border-color: rgba(255,170,0,0.4) !important; }
 .severity-low      { border-color: rgba(100,100,100,0.35) !important; }
@@ -1046,6 +1071,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-p
       <button class="dna-btn" id="dna-btn-force" onclick="dnaAnalyze(true)">FORCE REFRESH</button>
       <button class="dna-btn" id="dna-btn-compare" onclick="dnaCompare()" style="border-color:rgba(255,170,0,0.4);color:#ffaa00">⚔️ COMPARE</button>
       <button class="dna-btn dna-btn-audit" id="dna-btn-audit" onclick="dnaAuditSelf()">🔍 SELF AUDIT</button>
+      <button class="dna-btn" id="dna-btn-multi" onclick="multiModalOpen()" style="border-color:rgba(153,102,255,0.4);color:#9966ff">⚡ MULTI</button>
     </div>
     <div id="dna-results"></div>
   </div>
@@ -2501,6 +2527,38 @@ function dnaRender(data) {
     });
   }
 
+  // Trend — Since Last Analysis
+  const trend = data.trend || {};
+  if (trend.has_changes) {
+    html += `<div class="dna-section-label">// SINCE LAST ANALYSIS</div>`;
+    if (trend.files_delta && trend.files_delta !== 0) {
+      const sign = trend.files_delta > 0 ? '+' : '';
+      const cls  = trend.files_delta > 0 ? 'pos' : 'neg';
+      html += `<div class="trend-delta ${cls}">${sign}${trend.files_delta} files analyzed</div>`;
+    }
+    (trend.new_steal_this || []).forEach(s => {
+      html += `<div class="dna-card dna-card-steal dna-card-trend-new">
+        <div class="dna-card-title"><span>${s.title||''}${dnaEffortBadge(s.effort)}</span><span class="trend-badge new">NEW</span></div>
+        <div class="dna-card-desc">${s.description||''}</div>
+      </div>`;
+    });
+    (trend.removed_steal_this || []).forEach(s => {
+      html += `<div class="dna-card dna-card-steal dna-card-trend-gone">
+        <div class="dna-card-title"><span>${s.title||''}</span><span class="trend-badge gone">GONE</span></div>
+        <div class="dna-card-desc" style="text-decoration:line-through">${s.description||''}</div>
+      </div>`;
+    });
+    (trend.new_strategic_gaps || []).forEach(g => {
+      html += `<div class="gap-card dna-card-trend-gap">
+        <div class="gap-card-title">${g.capability||''}<span class="trend-badge gap">NEW GAP</span></div>
+        <div class="gap-card-what">${g.what||''}</div>
+      </div>`;
+    });
+  } else if (trend.first_analysis) {
+    html += `<div class="dna-section-label">// SINCE LAST ANALYSIS</div>
+      <div class="dna-empty" style="font-size:9px;padding:6px 0">First analysis — no trend data yet.</div>`;
+  }
+
   // Watch This
   const watch = data.watch_this || [];
   if (watch.length) {
@@ -2799,6 +2857,95 @@ function dnaRenderAudit(data) {
     html += `<div class="dna-section-label" style="margin-top:12px">// 4-VISION FUNCTION GAPS</div>`;
     data.vision_gaps.forEach(v => {
       html += `<div style="font-size:9px;color:rgba(255,170,0,0.8);font-family:var(--font-mono);padding:2px 0">${v}</div>`;
+    });
+  }
+
+  document.getElementById('dna-results').innerHTML = html;
+}
+
+// ── MULTI REPO COMPARE ────────────────────────────────────────
+
+function multiModalOpen() {
+  document.getElementById('multi-modal-overlay').classList.add('visible');
+}
+function multiModalClose() {
+  document.getElementById('multi-modal-overlay').classList.remove('visible');
+}
+
+async function multiCompareSubmit() {
+  const raw = document.getElementById('multi-url-input').value.trim();
+  const repo_urls = raw.split('\n').map(l => l.trim()).filter(l => l.startsWith('http'));
+  if (repo_urls.length < 2) { showToast('Need at least 2 URLs'); return; }
+  if (repo_urls.length > 3) { showToast('Max 3 repos at once'); return; }
+  const force_refresh = document.getElementById('multi-force-refresh').checked;
+
+  multiModalClose();
+  const btn = document.getElementById('dna-btn-multi');
+  btn.disabled = true;
+  document.getElementById('dna-spinner').classList.add('active');
+  document.getElementById('dna-results').innerHTML =
+    `<div class="dna-empty">Analyzing ${repo_urls.length} repos in parallel… this may take 60–90s</div>`;
+
+  try {
+    const res = await fetch(`${API}/api/repo/multi-compare`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({repo_urls, force_refresh})
+    });
+    const data = await res.json();
+    if (!res.ok) { showToast(data.error || 'Compare failed'); return; }
+    dnaRenderMulti(data);
+  } catch(e) {
+    showToast('Multi-compare failed: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    document.getElementById('dna-spinner').classList.remove('active');
+  }
+}
+
+function dnaRenderMulti(data) {
+  const total = data.repo_count || 0;
+  let html = `<div class="dna-summary">Compared ${total} repos${data.failed_count ? ` (${data.failed_count} failed)` : ''}.</div>`;
+
+  // Failed repos
+  if (data.errors && Object.keys(data.errors).length) {
+    Object.entries(data.errors).forEach(([url, err]) => {
+      html += `<div style="font-size:9px;color:#ff5555;font-family:var(--font-mono);padding:2px 0">${url} — ${err}</div>`;
+    });
+  }
+
+  // Cross-repo steal list
+  const unified = data.unified_steal || [];
+  if (unified.length) {
+    html += `<div class="dna-section-label">// CROSS-REPO STEAL LIST</div>`;
+    unified.forEach((entry, i) => {
+      const s = entry.item || {};
+      const count = entry.count || 1;
+      const freqClass = count >= 3 ? 'freq-3' : count === 2 ? 'freq-2' : 'freq-1';
+      const freqLabel = `${count}/${total} repos`;
+      const adaptItem = encodeURIComponent(JSON.stringify(s));
+      const repoEnc = encodeURIComponent((entry.repos || [])[0] || '');
+      html += `<div class="dna-card dna-card-steal" id="steal-card-multi-${i}">
+        <div class="dna-card-title" style="display:flex;align-items:center;gap:6px;">
+          <span>${s.title||s.capability||''}${dnaEffortBadge(s.effort)}<span class="freq-badge ${freqClass}">${freqLabel}</span></span>
+          <button class="dna-adapt-btn" id="adapt-btn-multi-${i}" data-index="multi-${i}" data-repo="${repoEnc}" data-item="${adaptItem}">ADAPT →</button>
+        </div>
+        <div class="dna-card-desc">${s.description||''}</div>
+        ${s.file_hint ? `<div class="dna-card-hint">${s.file_hint}</div>` : ''}
+      </div>`;
+    });
+  }
+
+  // Per-repo summaries
+  if (data.repos) {
+    html += `<div class="dna-section-label">// PER-REPO SUMMARY</div>`;
+    Object.entries(data.repos).forEach(([url, analysis]) => {
+      const name = url.split('/').pop();
+      html += `<div class="dna-card" style="border-color:rgba(153,102,255,0.3)">
+        <div class="dna-card-title" style="color:#9966ff">${name}</div>
+        <div class="dna-card-desc">${analysis.summary||''}</div>
+        <div class="dna-card-hint">${analysis.steal_this?.length||0} steal items · ${analysis.strategic_gaps?.length||0} gaps</div>
+      </div>`;
     });
   }
 
@@ -3324,6 +3471,25 @@ setInterval(fetchSessions, 30000);
     <div id="dp-response" style="min-height:140px;font-size:12px;line-height:1.8;white-space:pre-wrap;margin-top:8px;color:#ccc"><span style="color:#444">Awaiting query...</span></div>
   </div>
   <button onclick="closeDevPanel()" style="position:fixed;top:20px;right:20px;background:#1a1a2e;border:1px solid #333;color:#666;padding:6px 14px;cursor:pointer;font-family:monospace;font-size:11px">✕ CLOSE</button>
+</div>
+<div id="multi-modal-overlay" onclick="if(event.target===this)multiModalClose()">
+  <div id="multi-modal">
+    <div class="multi-modal-head">
+      <span class="multi-modal-title">⚡ MULTI REPO COMPARE</span>
+      <button class="adapt-modal-close" onclick="multiModalClose()">✕</button>
+    </div>
+    <div class="multi-modal-body">
+      <div style="font-size:9px;color:var(--text-dim);margin-bottom:6px">Enter 2–3 GitHub repo URLs, one per line:</div>
+      <textarea id="multi-url-input" placeholder="https://github.com/owner/repo1&#10;https://github.com/owner/repo2"></textarea>
+    </div>
+    <div class="multi-modal-foot">
+      <label class="multi-refresh-label">
+        <input type="checkbox" id="multi-force-refresh"> Re-analyze (skip cache)
+      </label>
+      <button class="adapt-confirm-btn no" onclick="multiModalClose()">✕ CANCEL</button>
+      <button class="adapt-confirm-btn yes" onclick="multiCompareSubmit()">⚡ COMPARE ALL</button>
+    </div>
+  </div>
 </div>
 </body>
 </html>

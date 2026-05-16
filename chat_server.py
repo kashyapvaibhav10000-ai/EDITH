@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request
+from pydantic import BaseModel
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -176,6 +177,9 @@ try:
         watch_repo as _watch_repo,
         get_watched_repos as _get_watched_repos,
         check_watched_repos as _check_watched_repos,
+        get_previous_snapshot as _get_prev_snapshot,
+        diff_analyses as _diff_analyses,
+        compare_multi_repos as _compare_multi_repos,
         _build_edith_context_summary,
         mark_adapted as _mark_adapted,
         get_adapted_capabilities as _get_adapted_caps,
@@ -2453,6 +2457,56 @@ async def repo_gap_plan(request: Request):
         })
     except Exception as exc:
         log.warning(f"[repo_gap_plan] error: {exc}")
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+# ── Repo DNA — Trend tracking ────────────────────────────────────────────────
+
+@app.get("/api/repo/trend")
+async def repo_trend(repo_url: str):
+    if not _REPO_DNA_OK:
+        return JSONResponse({"error": "repo_dna module not available"}, status_code=503)
+    try:
+        repo_url = repo_url.strip().rstrip("/")
+        all_analyses = _get_cached_analyses()
+        current = next((a for a in all_analyses if a.get("repo_url") == repo_url), None)
+        if not current:
+            return JSONResponse({"error": "no analysis found for this repo"}, status_code=404)
+        previous = _get_prev_snapshot(repo_url)
+        if not previous:
+            return JSONResponse({"has_changes": False, "first_analysis": True})
+        return JSONResponse(_diff_analyses(current, previous))
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+# ── Repo DNA — Multi-repo parallel compare ────────────────────────────────────
+
+class _MultiCompareBody(BaseModel):
+    repo_urls: list = []
+    force_refresh: bool = False
+
+
+@app.post("/api/repo/multi-compare")
+def repo_multi_compare(body: _MultiCompareBody):
+    """Sync def — FastAPI runs in threadpool, safe for blocking ThreadPoolExecutor."""
+    if not _REPO_DNA_OK:
+        return JSONResponse({"error": "repo_dna module not available"}, status_code=503)
+
+    repo_urls = [u.strip().rstrip("/") for u in (body.repo_urls or []) if u.strip()]
+
+    if len(repo_urls) < 2:
+        return JSONResponse({"error": "need at least 2 repo URLs"}, status_code=400)
+    if len(repo_urls) > 3:
+        return JSONResponse({"error": "max 3 repos at once"}, status_code=400)
+    for url in repo_urls:
+        if not _REPO_URL_RE.match(url):
+            return JSONResponse({"error": f"Invalid URL: {url}"}, status_code=400)
+    try:
+        result = _compare_multi_repos(repo_urls, body.force_refresh)
+        return JSONResponse(result)
+    except Exception as exc:
+        log.warning(f"[multi_compare] {exc}")
         return JSONResponse({"error": str(exc)}, status_code=500)
 
 

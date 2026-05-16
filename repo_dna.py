@@ -212,6 +212,15 @@ def _get_db() -> sqlite3.Connection:
             PRIMARY KEY (repo_url, capability)
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS analysis_snapshots (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            repo_url      TEXT NOT NULL,
+            commit_sha    TEXT NOT NULL,
+            snapshot_json TEXT NOT NULL,
+            analyzed_at   TEXT NOT NULL
+        )
+    """)
     conn.commit()
     return conn
 
@@ -238,6 +247,123 @@ def _cache_store(repo_url: str, repo_name: str, commit_sha: str, analysis: dict)
             (repo_url, repo_name, commit_sha, json.dumps(analysis), datetime.now(timezone.utc).isoformat()),
         )
         conn.commit()
+
+
+# ── Trend snapshots ────────────────────────────────────────────────────────────
+
+def _save_snapshot(repo_url: str, commit_sha: str, analysis: dict) -> None:
+    """Store snapshot; skip if last snapshot has same commit_sha; prune to 10."""
+    with _get_db() as conn:
+        last = conn.execute(
+            "SELECT commit_sha FROM analysis_snapshots WHERE repo_url = ? "
+            "ORDER BY analyzed_at DESC LIMIT 1",
+            (repo_url,),
+        ).fetchone()
+        if last and last["commit_sha"] == commit_sha:
+            return  # same commit — no new snapshot
+        conn.execute(
+            "INSERT INTO analysis_snapshots (repo_url, commit_sha, snapshot_json, analyzed_at) "
+            "VALUES (?, ?, ?, ?)",
+            (repo_url, commit_sha, json.dumps(analysis), datetime.now(timezone.utc).isoformat()),
+        )
+        # Prune: keep last 10 per repo
+        conn.execute(
+            "DELETE FROM analysis_snapshots WHERE repo_url = ? AND id NOT IN ("
+            "  SELECT id FROM analysis_snapshots WHERE repo_url = ? "
+            "  ORDER BY analyzed_at DESC LIMIT 10"
+            ")",
+            (repo_url, repo_url),
+        )
+        conn.commit()
+
+
+def get_previous_snapshot(repo_url: str) -> Optional[dict]:
+    """Return second-most-recent snapshot for this repo (not current), or None."""
+    with _get_db() as conn:
+        rows = conn.execute(
+            "SELECT snapshot_json FROM analysis_snapshots WHERE repo_url = ? "
+            "ORDER BY analyzed_at DESC LIMIT 2",
+            (repo_url,),
+        ).fetchall()
+    if len(rows) < 2:
+        return None
+    return json.loads(rows[1]["snapshot_json"])
+
+
+def diff_analyses(current: dict, previous: dict) -> dict:
+    """Diff two analyses by title (steal_this) / capability (strategic_gaps)."""
+    def _steal_key(item: dict) -> str:
+        return (item.get("title") or item.get("capability") or "").lower().strip()
+
+    def _gap_key(item: dict) -> str:
+        return (item.get("capability") or item.get("title") or "").lower().strip()
+
+    cur_steal  = {_steal_key(i): i for i in (current.get("steal_this") or []) if _steal_key(i)}
+    prev_steal = {_steal_key(i): i for i in (previous.get("steal_this") or []) if _steal_key(i)}
+    cur_gaps   = {_gap_key(i): i  for i in (current.get("strategic_gaps") or []) if _gap_key(i)}
+    prev_gaps  = {_gap_key(i): i  for i in (previous.get("strategic_gaps") or []) if _gap_key(i)}
+
+    new_steal     = [cur_steal[k]  for k in cur_steal  if k not in prev_steal]
+    removed_steal = [prev_steal[k] for k in prev_steal if k not in cur_steal]
+    new_gaps      = [cur_gaps[k]   for k in cur_gaps   if k not in prev_gaps]
+    removed_gaps  = [prev_gaps[k]  for k in prev_gaps  if k not in cur_gaps]
+
+    files_delta = (current.get("files_analyzed") or 0) - (previous.get("files_analyzed") or 0)
+    has_changes = bool(new_steal or removed_steal or new_gaps or removed_gaps or files_delta)
+
+    return {
+        "new_steal_this":       new_steal,
+        "removed_steal_this":   removed_steal,
+        "new_strategic_gaps":   new_gaps,
+        "removed_strategic_gaps": removed_gaps,
+        "files_delta":          files_delta,
+        "has_changes":          has_changes,
+    }
+
+
+# ── Multi-repo parallel compare ────────────────────────────────────────────────
+
+def compare_multi_repos(repo_urls: list, force_refresh: bool = False) -> dict:
+    """Analyze repos in parallel; return unified steal list ranked by frequency."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    results: dict = {}
+    errors:  dict = {}
+
+    with ThreadPoolExecutor(max_workers=min(len(repo_urls), 3)) as pool:
+        futures = {pool.submit(analyze_repo, url, force_refresh): url for url in repo_urls}
+        for future in as_completed(futures, timeout=300):
+            url = futures[future]
+            try:
+                results[url] = future.result()
+            except Exception as exc:
+                errors[url] = str(exc)
+                logger.warning("[repo_dna] multi-compare failed for %s: %s", url, exc)
+
+    if not results:
+        raise RuntimeError(f"All repos failed: {errors}")
+
+    # Build unified steal list — key by title, rank by frequency
+    steal_counter: dict = {}
+    for url, analysis in results.items():
+        for item in (analysis.get("steal_this") or []):
+            key = (item.get("title") or item.get("capability") or "").lower().strip()
+            if not key:
+                continue
+            if key not in steal_counter:
+                steal_counter[key] = {"item": item, "repos": [], "count": 0}
+            steal_counter[key]["repos"].append(url)
+            steal_counter[key]["count"] += 1
+
+    unified_steal = sorted(steal_counter.values(), key=lambda x: x["count"], reverse=True)
+
+    return {
+        "repos":         results,
+        "errors":        errors,
+        "unified_steal": unified_steal,
+        "repo_count":    len(results),
+        "failed_count":  len(errors),
+    }
 
 
 # ── Fetch ──────────────────────────────────────────────────────────────────────
@@ -629,6 +755,15 @@ def analyze_repo(repo_url: str, force_refresh: bool = False) -> dict:
         analysis["files_total"] = files_total
         _cache_store(repo_url, repo_name, commit_sha, analysis)
         logger.info("[repo_dna] analysis stored for %s", repo_url)
+
+        # Trend: diff against previous snapshot, then save current
+        prev = get_previous_snapshot(repo_url)
+        _save_snapshot(repo_url, commit_sha, analysis)
+        if prev:
+            analysis["trend"] = diff_analyses(analysis, prev)
+        else:
+            analysis["trend"] = {"has_changes": False, "first_analysis": True}
+
         return analysis
 
     finally:
