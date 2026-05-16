@@ -76,6 +76,10 @@ LOCAL_ONLY_INTENTS = {
     "sms",                       # SMS messages (private)
 }
 
+# Cloud node flag — set EDITH_NODE_TYPE=cloud in service env on DO droplet.
+# When true: Ollama stripped from all routing chains; private tasks rejected.
+_IS_CLOUD_NODE = os.getenv("EDITH_NODE_TYPE", "").lower() == "cloud"
+
 # Phase 3.5: PII Tagger — force local routing if PII detected in prompt
 import re as _re
 _PII_PATTERNS = [
@@ -740,6 +744,10 @@ def smart_call(prompt: str, intent: str = "chat", system: str = "") -> str:
     pii = detect_pii(prompt)
     force_local = intent in LOCAL_ONLY_INTENTS or pii["has_pii"]
     if force_local:
+        if _IS_CLOUD_NODE:
+            # Cloud node has no Ollama — private/PII tasks must not run here.
+            log.warning(f"🚫 [{intent}] private task rejected on cloud node (no Ollama)")
+            return "[EDITH] This task requires local processing and cannot run on the cloud node."
         if pii["has_pii"]:
             log.debug("PII detected — forcing local route")
         else:
@@ -794,8 +802,13 @@ def smart_call(prompt: str, intent: str = "chat", system: str = "") -> str:
     chain = _apply_tuner_weights(chain)
     log.debug(f"Tuner-adjusted chain: {chain}")
 
+    # ── Cloud node: strip Ollama from chain (not installed on DO droplet) ──
+    if _IS_CLOUD_NODE:
+        chain = [p for p in chain if p != "ollama"]
+        log.debug("Cloud node: Ollama removed from chain")
+
     # Skip cloud providers when offline — go straight to Ollama
-    if not _has_internet():
+    if not _IS_CLOUD_NODE and not _has_internet():
         log.warning("🔌 No internet — routing directly to Ollama")
         try:
             result = _call_ollama(prompt, system)
@@ -864,6 +877,10 @@ def smart_call_stream(prompt: str, intent: str = "chat", system: str = ""):
     pii = detect_pii(prompt)
     force_local = intent in LOCAL_ONLY_INTENTS or pii["has_pii"]
     if force_local:
+        if _IS_CLOUD_NODE:
+            log.warning(f"🚫 [{intent}] private task rejected on cloud node (stream)")
+            yield "[EDITH] This task requires local processing and cannot run on the cloud node."
+            return
         if pii["has_pii"]:
             log.debug("PII detected in stream — forcing local route")
         else:
@@ -908,8 +925,13 @@ def smart_call_stream(prompt: str, intent: str = "chat", system: str = ""):
     # ── Tuner weights ──
     chain = _apply_tuner_weights(chain)
 
+    # ── Cloud node: strip Ollama from chain ──
+    if _IS_CLOUD_NODE:
+        chain = [p for p in chain if p != "ollama"]
+        log.debug("Cloud node: Ollama removed from stream chain")
+
     # ── Skip cloud when offline ──
-    if not _has_internet():
+    if not _IS_CLOUD_NODE and not _has_internet():
         log.warning("🔌 No internet — streaming directly via Ollama")
         try:
             for token in _call_ollama_stream(prompt, system):
