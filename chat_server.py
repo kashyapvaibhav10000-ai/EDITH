@@ -2174,7 +2174,8 @@ async def repo_adapt_preview(request: Request):
             "Pick the most appropriate EDITH module as the target file."
         )
 
-        raw = smart_router.smart_call(
+        import smart_router as _sr
+        raw = _sr.smart_call(
             prompt=prompt,
             intent="repo_analyze",
             system=_ADAPT_PREVIEW_SYSTEM,
