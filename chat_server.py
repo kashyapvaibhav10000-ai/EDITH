@@ -2142,7 +2142,9 @@ _ADAPT_PREVIEW_SYSTEM = (
     "Format as:\n"
     "TARGET_FILE: <edith_module.py>\n"
     "```python\n<code sketch>\n```\n"
-    "Keep it short, concrete, and directly usable."
+    "Keep it short, concrete, and directly usable. "
+    "TARGET_FILE must be one of the EDITH files listed in the prompt. "
+    "If no existing file fits, use 'utils.py'."
 )
 
 
@@ -2151,6 +2153,7 @@ async def repo_adapt_preview(request: Request):
     if not _REPO_DNA_OK:
         return JSONResponse({"error": "repo_dna module not available"}, status_code=503)
     try:
+        import glob as _glob
         body = await request.json()
         steal_item = body.get("steal_item") or {}
         repo_url = (body.get("repo_url") or "").strip()
@@ -2158,6 +2161,11 @@ async def repo_adapt_preview(request: Request):
         capability = steal_item.get("capability") or steal_item.get("title") or "unknown"
         description = steal_item.get("description") or steal_item.get("what") or ""
         steal_from = steal_item.get("steal_from") or steal_item.get("file_hint") or ""
+
+        edith_files = sorted(
+            os.path.basename(f) for f in _glob.glob("/home/vaibhav/EDITH/*.py")
+        )
+        file_list_str = ", ".join(edith_files)
 
         task_description = (
             f"Implement '{capability}' in EDITH. "
@@ -2170,8 +2178,9 @@ async def repo_adapt_preview(request: Request):
             f"What it does: {description}\n"
             f"Source file in their repo: {steal_from}\n"
             f"Their repo: {repo_url}\n\n"
+            f"EDITH Python files (flat directory, no subdirs): {file_list_str}\n\n"
             "Generate a Python implementation sketch for EDITH. "
-            "Pick the most appropriate EDITH module as the target file."
+            "TARGET_FILE must be one of the files listed above."
         )
 
         import smart_router as _sr
@@ -2181,11 +2190,12 @@ async def repo_adapt_preview(request: Request):
             system=_ADAPT_PREVIEW_SYSTEM,
         )
 
-        # Extract target file from response
-        target_file = "edith_utils.py"
+        target_file = "utils.py"
         for line in raw.splitlines():
             if line.startswith("TARGET_FILE:"):
-                target_file = line.split(":", 1)[1].strip()
+                candidate = line.split(":", 1)[1].strip()
+                if candidate in edith_files:
+                    target_file = candidate
                 break
 
         return JSONResponse({
