@@ -510,6 +510,18 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-p
 .gap-adapt-btn { font-family: var(--font-display); font-size: 8px; letter-spacing: 1px; padding: 2px 6px; border-radius: 3px; border: 1px solid rgba(0,255,136,0.3); background: rgba(0,255,136,0.08); color: #00ff88; cursor: pointer; white-space: nowrap; }
 .gap-adapt-btn:hover { background: rgba(0,255,136,0.18); }
 .dna-card.adapted { opacity: 0.55; }
+.severity-critical { border-color: rgba(255,51,51,0.5) !important; }
+.severity-medium   { border-color: rgba(255,170,0,0.4) !important; }
+.severity-low      { border-color: rgba(100,100,100,0.35) !important; }
+.severity-badge { font-family: var(--font-display); font-size: 7px; letter-spacing: 1px; padding: 1px 5px; border-radius: 2px; margin-left: 6px; }
+.severity-badge.critical { background: rgba(255,51,51,0.2); color: #ff5555; }
+.severity-badge.medium   { background: rgba(255,170,0,0.15); color: #ffaa00; }
+.severity-badge.low      { background: rgba(100,100,100,0.2); color: #888; }
+.audit-gap-claimed { font-size: 9px; color: rgba(255,255,255,0.35); margin-top: 3px; }
+.audit-gap-claimed strong { color: rgba(255,255,255,0.55); }
+.dna-btn-audit { border-color: rgba(255,170,0,0.4) !important; color: #ffaa00 !important; }
+.dna-btn-audit:hover { background: rgba(255,170,0,0.1) !important; }
+.repo-watch-meta { font-size: 8px; color: rgba(255,255,255,0.3); font-family: var(--font-mono); margin-top: 1px; }
 .dna-adapt-done { font-family: var(--font-display); font-size: 8px; letter-spacing: 1px; padding: 2px 8px; border-radius: 3px; border: 1px solid rgba(0,255,136,0.3); color: rgba(0,255,136,0.5); margin-left: auto; flex-shrink: 0; cursor: default; }
 .adapt-status-badge { font-family: var(--font-display); font-size: 7px; letter-spacing: 1px; padding: 2px 6px; border-radius: 3px; margin-left: 6px; }
 .adapt-status-badge.running { background: rgba(255,170,0,0.15); color: #ffaa00; animation: pulse 1.2s infinite; }
@@ -1033,6 +1045,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-p
       <button class="dna-btn" id="dna-btn-analyze" onclick="dnaAnalyze(false)">ANALYZE</button>
       <button class="dna-btn" id="dna-btn-force" onclick="dnaAnalyze(true)">FORCE REFRESH</button>
       <button class="dna-btn" id="dna-btn-compare" onclick="dnaCompare()" style="border-color:rgba(255,170,0,0.4);color:#ffaa00">⚔️ COMPARE</button>
+      <button class="dna-btn dna-btn-audit" id="dna-btn-audit" onclick="dnaAuditSelf()">🔍 SELF AUDIT</button>
     </div>
     <div id="dna-results"></div>
   </div>
@@ -2688,11 +2701,20 @@ async function dnaLoadSidebarWatched() {
       el.innerHTML = '<div style="font-size:9px;color:var(--text-dim);padding:4px 8px">None</div>';
       return;
     }
-    el.innerHTML = items.map(w =>
-      `<div class="repo-hist-item" style="font-size:9px;padding:4px 8px" onclick="dnaLoadCached('${encodeURIComponent(w.repo_url)}')">
+    el.innerHTML = items.map(w => {
+      let checkedPill = '';
+      if (w.last_checked) {
+        const mins = Math.round((Date.now() - new Date(w.last_checked)) / 60000);
+        const ago = mins < 60 ? `${mins}m ago` : mins < 1440 ? `${Math.round(mins/60)}h ago` : `${Math.round(mins/1440)}d ago`;
+        checkedPill = `<div class="repo-watch-meta">checked ${ago}</div>`;
+      } else {
+        checkedPill = `<div class="repo-watch-meta">never checked</div>`;
+      }
+      return `<div class="repo-hist-item" style="font-size:9px;padding:4px 8px" onclick="dnaLoadCached('${encodeURIComponent(w.repo_url)}')">
         <span style="color:#00ff88">👁</span> ${w.repo_name || w.repo_url}
-      </div>`
-    ).join('');
+        ${checkedPill}
+      </div>`;
+    }).join('');
   } catch(e) {}
 }
 
@@ -2718,13 +2740,78 @@ async function dnaWatchRepo(encodedUrl, btn) {
   }
 }
 
+// ── EDITH SELF-AUDIT ──────────────────────────────────────────
+
+async function dnaAuditSelf() {
+  const btn = document.getElementById('dna-btn-audit');
+  const spinner = document.getElementById('dna-spinner');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  spinner.classList.add('active');
+  document.getElementById('dna-results').innerHTML = '<div class="dna-empty">Auditing EDITH… comparing CLAUDE.md vs code (~10s)</div>';
+  try {
+    const res = await fetch(`${API}/api/repo/self-audit`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) { showToast(data.error || 'Audit failed'); return; }
+    dnaRenderAudit(data);
+  } catch(e) {
+    showToast('Audit failed: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    spinner.classList.remove('active');
+  }
+}
+
+function dnaRenderAudit(data) {
+  const gaps = data.audit_gaps || [];
+  let html = `<div class="dna-summary">${data.summary || ''}</div>`;
+  if (data.cached) html += `<div class="dna-file-count">cached result · expires in 5 min</div>`;
+
+  if (gaps.length) {
+    html += `<div class="dna-section-label">// EDITH GAPS</div>`;
+    gaps.forEach((g, i) => {
+      const sev = (g.severity || 'low').toLowerCase();
+      const sevClass = sev === 'critical' ? 'critical' : sev === 'medium' ? 'medium' : 'low';
+      const sevLabel = sev.toUpperCase();
+      // Normalize to steal-item schema for adapt modal reuse
+      const adaptItem = {
+        title: g.capability || '',
+        description: `Claimed: ${g.claimed || ''}. Reality: ${g.reality || ''}`,
+        file_hint: g.target_file || '',
+        effort: sev === 'critical' ? 'high' : sev === 'medium' ? 'medium' : 'low',
+      };
+      const encodedItem = encodeURIComponent(JSON.stringify(adaptItem));
+      html += `<div class="dna-card severity-${sev}" id="audit-card-${i}" style="border-width:1px;border-style:solid">
+        <div class="dna-card-title" style="display:flex;align-items:center;gap:6px;">
+          <span>${g.capability || ''}<span class="severity-badge ${sevClass}">${sevLabel}</span></span>
+          <button class="dna-adapt-btn" id="adapt-btn-audit-${i}" data-index="audit-${i}" data-repo="" data-item="${encodedItem}">ADAPT →</button>
+        </div>
+        <div class="audit-gap-claimed"><strong>Claimed:</strong> ${g.claimed || ''}</div>
+        <div class="audit-gap-claimed"><strong>Reality:</strong> ${g.reality || ''}</div>
+        ${g.target_file ? `<div class="dna-card-hint">→ ${g.target_file}</div>` : ''}
+      </div>`;
+    });
+  } else {
+    html += `<div class="dna-empty" style="color:#00ff88;padding:16px 0">No gaps found — CLAUDE.md matches code ✓</div>`;
+  }
+
+  if (data.vision_gaps && data.vision_gaps.length) {
+    html += `<div class="dna-section-label" style="margin-top:12px">// 4-VISION FUNCTION GAPS</div>`;
+    data.vision_gaps.forEach(v => {
+      html += `<div style="font-size:9px;color:rgba(255,170,0,0.8);font-family:var(--font-mono);padding:2px 0">${v}</div>`;
+    });
+  }
+
+  document.getElementById('dna-results').innerHTML = html;
+}
+
 // ── ADAPT (click-to-adapt) ─────────────────────────────────────
 let _adaptState = {};  // stores preview data for confirm step
 
 document.addEventListener('click', function(e) {
   const btn = e.target.closest('.dna-adapt-btn');
   if (!btn || !btn.dataset.index) return;
-  const i = parseInt(btn.dataset.index, 10);
+  const i = btn.dataset.index;  // keep as string — supports both numeric "0" and "audit-0"
   const repoUrl = btn.dataset.repo;
   const item = btn.dataset.item;
   adaptPreview(i, item, repoUrl);

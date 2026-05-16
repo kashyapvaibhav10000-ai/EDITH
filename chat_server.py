@@ -175,6 +175,7 @@ try:
         clear_cache as _clear_repo_cache,
         watch_repo as _watch_repo,
         get_watched_repos as _get_watched_repos,
+        check_watched_repos as _check_watched_repos,
         _build_edith_context_summary,
         mark_adapted as _mark_adapted,
         get_adapted_capabilities as _get_adapted_caps,
@@ -2452,6 +2453,124 @@ async def repo_gap_plan(request: Request):
         })
     except Exception as exc:
         log.warning(f"[repo_gap_plan] error: {exc}")
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+# ── Repo DNA — EDITH self-audit ──────────────────────────────────────────────
+
+_audit_cache: dict = {"result": None, "ts": 0.0}
+
+
+def _audit_edith_self() -> dict:
+    import time, re as _re, json as _json
+    import smart_router as _sr
+
+    edith_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # Parse CLAUDE.md — extract all .py filenames mentioned
+    claude_md_path = os.path.join(edith_dir, "CLAUDE.md")
+    claude_md = open(claude_md_path, errors="ignore").read() if os.path.exists(claude_md_path) else ""
+    module_map_files = list(set(_re.findall(r'\b[\w_]+\.py\b', claude_md)))
+    actual_files = set(f for f in os.listdir(edith_dir) if f.endswith(".py"))
+    missing_files = [f for f in module_map_files if f not in actual_files]
+
+    # 4-Vision function checks — verify key functions exist in vision files
+    _VISION_EXPECTED = {
+        "cognitive_profile.py": ["update_profile", "detect_drift", "get_profile"],
+        "self_improve.py": ["run_scheduled_improvement", "monitor_arxiv"],
+        "life_os.py": ["weekly_briefing", "simulate_branches"],
+        "council.py": ["council_debate", "run_council"],
+    }
+    vision_gaps = [
+        f"{vf}: missing `{fn}`"
+        for vf, fns in _VISION_EXPECTED.items()
+        for fn in fns
+        if fn not in _get_all_fns_in_file(vf)
+    ]
+
+    # Function signatures for LLM context (capped to avoid token overflow)
+    all_sigs = _get_edith_signatures()
+    sigs_text = "\n".join(
+        f"{fname}: {', '.join(d.split('(')[0].replace('def ', '') for d in defs[:8])}"
+        for fname, defs in list(all_sigs.items())[:30]
+    )
+
+    prompt = (
+        f"EDITH CLAUDE.md lists these .py files:\n{', '.join(module_map_files[:60])}\n\n"
+        f"Files MISSING from disk: {', '.join(missing_files) or 'none'}\n\n"
+        f"4-Vision function checks: {'; '.join(vision_gaps) or 'all present'}\n\n"
+        f"Actual implemented functions (sample):\n{sigs_text}\n\n"
+        "Find up to 8 notable gaps between documented architecture and actual implementation. "
+        "Return JSON array only, no markdown:\n"
+        '[{"capability":"short name","claimed":"what docs say","reality":"what code has",'
+        '"severity":"critical|medium|low","target_file":"which .py to fix"}]'
+    )
+
+    raw = _sr.smart_call(
+        prompt=prompt, intent="repo_analyze",
+        system="EDITH code auditor. Analyze concrete evidence. Return JSON array only, no markdown.",
+    )
+
+    gaps: list = []
+    for attempt in [
+        lambda: _json.loads(raw.strip()),
+        lambda: _json.loads(_re.sub(r'```[a-z]*\n?', '', raw).strip()),
+        lambda: _json.loads((_re.search(r'\[[\s\S]+\]', raw) or type('x', (), {'group': lambda *_: '[]'})()).group(0)),
+    ]:
+        try:
+            result = attempt()
+            if isinstance(result, list):
+                gaps = result
+                break
+        except Exception:
+            pass
+
+    # Hard-inject confirmed missing files as critical items
+    for mf in missing_files[:3]:
+        if not any(mf in g.get("capability", "") for g in gaps):
+            gaps.insert(0, {
+                "capability": f"Missing module: {mf}",
+                "claimed": f"CLAUDE.md lists {mf} in module map",
+                "reality": "File does not exist on disk",
+                "severity": "critical",
+                "target_file": mf,
+            })
+
+    return {
+        "summary": f"Found {len(gaps)} gaps between CLAUDE.md and actual code.",
+        "audit_gaps": gaps,
+        "missing_files": missing_files,
+        "vision_gaps": vision_gaps,
+        "timestamp": __import__("datetime").datetime.utcnow().isoformat(),
+    }
+
+
+@app.post("/api/repo/self-audit")
+async def repo_self_audit():
+    if not _REPO_DNA_OK:
+        return JSONResponse({"error": "repo_dna module not available"}, status_code=503)
+    import time as _time
+    now = _time.time()
+    if _audit_cache["result"] is not None and now - _audit_cache["ts"] < 300:
+        return JSONResponse({**_audit_cache["result"], "cached": True})
+    try:
+        result = _audit_edith_self()
+        _audit_cache.update({"result": result, "ts": now})
+        return JSONResponse(result)
+    except Exception as exc:
+        log.warning(f"[self_audit] error: {exc}")
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+@app.post("/api/repo/watch-check")
+async def repo_watch_check():
+    """Manual trigger for watched repo check."""
+    if not _REPO_DNA_OK:
+        return JSONResponse({"error": "repo_dna module not available"}, status_code=503)
+    try:
+        updated = _check_watched_repos()
+        return JSONResponse({"updated": updated, "count": len(updated)})
+    except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=500)
 
 
