@@ -498,6 +498,17 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-p
 .gap-effort-roadmap { background: rgba(153,102,255,0.15); color: #9966ff; }
 .gap-loading { font-family: var(--font-display); font-size: 9px; letter-spacing: 1px; color: var(--text-dim); padding: 10px 0; animation: pulse 1.5s ease-in-out infinite; }
 @keyframes pulse { 0%,100% { opacity:0.4; } 50% { opacity:1; } }
+.gap-plan-btn { font-family: var(--font-display); font-size: 8px; letter-spacing: 1px; padding: 2px 8px; border-radius: 3px; border: 1px solid rgba(153,102,255,0.4); background: rgba(153,102,255,0.1); color: #9966ff; cursor: pointer; margin-left: auto; }
+.gap-plan-btn:hover { background: rgba(153,102,255,0.25); }
+.gap-plan-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.gap-plan-result { margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.06); }
+.gap-plan-meta { font-size: 9px; color: rgba(153,102,255,0.8); font-family: var(--font-mono); margin-bottom: 6px; }
+.gap-subtask { display: flex; align-items: center; gap: 6px; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 10px; }
+.gap-subtask:last-child { border-bottom: none; }
+.gap-subtask-title { flex: 1; color: var(--text-dim); }
+.gap-subtask-meta { font-family: var(--font-mono); font-size: 9px; color: rgba(255,255,255,0.35); white-space: nowrap; }
+.gap-adapt-btn { font-family: var(--font-display); font-size: 8px; letter-spacing: 1px; padding: 2px 6px; border-radius: 3px; border: 1px solid rgba(0,255,136,0.3); background: rgba(0,255,136,0.08); color: #00ff88; cursor: pointer; white-space: nowrap; }
+.gap-adapt-btn:hover { background: rgba(0,255,136,0.18); }
 
 /* Adapt button + modal */
 .dna-adapt-btn { background: none; border: 1px solid rgba(0,255,136,0.4); color: #00ff88; font-family: var(--font-display); font-size: 8px; letter-spacing: 1px; padding: 2px 8px; border-radius: 3px; cursor: pointer; margin-left: auto; flex-shrink: 0; transition: all 0.15s; }
@@ -2503,7 +2514,11 @@ function dnaRender(data) {
       const effortClass = effort === 'quick_win' ? 'gap-effort-quick' : effort === 'sprint' ? 'gap-effort-sprint' : 'gap-effort-roadmap';
       const effortLabel = effort === 'quick_win' ? 'QUICK WIN' : effort === 'sprint' ? 'SPRINT' : 'ROADMAP';
       html += `<div class="gap-card">
-        <div class="gap-card-title">${g.capability||''}<span class="gap-effort ${effortClass}">${effortLabel}</span></div>
+        <div class="gap-card-title">
+          ${g.capability||''}
+          <span class="gap-effort ${effortClass}">${effortLabel}</span>
+          <button class="gap-plan-btn" data-gap="${encodeURIComponent(JSON.stringify(g))}" data-repo="${encodeURIComponent(_repoUrl)}">PLAN →</button>
+        </div>
         <div class="gap-card-what">${g.what||''}</div>
         <div class="gap-card-why">${g.why||''}</div>
         ${g.steal_from ? `<div class="gap-steal-from">steal from: ${g.steal_from}</div>` : ''}
@@ -2786,6 +2801,72 @@ async function adaptConfirm(confirmed) {
 
 function adaptModalClose() {
   document.getElementById('adapt-modal-overlay').classList.remove('visible');
+}
+
+// ── GAP PLAN (strategic gap → sub-task decomposition) ──────────
+
+document.addEventListener('click', async function(e) {
+  const btn = e.target.closest('.gap-plan-btn');
+  if (!btn || btn.disabled) return;
+  const gap = JSON.parse(decodeURIComponent(btn.dataset.gap));
+  const repoUrl = decodeURIComponent(btn.dataset.repo);
+  await gapPlan(btn, gap, repoUrl);
+});
+
+document.addEventListener('click', function(e) {
+  const btn = e.target.closest('.gap-adapt-btn');
+  if (!btn) return;
+  adaptModalClose();
+  adaptPreview(-1, btn.dataset.subtask, btn.dataset.repo);
+});
+
+async function gapPlan(btn, gap, repoUrl) {
+  btn.textContent = '…';
+  btn.disabled = true;
+
+  const card = btn.closest('.gap-card');
+  let planEl = card.querySelector('.gap-plan-result');
+  if (!planEl) {
+    planEl = document.createElement('div');
+    planEl.className = 'gap-plan-result';
+    card.appendChild(planEl);
+  }
+  planEl.innerHTML = '<div class="gap-loading">ANALYZING EDITH…</div>';
+
+  try {
+    const res = await fetch(`${API}/api/repo/gap-plan`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({gap, repo_url: repoUrl})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Plan failed');
+
+    if (!data.subtasks || !data.subtasks.length) {
+      planEl.innerHTML = '<div style="color:#f87171;font-size:10px;padding:4px 0">No sub-tasks generated.</div>';
+      return;
+    }
+
+    let html = `<div class="gap-plan-meta">→ ${data.target_file}${data.pick_reason ? ' — ' + data.pick_reason : ''}</div>`;
+    data.subtasks.forEach(t => {
+      const subtaskData = encodeURIComponent(JSON.stringify({
+        capability: t.title,
+        description: t.description,
+        steal_from: data.target_file,
+      }));
+      html += `<div class="gap-subtask">
+        <span class="gap-subtask-title">${t.id}. ${t.title}</span>
+        <span class="gap-subtask-meta">${t.function_name}() ~${t.lines_estimate}L</span>
+        <button class="gap-adapt-btn" data-subtask="${subtaskData}" data-repo="${encodeURIComponent(repoUrl)}">ADAPT →</button>
+      </div>`;
+    });
+    planEl.innerHTML = html;
+  } catch(e) {
+    planEl.innerHTML = `<div style="color:#f87171;font-size:10px;padding:4px 0">Error: ${e.message}</div>`;
+  } finally {
+    btn.textContent = 'PLAN →';
+    btn.disabled = false;
+  }
 }
 
 // ── DEV PANEL ──────────────────────────────────────────────────

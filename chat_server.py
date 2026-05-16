@@ -2276,6 +2276,137 @@ async def repo_adapt_confirm(request: Request):
         return JSONResponse({"error": str(exc)}, status_code=500)
 
 
+# ── Repo DNA — Gap plan (strategic gap → sub-task decomposition) ──────────────
+
+_sigs_cache: dict = {"data": None, "mtime": 0.0}
+
+def _get_edith_signatures() -> dict:
+    import glob as _g
+    edith_dir = os.path.dirname(os.path.abspath(__file__))
+    files = sorted(_g.glob(os.path.join(edith_dir, "*.py")))
+    max_mtime = max((os.path.getmtime(f) for f in files), default=0.0)
+    if _sigs_cache["mtime"] == max_mtime and _sigs_cache["data"] is not None:
+        return _sigs_cache["data"]
+    _BLOCKLIST = {"config.py", "vault.py", "voice.py"}
+    sigs: dict = {}
+    for fpath in files:
+        fname = os.path.basename(fpath)
+        if fname in _BLOCKLIST:
+            continue
+        try:
+            defs = [l.strip() for l in open(fpath) if l.strip().startswith("def ")]
+            if defs:
+                sigs[fname] = defs
+        except Exception:
+            pass
+    _sigs_cache.update({"data": sigs, "mtime": max_mtime})
+    return sigs
+
+def _get_all_fns_in_file(fname: str) -> set:
+    edith_dir = os.path.dirname(os.path.abspath(__file__))
+    fpath = os.path.join(edith_dir, fname)
+    fns: set = set()
+    if not os.path.exists(fpath):
+        return fns
+    try:
+        for line in open(fpath):
+            s = line.strip()
+            if s.startswith("def "):
+                fns.add(s.split("(")[0].replace("def ", "").strip())
+    except Exception:
+        pass
+    return fns
+
+def _read_file_skeleton(fname: str) -> str:
+    edith_dir = os.path.dirname(os.path.abspath(__file__))
+    fpath = os.path.join(edith_dir, fname)
+    if not os.path.exists(fpath):
+        return ""
+    try:
+        return "".join(open(fpath).readlines()[:200])
+    except Exception:
+        return ""
+
+_GAP_PLAN_SYSTEM = (
+    "You are EDITH's code architect. Decompose a capability gap into 3-5 sub-tasks. "
+    "Each sub-task adds ONE new Python function to the target file. "
+    "Rules: ADD ONLY. Never modify existing functions. Python only. Max 40 lines per function. "
+    "Return JSON only, no markdown fences:\n"
+    '{"target_file":"filename.py","reason":"one sentence",'
+    '"subtasks":[{"id":1,"title":"...","function_name":"...","description":"...","lines_estimate":20}]}'
+)
+
+
+@app.post("/api/repo/gap-plan")
+async def repo_gap_plan(request: Request):
+    if not _REPO_DNA_OK:
+        return JSONResponse({"error": "repo_dna module not available"}, status_code=503)
+    try:
+        body = await request.json()
+        gap = body.get("gap") or {}
+        repo_url = (body.get("repo_url") or "").strip()
+
+        capability = gap.get("capability") or ""
+        what = gap.get("what") or ""
+        why = gap.get("why") or ""
+
+        all_sigs = _get_edith_signatures()
+        sigs_text = "\n".join(
+            f"{fname}:\n" + "\n".join(f"  {d}" for d in defs)
+            for fname, defs in all_sigs.items()
+        )
+        edith_files = sorted(all_sigs.keys())
+
+        prompt = (
+            f"Gap: {capability}\nWhat: {what}\nWhy: {why}\n\n"
+            f"EDITH files + their functions:\n{sigs_text}\n\n"
+            f"Pick the best existing file as target. Decompose into 3-5 sub-tasks. "
+            f"TARGET_FILE must be one of: {', '.join(edith_files)}\n"
+            "Return JSON only."
+        )
+
+        import smart_router as _sr
+        import json as _json, re as _re
+        raw = _sr.smart_call(prompt=prompt, intent="repo_analyze", system=_GAP_PLAN_SYSTEM)
+
+        result: dict = {}
+        for attempt in [
+            lambda: _json.loads(raw.strip()),
+            lambda: _json.loads(_re.sub(r'```[a-z]*\n?', '', raw).strip()),
+            lambda: _json.loads(_re.search(r'\{[\s\S]+\}', raw).group(0)),
+        ]:
+            try:
+                result = attempt()
+                break
+            except Exception:
+                pass
+
+        _BLOCKLIST = {"config.py", "vault.py", "voice.py"}
+        target_file = result.get("target_file", "utils.py")
+        if target_file in _BLOCKLIST or not target_file.endswith(".py") or target_file not in all_sigs:
+            target_file = "utils.py"
+
+        existing_fns = _get_all_fns_in_file(target_file)
+        file_skeleton = _read_file_skeleton(target_file)
+
+        subtasks = [
+            t for t in (result.get("subtasks") or [])
+            if isinstance(t, dict) and t.get("function_name") not in existing_fns
+        ]
+
+        return JSONResponse({
+            "target_file": target_file,
+            "pick_reason": result.get("reason", ""),
+            "file_skeleton": file_skeleton,
+            "subtasks": subtasks,
+            "capability": capability,
+            "repo_url": repo_url,
+        })
+    except Exception as exc:
+        log.warning(f"[repo_gap_plan] error: {exc}")
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
 if __name__ == "__main__":
     import atexit
     import signal
