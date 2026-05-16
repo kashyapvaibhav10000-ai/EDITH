@@ -27,6 +27,7 @@ _TOP_FILES_COUNT = 10
 _MAX_FILE_CHARS = 3_000  # per-file cap — keeps total prompt under Groq's payload limit
 _TMP_PREFIX = "edith_repo_"
 _MIN_CONTENT_CHARS = 1000
+_GIT_BIN = "/usr/bin/git"  # full path — service env may not have /usr/bin in PATH
 
 # File scoring weights
 _FILE_SCORES = {
@@ -243,7 +244,7 @@ def _clone_repo(repo_url: str) -> tuple[str, str]:
         shutil.rmtree(clone_path, ignore_errors=True)
 
     result = subprocess.run(
-        ["git", "clone", "--depth", "1", repo_url, clone_path],
+        [_GIT_BIN, "clone", "--depth", "1", repo_url, clone_path],
         capture_output=True,
         text=True,
         timeout=120,
@@ -252,7 +253,7 @@ def _clone_repo(repo_url: str) -> tuple[str, str]:
         raise RepoFetchError(f"git clone failed: {result.stderr.strip()[:300]}")
 
     sha_result = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
+        [_GIT_BIN, "rev-parse", "HEAD"],
         capture_output=True,
         text=True,
         cwd=clone_path,
@@ -265,7 +266,7 @@ def _clone_repo(repo_url: str) -> tuple[str, str]:
 def _get_remote_sha(repo_url: str) -> str:
     """Get HEAD sha without cloning — used by watch checker."""
     result = subprocess.run(
-        ["git", "ls-remote", repo_url, "HEAD"],
+        [_GIT_BIN, "ls-remote", repo_url, "HEAD"],
         capture_output=True,
         text=True,
         timeout=30,
@@ -462,30 +463,49 @@ def _build_strategic_prompt(repo_url: str, file_contents: dict[str, str]) -> str
 
 
 def _run_strategic_analysis(repo_url: str, file_contents: dict[str, str]) -> list:
-    """Second LLM call — architect-level gap analysis. Returns list[dict] or []."""
+    """Second LLM call — architect-level gap analysis.
+    Cloud-only chain: Groq → Gemini → NVIDIA → OpenRouter.
+    Ollama excluded — DO cloud node has no local Ollama.
+    Returns list[dict] or [] on failure.
+    """
     prompt = _build_strategic_prompt(repo_url, file_contents)
-    try:
-        raw = smart_router.smart_call(
-            prompt=prompt,
-            intent="repo_analyze",
-            system=_STRATEGIC_SYSTEM,
-        )
+    _cloud_callers = [
+        ("groq",       smart_router._call_groq),
+        ("gemini",     smart_router._call_gemini),
+        ("nvidia",     smart_router._call_nvidia),
+        ("openrouter", smart_router._call_openrouter),
+    ]
+    raw = None
+    for name, caller in _cloud_callers:
         try:
-            result = json.loads(raw)
-        except json.JSONDecodeError:
-            match = re.search(r"\[[\s\S]+\]", raw)
-            if match:
+            raw = caller(prompt, _STRATEGIC_SYSTEM)
+            logger.info("[repo_dna] strategic: %s responded (%d chars)", name, len(raw))
+            break
+        except Exception as exc:
+            logger.warning("[repo_dna] strategic: %s failed: %s", name, str(exc)[:120])
+
+    if raw is None:
+        logger.warning("[repo_dna] strategic: all cloud providers failed")
+        return []
+
+    try:
+        result = json.loads(raw)
+    except json.JSONDecodeError:
+        match = re.search(r"\[[\s\S]+\]", raw)
+        if match:
+            try:
                 result = json.loads(match.group(0))
-            else:
+            except json.JSONDecodeError:
                 logger.warning("[repo_dna] strategic: non-JSON response")
                 return []
-        if isinstance(result, list):
-            return result
-        logger.warning("[repo_dna] strategic: expected list, got %s", type(result))
-        return []
-    except Exception as exc:
-        logger.warning("[repo_dna] strategic analysis failed: %s", exc)
-        return []
+        else:
+            logger.warning("[repo_dna] strategic: non-JSON response")
+            return []
+
+    if isinstance(result, list):
+        return result
+    logger.warning("[repo_dna] strategic: expected list, got %s", type(result))
+    return []
 
 
 def _run_llm_analysis(repo_url: str, file_contents: dict[str, str], force_refresh: bool = False) -> dict:
