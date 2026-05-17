@@ -289,16 +289,47 @@ def _save_snapshot(repo_url: str, commit_sha: str, analysis: dict) -> None:
 
 
 def get_previous_snapshot(repo_url: str) -> Optional[dict]:
-    """Return second-most-recent snapshot for this repo (not current), or None."""
+    """Return the most-recent saved snapshot for this repo, or None.
+    Called BEFORE _save_snapshot in analyze_repo, so the current run's snapshot
+    has not been saved yet — row[0] is the prior run's snapshot."""
     with _get_db() as conn:
-        rows = conn.execute(
+        row = conn.execute(
             "SELECT snapshot_json FROM analysis_snapshots WHERE repo_url = ? "
-            "ORDER BY analyzed_at DESC LIMIT 2",
+            "ORDER BY analyzed_at DESC LIMIT 1",
             (repo_url,),
-        ).fetchall()
-    if len(rows) < 2:
+        ).fetchone()
+    if row is None:
         return None
-    return json.loads(rows[1]["snapshot_json"])
+    return json.loads(row["snapshot_json"])
+
+
+def _backfill_snapshots() -> None:
+    """Populate analysis_snapshots from repo_analyses rows that have no snapshot.
+    Runs once at startup — idempotent, skips repos already having a snapshot."""
+    with _get_db() as conn:
+        analyses = conn.execute(
+            "SELECT repo_url, commit_sha, analysis_json FROM repo_analyses "
+            "ORDER BY created_at ASC"
+        ).fetchall()
+        for row in analyses:
+            existing = conn.execute(
+                "SELECT 1 FROM analysis_snapshots WHERE repo_url = ? AND commit_sha = ?",
+                (row["repo_url"], row["commit_sha"]),
+            ).fetchone()
+            if existing:
+                continue
+            conn.execute(
+                "INSERT INTO analysis_snapshots (repo_url, commit_sha, snapshot_json, analyzed_at) "
+                "VALUES (?, ?, ?, ?)",
+                (
+                    row["repo_url"],
+                    row["commit_sha"],
+                    row["analysis_json"],
+                    datetime.now(timezone.utc).isoformat(),
+                ),
+            )
+        conn.commit()
+    logger.info("[repo_dna] snapshot backfill complete (%d analyses checked)", len(analyses))
 
 
 def diff_analyses(current: dict, previous: dict) -> dict:
@@ -608,11 +639,44 @@ def _build_strategic_prompt(repo_url: str, file_contents: dict[str, str]) -> str
     return _STRATEGIC_PROMPT_TMPL.format(repo_url=repo_url, repo_content=repo_content)
 
 
+def _valid_strategic_schema(result: object) -> bool:
+    """True only if result is a non-empty list where each item has required keys."""
+    if not isinstance(result, list) or len(result) == 0:
+        return False
+    required = {"capability", "what"}
+    return all(required.issubset(item.keys()) for item in result if isinstance(item, dict))
+
+
+def _parse_strategic_json(raw: str) -> Optional[list]:
+    """Extract JSON list from raw LLM response. Returns None on total parse failure."""
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, list):
+            return parsed
+        # LLM wrapped list in object: {"strategic_gaps": [...]}
+        if isinstance(parsed, dict):
+            for v in parsed.values():
+                if isinstance(v, list):
+                    return v
+    except json.JSONDecodeError:
+        pass
+    match = re.search(r"\[[\s\S]+\]", raw)
+    if match:
+        try:
+            parsed = json.loads(match.group(0))
+            if isinstance(parsed, list):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+    return None
+
+
 def _run_strategic_analysis(repo_url: str, file_contents: dict[str, str]) -> list:
     """Second LLM call — architect-level gap analysis.
     Cloud-only chain: Groq → Gemini → NVIDIA → OpenRouter.
     Ollama excluded — DO cloud node has no local Ollama.
-    Returns list[dict] or [] on failure.
+    Returns list[dict] on success, [] on failure.
+    Sets parse_error key on returned list's __dict__ — callers check via _strategic_parse_error.
     """
     prompt = _build_strategic_prompt(repo_url, file_contents)
     _cloud_callers = [
@@ -621,54 +685,53 @@ def _run_strategic_analysis(repo_url: str, file_contents: dict[str, str]) -> lis
         ("nvidia",     smart_router._call_nvidia),
         ("openrouter", smart_router._call_openrouter),
     ]
-    raw = None
-    for name, caller in _cloud_callers:
-        try:
-            raw = caller(prompt, _STRATEGIC_SYSTEM)
-            logger.info("[repo_dna] strategic: %s responded (%d chars)", name, len(raw))
-            break
-        except Exception as exc:
-            logger.warning("[repo_dna] strategic: %s failed: %s", name, str(exc)[:120])
 
+    def _call_cloud(extra_system: str = "") -> Optional[str]:
+        system = _STRATEGIC_SYSTEM + extra_system
+        for name, caller in _cloud_callers:
+            try:
+                raw = caller(prompt, system)
+                logger.info("[repo_dna] strategic: %s responded (%d chars)", name, len(raw))
+                return raw
+            except Exception as exc:
+                logger.warning("[repo_dna] strategic: %s failed: %s", name, str(exc)[:120])
+        return None
+
+    raw = _call_cloud()
     if raw is None:
         logger.warning("[repo_dna] strategic: all cloud providers failed")
         return []
 
-    try:
-        result = json.loads(raw)
-    except json.JSONDecodeError:
-        match = re.search(r"\[[\s\S]+\]", raw)
-        if match:
-            try:
-                result = json.loads(match.group(0))
-            except json.JSONDecodeError:
-                logger.warning("[repo_dna] strategic: non-JSON response")
-                return []
-        else:
-            logger.warning("[repo_dna] strategic: non-JSON response")
-            return []
-
-    if isinstance(result, list):
+    result = _parse_strategic_json(raw)
+    if result is not None and _valid_strategic_schema(result):
         return result
-    logger.warning("[repo_dna] strategic: expected list, got %s", type(result))
+
+    # Schema validation failed — retry once with stricter instruction
+    logger.warning(
+        "[repo_dna] strategic schema invalid on first attempt "
+        "(result=%s, len=%s). Retrying.",
+        type(result).__name__,
+        len(result) if isinstance(result, list) else "n/a",
+    )
+    raw2 = _call_cloud(
+        extra_system=(
+            " CRITICAL: Your previous response did not match the required schema. "
+            "Return ONLY a raw JSON array of exactly 5 objects. "
+            "Each object MUST have these keys: capability, what, why, effort, steal_from. "
+            "No markdown fences. No wrapping object. Start with [ and end with ]."
+        )
+    )
+    if raw2 is not None:
+        result2 = _parse_strategic_json(raw2)
+        if result2 is not None and _valid_strategic_schema(result2):
+            return result2
+
+    logger.warning("[repo_dna] strategic: retry also failed. raw[:200]=%r", (raw or "")[:200])
     return []
 
 
-def _run_llm_analysis(repo_url: str, file_contents: dict[str, str], force_refresh: bool = False) -> dict:
-    system_prompt = _build_system_prompt()
-    prompt = _build_prompt(repo_url, file_contents)
-    if force_refresh:
-        # Bust smart_router's 1-hour in-memory response cache.
-        # _context_fingerprint() keys on prompt text — unique suffix forces a fresh LLM call.
-        import time as _time
-        prompt += f"\n\n[refresh:{int(_time.time()):x}]"
-    raw = smart_router.smart_call(
-        prompt=prompt,
-        intent="repo_analyze",
-        system=system_prompt,
-    )
-
-    # Try to extract JSON even if LLM adds surrounding text
+def _parse_analysis_json(raw: str) -> Optional[dict]:
+    """Extract JSON dict from raw LLM response. Returns None on total parse failure."""
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
@@ -678,8 +741,68 @@ def _run_llm_analysis(repo_url: str, file_contents: dict[str, str], force_refres
                 return json.loads(match.group(0))
             except json.JSONDecodeError:
                 pass
-    logger.warning("[repo_dna] LLM returned non-JSON, storing raw text")
-    return {**_ANALYSIS_SCHEMA, "summary": raw, "repo_url": repo_url}
+    return None
+
+
+_ANALYSIS_REQUIRED_KEYS = {"steal_this", "skip_this", "summary"}
+
+
+def _valid_analysis_schema(result: dict) -> bool:
+    """True only if result has required keys and steal_this is a non-empty list."""
+    steal = result.get("steal_this")
+    return (
+        isinstance(steal, list)
+        and len(steal) > 0
+        and _ANALYSIS_REQUIRED_KEYS.issubset(result.keys())
+    )
+
+
+def _run_llm_analysis(repo_url: str, file_contents: dict[str, str], force_refresh: bool = False) -> dict:
+    import time as _time
+    system_prompt = _build_system_prompt()
+    prompt = _build_prompt(repo_url, file_contents)
+    if force_refresh:
+        # Bust smart_router's 1-hour in-memory response cache.
+        # _context_fingerprint() keys on prompt text — unique suffix forces a fresh LLM call.
+        prompt += f"\n\n[refresh:{int(_time.time()):x}]"
+
+    raw = smart_router.smart_call(
+        prompt=prompt,
+        intent="repo_analyze",
+        system=system_prompt,
+    )
+
+    result = _parse_analysis_json(raw)
+    if result and _valid_analysis_schema(result):
+        return result
+
+    # Schema validation failed (wrong keys or steal_this missing/empty) — retry once
+    logger.warning(
+        "[repo_dna] schema validation failed on first attempt "
+        "(steal_this=%r, keys=%s). Retrying with strict prompt.",
+        result.get("steal_this") if result else "parse_error",
+        list(result.keys()) if result else [],
+    )
+    strict_system = system_prompt + (
+        "\n\nCRITICAL: Your previous response did not match the required JSON schema. "
+        "Return ONLY a raw JSON object — no markdown fences, no prose. "
+        "Required top-level keys: repo_url, repo_name, analyzed_at, steal_this, "
+        "skip_this, watch_this, architecture_delta, quick_wins, summary. "
+        "steal_this MUST be a non-empty list with at least 3 items."
+    )
+    retry_prompt = prompt + f"\n\n[strict-retry:{int(_time.time()):x}]"
+    raw2 = smart_router.smart_call(
+        prompt=retry_prompt,
+        intent="repo_analyze",
+        system=strict_system,
+    )
+
+    result2 = _parse_analysis_json(raw2)
+    if result2 and _valid_analysis_schema(result2):
+        return result2
+
+    logger.warning("[repo_dna] retry also failed schema validation. raw[:200]=%r", raw[:200])
+    return {**_ANALYSIS_SCHEMA, "summary": raw, "repo_url": repo_url, "parse_error": True}
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────
@@ -756,6 +879,7 @@ def analyze_repo(repo_url: str, force_refresh: bool = False) -> dict:
             logger.info("[repo_dna] strategic: %d gaps found", len(strategic_gaps))
         else:
             logger.warning("[repo_dna] strategic: no gaps returned (provider may have failed)")
+            analysis["strategic_parse_error"] = True
 
         # ── Enrich & cache ──
         repo_name = repo_url.rstrip("/").split("/")[-1]
@@ -954,3 +1078,10 @@ def check_watched_repos() -> list[dict]:
             logger.error("[repo_watch] failed checking %s: %s", repo_url, exc)
 
     return changed
+
+
+# ── Module init ────────────────────────────────────────────────────────────────
+try:
+    _backfill_snapshots()
+except Exception as _e:
+    logger.warning("[repo_dna] snapshot backfill failed: %s", _e)
