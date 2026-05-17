@@ -1,9 +1,20 @@
+import asyncio
 import docker
 from tools import confirm as hitl_confirm
 
 client = None
 
 def run_code_in_sandbox(code, language="python"):
+    try:
+        loop = asyncio.get_running_loop()
+        if loop is not None:
+            raise NotImplementedError(
+                "run_code_in_sandbox blocks on input() — cannot call from async context. "
+                "Use asyncio.to_thread(run_code_in_sandbox, code, language) instead."
+            )
+    except RuntimeError:
+        pass  # No running loop — safe to call input()
+
     if not hitl_confirm(f"RUN {language} code in Docker sandbox:\n{code}"):
         return "❌ Cancelled."
     

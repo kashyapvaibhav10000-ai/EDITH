@@ -329,6 +329,7 @@ def _listen_loop_openwakeword():
 
 def _listen_loop_vosk():
     """Vosk fuzzy-match fallback wake-word loop."""
+    import audioop
     from vosk import Model, KaldiRecognizer, SetLogLevel
 
     SetLogLevel(-1)
@@ -346,9 +347,41 @@ def _listen_loop_vosk():
     old_stderr = os.dup(2)
     os.dup2(devnull, 2)
     pa = pyaudio.PyAudio()
-    stream = pa.open(format=pyaudio.paInt16, channels=1, rate=16000, input=True, frames_per_buffer=4000)
     os.dup2(old_stderr, 2)
     os.close(devnull)
+
+    # Try default device at 16kHz first; fall back to hw devices at native rate + resampling.
+    # (dev_idx=None means default device)
+    _FALLBACK_COMBOS = [
+        (None, 16000, 4000),
+        (0, 44100, 11025),
+        (1, 44100, 11025),
+        (0, 48000, 12000),
+    ]
+    stream = None
+    native_rate = 16000
+    for dev_idx, rate, buf in _FALLBACK_COMBOS:
+        try:
+            kwargs = dict(format=pyaudio.paInt16, channels=1, rate=rate,
+                          input=True, frames_per_buffer=buf)
+            if dev_idx is not None:
+                kwargs["input_device_index"] = dev_idx
+            stream = pa.open(**kwargs)
+            native_rate = rate
+            if dev_idx is not None:
+                log.info(f"Wake listener using device {dev_idx} at {rate}Hz (resampling to 16kHz)")
+            break
+        except OSError:
+            continue
+
+    if stream is None:
+        log.error("No audio input device available — wake listener will retry in 60s")
+        pa.terminate()
+        time.sleep(60)
+        sys.exit(1)
+
+    _resample_state = None
+    buf_frames = int(4000 * native_rate / 16000)
 
     stream.start_stream()
     log.info("Wake listener started (Vosk) — listening for 'Hey EDITH'...")
@@ -369,9 +402,12 @@ def _listen_loop_vosk():
                     time.sleep(1)
                     continue
 
-            data = stream.read(4000, exception_on_overflow=False)
+            data = stream.read(buf_frames, exception_on_overflow=False)
             if len(data) == 0:
                 continue
+
+            if native_rate != 16000:
+                data, _resample_state = audioop.ratecv(data, 2, 1, native_rate, 16000, _resample_state)
 
             if rec.AcceptWaveform(data):
                 res = json.loads(rec.Result())

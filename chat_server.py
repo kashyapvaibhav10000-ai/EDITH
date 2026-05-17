@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Request
 from pydantic import BaseModel
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import uvicorn
@@ -134,7 +134,6 @@ def index():
 # Rate Limiting
 # ────────────────────────────────────────────────────
 import time
-from fastapi.responses import JSONResponse
 
 _rate_limit_cache = {}
 _RATE_LIMIT_MAX = 120
