@@ -8,6 +8,7 @@ token.pickle
 vault.enc
 vault.salt
 vault.enc.bak
+conversation_history.json
 *.key
 *.pem
 *.crt
@@ -22,6 +23,7 @@ __pycache__/
 dist/
 build/
 *.egg
+.pytest_cache/
 
 # ──────────────────────────────────────────────
 # Virtual Environment
@@ -42,6 +44,22 @@ images/
 charts/
 logs/
 voices/
+models/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite3
+*.pickle
+*.log
+*.wav
+*.bak
+*.tmp
+cleanup.log
+maintenance_state.json
+tuner_state.json
+memory_db_backup/
+chroma_db_deleted_backup/
+edith_memory_deleted_backup/
 
 # ──────────────────────────────────────────────
 # OS / IDE
@@ -54,4 +72,10 @@ voices/
 .vscode/
 *.bin
 *.gguf
-models/
+
+# ──────────────────────────────────────────────
+# Local scratch / malformed historical files
+# ──────────────────────────────────────────────
+tree.txt
+top qwen2.5:1.5b
+C:\Users\*

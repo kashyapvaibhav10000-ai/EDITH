@@ -18,6 +18,7 @@ import psutil
 import uuid
 import json
 import traceback
+import hmac
 
 # Ensure EDITH directory is in path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -61,18 +62,23 @@ app = FastAPI()
 # ────────────────────────────────────────────────────
 _keys_raw = os.getenv("EDITH_API_KEYS", "") + "," + os.getenv("EDITH_API_KEY", "")
 _VALID_API_KEYS = set(filter(None, _keys_raw.split(",")))
+_PUBLIC_EXACT_PATHS = {"/", "/dashboard", "/ui"}
+_PUBLIC_PREFIXES = ("/static/",)
 
 @app.middleware("http")
 async def api_key_middleware(request: Request, call_next):
     """Validate API key for protected endpoints before CORS processing."""
-    # Public endpoints that don't require auth
-    public_paths = {"/", "/dashboard", "/ui", "/static"}
-    if any(request.url.path.startswith(p) for p in public_paths):
+    path = request.url.path
+    if path in _PUBLIC_EXACT_PATHS or any(path.startswith(p) for p in _PUBLIC_PREFIXES):
         return await call_next(request)
-    
-    # Protected endpoints — require valid API key
-    api_key = request.headers.get("X-API-Key", "") or request.headers.get("Authorization", "").replace("Bearer ", "")
-    if not api_key or api_key not in _VALID_API_KEYS:
+
+    api_key = request.headers.get("X-API-Key", "")
+    auth_header = request.headers.get("Authorization", "")
+    if not api_key and auth_header.lower().startswith("bearer "):
+        api_key = auth_header[7:].strip()
+
+    valid = any(hmac.compare_digest(api_key, key) for key in _VALID_API_KEYS)
+    if not api_key or not valid:
         return JSONResponse(
             status_code=401,
             content={"error": "Unauthorized: missing or invalid API key"}
@@ -83,7 +89,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["POST", "GET", "DELETE"],
-    allow_headers=["Content-Type", "X-Admin-Token"],
+    allow_headers=["Content-Type", "X-API-Key", "Authorization", "X-Admin-Token"],
     allow_credentials=False,
 )
 

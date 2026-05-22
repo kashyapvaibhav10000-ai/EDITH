@@ -7,12 +7,18 @@ import sys
 import os
 import json
 import ast
+import pytest
+from pathlib import Path
 
-sys.path.insert(0, '/home/vaibhav/EDITH')
+EDITH_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(EDITH_ROOT))
+
+live_service = pytest.mark.live_service
 
 
 # ── Tests 1-5 (Phase 1) ────────────────────────────────────────────────────
 
+@live_service
 def test_1_silent_blob_rejected_before_groq():
     """Silent/tiny blob must be rejected before hitting Groq API"""
     import requests
@@ -42,6 +48,7 @@ def test_2_hallucination_phrases_filtered():
     print("✅ Test 2 passed: Hallucination filter contains known phrases")
 
 
+@live_service
 def test_3_voice_respond_returns_sse():
     """Voice respond endpoint must return SSE tokens"""
     import requests
@@ -73,6 +80,7 @@ def test_3_voice_respond_returns_sse():
     print(f"✅ Test 3 passed: SSE stream working, events: {events[:5]}")
 
 
+@live_service
 def test_4_stop_tts_clears_queue():
     """Stop TTS endpoint must drain queue and return ok"""
     import requests
@@ -86,6 +94,7 @@ def test_4_stop_tts_clears_queue():
     print("✅ Test 4 passed: Stop TTS endpoint working")
 
 
+@live_service
 def test_5_voice_status_returns_mode():
     """Voice status endpoint must return mode field (normal or private)"""
     import requests
@@ -103,6 +112,7 @@ def test_5_voice_status_returns_mode():
 
 # ── Tests 6-10 (Phase 4) ───────────────────────────────────────────────────
 
+@live_service
 def test_6_provider_latencies_endpoint():
     """Provider latency endpoint must return dict"""
     import requests
@@ -114,6 +124,7 @@ def test_6_provider_latencies_endpoint():
     print("✅ Test 6 passed: Provider latencies endpoint working")
 
 
+@live_service
 def test_7_sensitive_intent_blocked_from_voice():
     """Vault commands must be blocked via voice channel"""
     import requests
@@ -132,6 +143,7 @@ def test_7_sensitive_intent_blocked_from_voice():
     print("✅ Test 7 passed: Sensitive intent blocked from voice")
 
 
+@live_service
 def test_8_friend_voice_trigger_switches_mode():
     """Friend voice trigger phrase must switch TTS mode"""
     import requests
@@ -159,7 +171,7 @@ def test_9_emotion_tag_added_to_positive_response():
 
 def test_10_wake_listener_no_listen_call():
     """Wake listener must NOT call listen() anymore"""
-    with open('/home/vaibhav/EDITH/wake_listener.py', 'r') as f:
+    with open(EDITH_ROOT / 'wake_listener.py', 'r') as f:
         content = f.read()
     tree = ast.parse(content)
     listen_calls = []

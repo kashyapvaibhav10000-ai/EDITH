@@ -1,0 +1,14 @@
+# Local-node extras: desktop widget, mic/speaker pipeline, OCR, and local STT/TTS.
+-r requirements-core.txt
+
+PyQt6==6.11.0
+PyAudio==0.2.14
+pynput==1.8.1
+evdev==1.9.3
+faster-whisper==1.2.1
+openai-whisper==20250625
+piper-tts==1.4.2
+pillow==12.2.0
+pytesseract==0.3.13
+av==17.0.0
+ctranslate2==4.7.1

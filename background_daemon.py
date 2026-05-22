@@ -207,7 +207,7 @@ def _check_heartbeat_silence():
 # ──────────────────────────────────────────────
 def _send_telegram_alert(message: str):
     """Send a Telegram alert (non-blocking)."""
-    # Local node is voice/widget only — not a Telegram gateway
+    # Local node is voice/widget only; cloud/Telegram node owns outbound alerts.
     if os.getenv("EDITH_NODE_TYPE", "local") == "local":
         log.debug(f"Telegram suppressed on local node: {message[:80]}")
         return

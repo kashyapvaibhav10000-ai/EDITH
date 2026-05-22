@@ -23,6 +23,8 @@ import threading
 import pytest
 from unittest.mock import patch, MagicMock, Mock
 
+pytestmark = pytest.mark.integration
+
 # ── path setup ──
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -35,12 +37,15 @@ def client():
     """FastAPI TestClient — starts app in-process, mocks external I/O."""
     from fastapi.testclient import TestClient
 
+    os.environ["EDITH_API_KEY"] = "test-api-key"
+
     # Patch vault/Telegram/Ollama so tests don't need real credentials
     with patch("vault.get_secret", return_value=""), \
          patch("vault.set_secret", return_value=True), \
          patch("telegram_bot.send_telegram", return_value=True):
         from chat_server import app
         with TestClient(app, raise_server_exceptions=False) as c:
+            c.headers.update({"X-API-Key": "test-api-key"})
             yield c
 
 
