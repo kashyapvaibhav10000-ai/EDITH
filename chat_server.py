@@ -18,11 +18,11 @@ import psutil
 import uuid
 import json
 import traceback
-import hmac
 
 # Ensure EDITH directory is in path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+from api_auth import is_request_authenticated, create_unauthorized_response
 from orchestrator import chat, chat_stream, detect_intent
 from voice import speak
 from config import get_logger
@@ -32,57 +32,23 @@ from intent_dispatch import (
     get_pending_action, set_pending_action, clear_pending_action,
     _extract_phone_number, _extract_sms_body,
 )
+# Extracted voice routes
+from voice_routes import register_voice_routes, _get_voice_memory_context
 
 log = get_logger("chat_server")
-
-
-def _get_voice_memory_context(user_input: str) -> str:
-    """Fetch relevant ChromaDB memory for voice query. Returns empty str on any error."""
-    try:
-        from config import get_chroma_client
-        client = get_chroma_client()
-        collection = client.get_collection("edith_history")
-        results = collection.query(
-            query_texts=[user_input],
-            n_results=3,
-            include=["documents"]
-        )
-        docs = results.get("documents", [[]])[0]
-        if docs:
-            return " | ".join(str(d)[:300] for d in docs)
-    except Exception as e:
-        log.debug(f"Voice memory fetch (non-fatal): {e}")
-    return ""
-
 
 app = FastAPI()
 
 # ────────────────────────────────────────────────────
-# API Key Authentication Middleware (before CORS)
+# API Key Authentication Middleware
 # ────────────────────────────────────────────────────
-_keys_raw = os.getenv("EDITH_API_KEYS", "") + "," + os.getenv("EDITH_API_KEY", "")
-_VALID_API_KEYS = set(filter(None, _keys_raw.split(",")))
-_PUBLIC_EXACT_PATHS = {"/", "/dashboard", "/ui"}
-_PUBLIC_PREFIXES = ("/static/",)
 
 @app.middleware("http")
 async def api_key_middleware(request: Request, call_next):
     """Validate API key for protected endpoints before CORS processing."""
-    path = request.url.path
-    if path in _PUBLIC_EXACT_PATHS or any(path.startswith(p) for p in _PUBLIC_PREFIXES):
-        return await call_next(request)
-
-    api_key = request.headers.get("X-API-Key", "")
-    auth_header = request.headers.get("Authorization", "")
-    if not api_key and auth_header.lower().startswith("bearer "):
-        api_key = auth_header[7:].strip()
-
-    valid = any(hmac.compare_digest(api_key, key) for key in _VALID_API_KEYS)
-    if not api_key or not valid:
-        return JSONResponse(
-            status_code=401,
-            content={"error": "Unauthorized: missing or invalid API key"}
-        )
+    is_valid, error = is_request_authenticated(request)
+    if not is_valid:
+        return create_unauthorized_response()
     return await call_next(request)
 
 app.add_middleware(
@@ -101,12 +67,13 @@ if os.path.isdir(_STATIC_DIR):
 _UI_HTML_PATH        = os.path.join(os.path.dirname(os.path.abspath(__file__)), "edith_ui_new.html")
 _DASHBOARD_HTML_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "edith_dashboard.html")
 
+# Register voice routes (extracted to voice_routes.py)
+register_voice_routes(app)
 
 def verify_mcp_admin_token(supplied_token: str, expected_token: str = None) -> bool:
     """Return True when the supplied MCP admin token matches configured auth."""
     expected = expected_token if expected_token is not None else os.getenv("MCP_ADMIN_TOKEN", "")
     return bool(expected) and supplied_token == expected
-
 
 def _check_mcp_admin(req: Request):
     """Require MCP_ADMIN_TOKEN for MCP mutation endpoints."""
@@ -227,7 +194,6 @@ try:
 except Exception:
     _ADAPT_TRACKING_OK = False
 
-
 def _get_last_exchange():
     """Get the last user→assistant exchange for follow-up context."""
     with _widget_history_lock:
@@ -235,7 +201,6 @@ def _get_last_exchange():
         if len(values) >= 2:
             return values[-2], values[-1]
     return None, None
-
 
 def _is_followup(user_input):
     """Detect if this message is a follow-up to the previous exchange."""
@@ -273,7 +238,6 @@ def _is_followup(user_input):
             return True, "self_improve_accept"
 
     return False, None
-
 
 # ────────────────────────────────────────────────────
 # Streaming Endpoint
@@ -438,7 +402,6 @@ async def chat_stream_endpoint(req: Request):
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
-
 # ────────────────────────────────────────────────────
 # Main Chat Endpoint (dispatch via DispatchContext)
 # ────────────────────────────────────────────────────
@@ -510,522 +473,9 @@ async def chat_endpoint(req: Request):
 
     return {"reply": reply, "intent": intent, "session_id": used_sid}
 
-
 # ────────────────────────────────────────────────────
 # Voice Pipeline Endpoints
 # ────────────────────────────────────────────────────
-
-@app.post("/api/voice/transcribe")
-async def voice_transcribe_endpoint(request: Request):
-    tmp_path = None
-    try:
-        log.info(f"voice/transcribe called, content-type: {request.headers.get('content-type')}, body will be read")
-        audio_bytes = await request.body()
-        if not audio_bytes or len(audio_bytes) < 4000:
-            log.warning(f"Audio blob too small: {len(audio_bytes)} bytes — rejecting")
-            return JSONResponse({"error": "No audio received"}, status_code=400)
-
-        mime_type = request.headers.get("content-type", "audio/webm")
-        with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
-            tmp.write(audio_bytes)
-            tmp_path = tmp.name
-
-        from voice import _last_intent, _transcribe_local
-        from config import PRIVATE_INTENTS
-        is_private = _last_intent in PRIVATE_INTENTS
-
-        engine_used = "local"
-        try:
-            if is_private:
-                transcript = _transcribe_local(tmp_path)
-            else:
-                import requests as _req
-                import vault
-                groq_key = vault.get_secret("GROQ_API_KEY", "") or os.getenv("GROQ_API_KEY", "")
-                if not groq_key:
-                    transcript = _transcribe_local(tmp_path)
-                else:
-                    # Browser already does RMS check via AudioContext — skip unreliable server-side WebM byte check
-                    with open(tmp_path, "rb") as f:
-                        audio_data = f.read()
-                    try:
-                        ctx_parts = []
-                        from shared_state import get_recent_context as _get_ctx
-                        for m in _get_ctx(max_items=2):
-                            if isinstance(m, dict):
-                                ctx_parts.append(f"{m.get('role','')}: {str(m.get('content',''))[:300]}")
-                        ctx_str = " | ".join(ctx_parts) if ctx_parts else ""
-                        stt_prompt = "EDITH AI assistant. User speaks English Hindi Hinglish."
-                        if ctx_str:
-                            stt_prompt += f" Recent context: {ctx_str}"
-                    except Exception:
-                        stt_prompt = "EDITH AI assistant. User speaks English Hindi Hinglish."
-                    resp = _req.post(
-                        "https://api.groq.com/openai/v1/audio/transcriptions",
-                        headers={"Authorization": f"Bearer {groq_key}"},
-                        files={"file": ("audio.webm", audio_data, mime_type)},
-                        data={
-                            "model": "whisper-large-v3-turbo",
-                            "prompt": stt_prompt,
-                        },
-                        timeout=30,
-                    )
-                    if resp.status_code == 200:
-                        transcript = resp.json().get("text", "").strip()
-                        engine_used = "groq"
-                    else:
-                        log.warning(f"Groq STT failed {resp.status_code}: {resp.text}")
-                        transcript = _transcribe_local(tmp_path)
-        finally:
-            try:
-                os.unlink(tmp_path)
-            except Exception:
-                pass
-
-        log.info(f"Voice STT: {engine_used} → {transcript[:50]}")
-        if not transcript or not transcript.strip():
-            return JSONResponse({"error": "Could not transcribe audio"}, status_code=400)
-
-        # Hallucination filter — known Whisper ghost phrases on silent/noise audio
-        WHISPER_HALLUCINATIONS = {
-            "thank you", "thanks", "thanks for watching",
-            "thanks for watching!", "thank you for watching",
-            "bye", "goodbye", "good bye", "see you",
-            "subtitles by", "www.", "http", "subtitled by",
-            ".", "..", "...", "!", "?", "-", "—",
-            "you", "the", "a", "an", "and", "to",
-            "i", "it", "in", "is", "be", "was",
-        }
-        transcript_clean = transcript.strip()
-        transcript_lower = transcript_clean.lower().strip()
-        transcript_words = transcript_lower.split()
-
-        if len(transcript_words) < 2 or len(transcript_clean) < 5:
-            log.warning(f"Transcript too short: '{transcript_clean}' — rejecting")
-            return JSONResponse({"error": "Could not transcribe audio"}, status_code=400)
-
-        if transcript_lower in WHISPER_HALLUCINATIONS:
-            log.warning(f"Hallucination detected: '{transcript_clean}' — rejecting")
-            return JSONResponse({"error": "Could not transcribe audio"}, status_code=400)
-
-        if re.match(r'^[\d\s\.\,\!\?\-\_]+$', transcript_lower):
-            log.warning(f"Numbers/punctuation only: '{transcript_clean}' — rejecting")
-            return JSONResponse({"error": "Could not transcribe audio"}, status_code=400)
-
-        # Semantic check: must have at least one content word (len > 2, not a stopword)
-        _STOPWORDS = {
-            "the", "a", "an", "is", "it", "in", "on", "at", "to", "for",
-            "of", "and", "or", "but", "not", "no", "so", "do", "did",
-            "can", "will", "was", "are", "be", "has", "had", "have",
-            "he", "she", "we", "you", "they", "me", "him", "her",
-            "ok", "okay", "yes", "yep", "yeah", "nope", "hmm", "uh", "um",
-        }
-        content_words = [w for w in transcript_words if len(w) > 2 and w not in _STOPWORDS]
-        if not content_words:
-            log.warning(f"No content words in transcript: '{transcript_clean}' — rejecting")
-            return JSONResponse({"error": "Could not transcribe audio"}, status_code=400)
-
-        log.info(f"Transcript accepted: '{transcript_clean[:60]}'")
-        return JSONResponse({"transcript": transcript_clean, "status": "ok"})
-    except Exception as e:
-        log.error(f"voice/transcribe FATAL: {traceback.format_exc()}")
-        if tmp_path:
-            try:
-                os.unlink(tmp_path)
-            except Exception:
-                pass
-        return JSONResponse({"error": str(e), "detail": traceback.format_exc()}, status_code=500)
-
-
-@app.post("/api/voice/respond")
-async def voice_respond_endpoint(request: Request):
-    """SSE Streaming endpoint for voice responses with sentence-level TTS."""
-    data = await request.json()
-    user_input = data.get("text", "").strip()
-    if not user_input:
-        return {"error": "No text provided"}
-    
-    import config as _cfg
-    from intent import detect_intent
-    intent = detect_intent(user_input)
-
-    # Voice mode triggers — switch TTS engine
-    user_lower = user_input.lower().strip()
-    if _cfg.FRIEND_VOICE_TRIGGER in user_lower:
-        _cfg.PREFER_FAST_TTS = False
-        log.info("Switched to friend voice mode (Chatterbox)")
-        async def _friend_gen():
-            yield f"data: {json.dumps({'type': 'start', 'intent': 'chat'})}\n\n"
-            yield f"data: {json.dumps({'type': 'token', 'text': 'Switching to friend voice mode.'})}\n\n"
-            yield f"data: {json.dumps({'type': 'done'})}\n\n"
-        return StreamingResponse(_friend_gen(), media_type="text/event-stream",
-                                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
-
-    if _cfg.NORMAL_VOICE_TRIGGER in user_lower:
-        _cfg.PREFER_FAST_TTS = True
-        log.info("Switched to normal voice mode (Groq Orpheus)")
-        async def _normal_gen():
-            yield f"data: {json.dumps({'type': 'start', 'intent': 'chat'})}\n\n"
-            yield f"data: {json.dumps({'type': 'token', 'text': 'Switching to normal voice mode.'})}\n\n"
-            yield f"data: {json.dumps({'type': 'done'})}\n\n"
-        return StreamingResponse(_normal_gen(), media_type="text/event-stream",
-                                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
-
-    # Voice auth — block sensitive intents + keyword-detected sensitive topics
-    VOICE_SENSITIVE_INTENTS = {"vault", "shell", "email", "delete", "agent"}
-    VOICE_SENSITIVE_KEYWORDS = {"vault", "password", "passwd", "credential", "secret", "sudo", "shell"}
-    _is_sensitive = (intent in VOICE_SENSITIVE_INTENTS or
-                     any(kw in user_lower for kw in VOICE_SENSITIVE_KEYWORDS))
-    if _is_sensitive:
-        log.info(f"Sensitive intent '{intent}' from voice — requiring confirmation")
-        async def _sensitive_gen():
-            yield f"data: {json.dumps({'type': 'start', 'intent': intent})}\n\n"
-            yield f"data: {json.dumps({'type': 'token', 'text': 'This is a sensitive command. Please confirm by typing in the chat panel.'})}\n\n"
-            yield f"data: {json.dumps({'type': 'done'})}\n\n"
-        return StreamingResponse(_sensitive_gen(), media_type="text/event-stream",
-                                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
-
-    # Track in conversation history
-    add_to_history("user", user_input)
-
-    async def event_generator():
-        # FIX 3: Drain any leftover sentences from previous request
-        try:
-            from voice import _tts_queue, _tts_active
-            import queue as _queue_module
-            import time as _time
-            # H8: Wait 500ms — give current sentence time to finish
-            _time.sleep(0.5)
-            # Now drain stale queue
-            drained = 0
-            while True:
-                try:
-                    _tts_queue.get_nowait()
-                    _tts_queue.task_done()
-                    drained += 1
-                except _queue_module.Empty:
-                    break
-            if drained > 0:
-                log.info(f"TTS queue flushed {drained} stale sentences")
-            # Kill any active TTS
-            _tts_active.clear()
-            # Kill aplay and chatterbox if running (H1: use PID tracking)
-            try:
-                from voice import _aplay_pid, _aplay_pid_lock
-                with _aplay_pid_lock:
-                    pid = _aplay_pid
-                if pid:
-                    import os, signal
-                    try:
-                        os.kill(pid, signal.SIGTERM)
-                        log.info(f"Killed aplay PID {pid}")
-                    except (ProcessLookupError, OSError):
-                        pass
-                else:
-                    import subprocess
-                    subprocess.run(["pkill", "-f", "aplay"], capture_output=True)
-            except Exception as e:
-                log.warning(f"aplay kill error: {e}")
-                import subprocess
-                subprocess.run(["pkill", "-f", "aplay"], capture_output=True)
-            # NOTE: Do NOT kill chatterbox_worker here — it holds the warm model in RAM.
-            # Killing it forces 70s cold reload on next TTS call. Drain queue + kill aplay only.
-        except Exception as e:
-            log.warning(f"TTS flush error: {e}")
-        
-        try:
-            log.info(f"🎙️ Voice respond: {user_input}")
-            
-            # FIX 7: Assign unique request ID and track it globally
-            global _current_voice_request_id
-            request_id = str(uuid.uuid4())[:8]
-            with _voice_request_lock:
-                _current_voice_request_id = request_id
-            log.info(f"Voice request {request_id} started")
-
-            # V12: Join previous TTS threads (2s grace) before clearing — prevents stale audio bleed
-            for _prev_t in list(_active_tts_threads):
-                _prev_t.join(timeout=2.0)
-            _active_tts_threads.clear()
-            
-            yield f"data: {json.dumps({'type': 'start', 'intent': intent})}\n\n"
-            full_reply = ""
-            current_sentence = ""
-
-            # Action intents: dispatch instead of chat_stream
-            from intent_dispatch import INTENT_HANDLERS, dispatch as _dispatch
-            ACTION_INTENTS = set(INTENT_HANDLERS.keys()) - {"chat", "lookup", "reason", "search"}
-            if intent in ACTION_INTENTS:
-                log.info(f"🎙️ Voice action intent '{intent}' — dispatching")
-                _ctx = DispatchContext(
-                    user_input=user_input, intent=intent, source="voice",
-                    chat_fn=chat, chat_stream_fn=chat_stream,
-                )
-                _result = await asyncio.to_thread(_dispatch, _ctx)
-                full_reply = _result if isinstance(_result, str) else str(_result)
-                yield f"data: {json.dumps({'type': 'token', 'text': full_reply})}\n\n"
-                add_to_history("assistant", full_reply)
-                yield f"data: {json.dumps({'type': 'done'})}\n\n"
-                return
-
-            memory_context = _get_voice_memory_context(user_input)
-            if memory_context:
-                log.info(f"Voice memory context: {memory_context[:80]}")
-            log.info(f"🎙️ Starting chat_stream...")
-
-            # --- async search enrichment for voice path ---
-            _enriched_voice_input = user_input
-            try:
-                import re as _vre
-                from datetime import datetime, timezone, timedelta
-                from search import web_search as _vws, format_results as _vfmt
-                _VTEMPORAL = _vre.compile(
-                    r"\b(who won|score|result|ipl|cricket|football|election|stock|"
-                    r"price|match|latest|today|current|news|recent|now|happening|"
-                    r"update|yesterday|tonight|who is|what happened)\b",
-                    _vre.IGNORECASE
-                )
-                if intent in {"search", "lookup"} or _VTEMPORAL.search(user_input):
-                    _vist = timezone(timedelta(hours=5, minutes=30))
-                    _vnow = datetime.now(_vist)
-                    _vsq = user_input
-                    if not _vre.search(r'\b20\d{2}\b', user_input):
-                        _vsq = f"Today is {_vnow.strftime('%A %B %d %Y')}, India IST. {user_input}"
-                    _vr = await asyncio.to_thread(_vws, _vsq)
-                    _vresults = _vr.value if _vr.ok else []
-                    _vformatted = _vfmt(_vresults)
-                    if _vformatted and "error" not in _vformatted.lower():
-                        _enriched_voice_input = (
-                            f"Web search results for '{user_input}':\n{_vformatted}\n\n"
-                            f"Using the above results, answer: {user_input}"
-                        )
-                        log.info(f"Voice stream search enriched (async): {_vsq[:80]}")
-            except Exception as _ve:
-                log.warning(f"voice stream search enrichment failed: {_ve}")
-            # --- end async search enrichment ---
-
-            # H4: Start barge-in monitor BEFORE token loop
-            def _on_barge_in():
-                log.info("Barge-in detected — stopping TTS, restarting listen")
-                _barge_in_triggered.set()
-                _restart_listen.set()
-                try:
-                    from voice import _tts_queue, _tts_active, _aplay_pid, _aplay_pid_lock
-                    import queue as _q
-                    _tts_active.clear()
-                    while True:
-                        try:
-                            _tts_queue.get_nowait()
-                            _tts_queue.task_done()
-                        except _q.Empty:
-                            break
-                    _tts_queue.put(None)
-                    # H1: Kill aplay by PID
-                    with _aplay_pid_lock:
-                        pid = _aplay_pid
-                    if pid:
-                        import os, signal
-                        try:
-                            os.kill(pid, signal.SIGTERM)
-                            log.info(f"Killed aplay PID {pid}")
-                        except (ProcessLookupError, OSError):
-                            pass
-                    else:
-                        import subprocess
-                        subprocess.run(["pkill", "-f", "aplay"],
-                                      capture_output=True)
-                except Exception as e:
-                    log.warning(f"Barge-in TTS kill error: {e}")
-            
-            try:
-                from voice import start_barge_in_monitor
-                start_barge_in_monitor(_on_barge_in)
-                log.info("Barge-in monitor started before first token")
-            except Exception as e:
-                log.warning(f"Barge-in start error: {e}")
-
-            for token in chat_stream(_enriched_voice_input, intent=intent):
-                full_reply += token
-                current_sentence += token
-                log.debug(f"🎙️ Token: {len(token)} chars")
-                yield f"data: {json.dumps({'type': 'token', 'text': token})}\n\n"
-                
-                # Check for sentence boundaries: . ! ? : ; or 4+ chars minimum
-                stripped = current_sentence.strip()
-                if re.search(r'[.!?:;]\s*$', stripped):
-                    if len(stripped) >= 4 or stripped in ("Done.", "Yes.", "No.", "Ok.", "Sure.", "Got it."):
-                        # FIX 7: Wrapper to skip stale TTS from old requests
-                        def _speak_if_current(s=current_sentence.strip(), rid=request_id):
-                            with _voice_request_lock:
-                                if _current_voice_request_id != rid:
-                                    log.info(f"Skipping stale TTS from request {rid}")
-                                    return
-                            try:
-                                from voice import speak_sentence as vs
-                                vs(s)
-                            except Exception as e:
-                                log.warning(f"Sentence TTS error: {e}")
-                        _tts_t = threading.Thread(target=_speak_if_current, daemon=True)
-                        _tts_t.start()
-                        _active_tts_threads.append(_tts_t)
-                    current_sentence = ""
-            
-            # Flush any trailing sentence fragment not caught by punctuation check
-            if current_sentence.strip() and len(current_sentence.strip()) >= 4:
-                def _speak_tail(s=current_sentence.strip(), rid=request_id):
-                    with _voice_request_lock:
-                        if _current_voice_request_id != rid:
-                            return
-                    try:
-                        from voice import speak_sentence as vs
-                        vs(s)
-                    except Exception as e:
-                        log.warning(f"Tail TTS error: {e}")
-                _tts_t = threading.Thread(target=_speak_tail, daemon=True)
-                _tts_t.start()
-                _active_tts_threads.append(_tts_t)
-                current_sentence = ""
-
-            # Track response in conversation history
-            add_to_history("assistant", full_reply)
-
-            log.info(f"🎙️ Stream done: {len(full_reply)} chars")
-            
-            # UPGRADE B: Send TTS engine info for orb color
-            tts_engine = "piper"
-            try:
-                from config import USE_GROQ_TTS, USE_CHATTERBOX, PREFER_FAST_TTS
-                if USE_GROQ_TTS and PREFER_FAST_TTS:
-                    tts_engine = "groq"
-                elif USE_CHATTERBOX:
-                    tts_engine = "chatterbox"
-            except Exception:
-                pass
-            yield f"data: {json.dumps({'type': 'tts_engine', 'engine': tts_engine})}\n\n"
-            yield f"data: {json.dumps({'type': 'done'})}\n\n"
-            # V8: if barge-in fired during this response, tell frontend to re-enter listen state
-            if _restart_listen.is_set():
-                _restart_listen.clear()
-                log.info("Barge-in triggered relisten — notifying frontend")
-                yield f"data: {json.dumps({'type': 'relisten'})}\n\n"
-        except Exception as e:
-            log.error(f"Voice respond error: {e}", exc_info=True)
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
-
-
-@app.post("/api/voice/mic-lock")
-async def mic_lock_endpoint():
-    """Browser mic activated — set MIC_IN_USE CrossProcessEvent to block wake_listener."""
-    try:
-        from voice import MIC_IN_USE
-        MIC_IN_USE.set()
-        import wake_listener as _wl
-        _wl.pause()
-    except Exception as e:
-        log.warning(f"mic-lock error: {e}")
-    return {"status": "locked"}
-
-
-@app.post("/api/voice/mic-unlock")
-async def mic_unlock_endpoint():
-    """Browser mic released — clear MIC_IN_USE CrossProcessEvent."""
-    try:
-        from voice import MIC_IN_USE
-        MIC_IN_USE.clear()
-        import wake_listener as _wl
-        _wl.resume()
-    except Exception as e:
-        log.warning(f"mic-unlock error: {e}")
-    return {"status": "unlocked"}
-
-
-@app.post("/api/voice/warmup-chatterbox")
-async def warmup_chatterbox_endpoint():
-    """Spawn Chatterbox worker the moment mic activates — absorbs 70s cold-start before TTS needed."""
-    def _warmup():
-        try:
-            from config import USE_CHATTERBOX
-            if not USE_CHATTERBOX:
-                return
-            from voice import _get_chatterbox_worker
-            _get_chatterbox_worker()
-            log.info("Chatterbox worker warmed up via mic-activate trigger")
-        except Exception as e:
-            log.warning(f"Chatterbox warmup error: {e}")
-    import threading as _threading
-    _threading.Thread(target=_warmup, daemon=True, name="chatterbox-warmup").start()
-    return {"status": "warming"}
-
-
-@app.post("/api/voice/stop-tts")
-async def stop_tts_endpoint():
-    """FIX 6: Aggressive TTS kill — drain queue, kill worker, kill processes."""
-    def _kill_all_tts():
-        try:
-            import queue as _q
-            from voice import (
-                _tts_queue,
-                _tts_active,
-                _tts_worker_thread
-            )
-            import subprocess
-            
-            # Step 1: Signal stop
-            _tts_active.clear()
-            
-            # Step 2: Drain entire queue
-            drained = 0
-            while True:
-                try:
-                    _tts_queue.get_nowait()
-                    _tts_queue.task_done()
-                    drained += 1
-                except _q.Empty:
-                    break
-            
-            # Step 3: Put poison pill to kill worker
-            _tts_queue.put(None)
-            
-            # Step 4: Kill audio processes (H1: use PID tracking)
-            try:
-                from voice import _aplay_pid, _aplay_pid_lock
-                with _aplay_pid_lock:
-                    pid = _aplay_pid
-                if pid:
-                    import os, signal
-                    try:
-                        os.kill(pid, signal.SIGTERM)
-                        log.info(f"Killed aplay PID {pid}")
-                    except (ProcessLookupError, OSError):
-                        pass
-                else:
-                    subprocess.run(
-                        ["pkill", "-f", "aplay"],
-                        capture_output=True,
-                        timeout=2
-                    )
-            except Exception as e:
-                log.warning(f"aplay kill error: {e}")
-                subprocess.run(
-                    ["pkill", "-f", "aplay"],
-                    capture_output=True,
-                    timeout=2
-                )
-            # Do NOT kill chatterbox_worker — preserve warm model in RAM for next TTS call.
-            log.info(f"TTS killed: drained {drained} sentences")
-            
-        except Exception as e:
-            log.warning(f"TTS kill error: {e}")
-    
-    threading.Thread(target=_kill_all_tts, daemon=True).start()
-    return {"status": "ok", "message": "TTS stopped"}
-
 
 def _track_widget_msg(content, role, intent):
     """Track messages for multi-turn context."""
@@ -1035,7 +485,6 @@ def _track_widget_msg(content, role, intent):
         while len(_widget_history) > _MAX_WIDGET_HISTORY * 2:
             oldest = next(iter(_widget_history))
             del _widget_history[oldest]
-
 
 def _persist_exchange(user_msg: str, assistant_msg: str, session_id: str = None) -> str:
     """Persist a user+assistant exchange to conversation_json in sessions table. Returns used session_id."""
@@ -1063,7 +512,6 @@ def _persist_exchange(user_msg: str, assistant_msg: str, session_id: str = None)
     except Exception as e:
         log.warning(f"persist_exchange failed: {e}")
         return session_id or ""
-
 
 def _handle_followup(user_input, fu_type):
     """Handle a follow-up message using context from the previous exchange."""
@@ -1111,7 +559,6 @@ def _handle_followup(user_input, fu_type):
 
     return chat(user_input, intent="chat"), "chat"
 
-
 # ────────────────────────────────────────────────────
 # Memory Monitor
 # ────────────────────────────────────────────────────
@@ -1132,7 +579,6 @@ def _memory_monitor():
                 log.info(f"After GC: {memory_mb:.2f} MB")
         except Exception as e:
             log.error(f"Memory monitor error: {e}")
-
 
 # ────────────────────────────────────────────────────
 # Phase 6 API Endpoints
@@ -1158,7 +604,6 @@ async def api_health_check():
     from validator import validate_all
     results = validate_all(emit_events=False)
     return results
-
 
 @app.get("/api/system-status")
 async def api_status_legacy():
@@ -1188,7 +633,6 @@ async def api_recent_traces(limit: int = 20):
     traces = await asyncio.to_thread(_fetch)
     return {"traces": traces}
 
-
 @app.get("/api/monitor_schedule")
 async def api_monitor_schedule():
     """Return last maintenance timestamps + static schedule."""
@@ -1208,7 +652,6 @@ async def api_monitor_schedule():
             {"time": "21:00", "job": "Weekly Briefing Prep", "freq": "sunday"},
         ],
     }
-
 
 @app.post("/api/feedback")
 async def api_feedback(req: Request):
@@ -1251,7 +694,6 @@ async def api_feedback(req: Request):
     ok = await asyncio.to_thread(_tag)
     return {"ok": ok}
 
-
 # ────────────────────────────────────────────────────
 # Dashboard Route
 # ────────────────────────────────────────────────────
@@ -1262,7 +704,6 @@ async def dashboard():
             return f.read()
     except Exception as e:
         return HTMLResponse(f"<h1>UI error: {e}</h1>", status_code=500)
-
 
 # ────────────────────────────────────────────────────
 # New Dashboard API Endpoints
@@ -1298,7 +739,6 @@ async def api_costs():
     except Exception as e:
         return {"error": str(e)}
 
-
 @app.get("/api/provider-latencies")
 async def api_provider_latencies():
     """Return latest per-provider latency (seconds) from smart_router."""
@@ -1307,7 +747,6 @@ async def api_provider_latencies():
         return _provider_latencies
     except Exception as e:
         return {"error": str(e)}
-
 
 @app.get("/api/stats")
 async def api_stats_proxy():
@@ -1327,7 +766,6 @@ async def api_stats_proxy():
     except Exception as e:
         log.error(f"api/stats proxy error: {e}")
         return {"error": str(e)}
-
 
 @app.get("/api/status")
 async def api_status_combined():
@@ -1379,53 +817,6 @@ async def api_status_combined():
         log.error(f"Status API failed: {e}")
         return {"error": str(e)}
 
-
-@app.get("/api/voice-status")
-async def api_voice_status():
-    """Return current voice mode (normal, private) and TTS engine color."""
-    try:
-        from voice import get_last_intent
-        from config import PRIVATE_INTENTS, USE_GROQ_TTS, USE_CHATTERBOX
-        
-        last_intent = get_last_intent()
-        is_private = last_intent in PRIVATE_INTENTS if last_intent else False
-        
-        tts_engine = "piper"
-        if USE_CHATTERBOX:
-            tts_engine = "chatterbox"
-        elif USE_GROQ_TTS:
-            tts_engine = "groq"
-        
-        tts_colors = {
-            "chatterbox": "#ff6b35",
-            "groq": "#00d4ff",
-            "piper": "#4ecdc4",
-        }
-        
-        return {
-            "mode": "private" if is_private else "normal",
-            "tts_engine": tts_engine,
-            "tts_color": tts_colors.get(tts_engine, "#4ecdc4"),
-            "timestamp": _dt.datetime.now().isoformat(),
-        }
-    except Exception as e:
-        log.error(f"Voice status API failed: {e}")
-        return {"mode": "normal", "tts_engine": "piper", "error": str(e)}
-
-
-@app.post("/api/voice/barge-in-complete")
-async def api_barge_in_complete():
-    """Clear barge-in trigger — called by dashboard JS to re-enable mic button."""
-    _barge_in_triggered.clear()
-    return {"status": "ok", "barge_in_active": False}
-
-
-@app.get("/api/voice/barge-in-status")
-async def api_barge_in_status():
-    """Poll endpoint — returns whether barge-in was triggered."""
-    return {"barge_in_triggered": _barge_in_triggered.is_set()}
-
-
 @app.get("/api/last-memory")
 async def api_last_memory():
     """Return last 3 memories from SmartMemoryManager."""
@@ -1447,7 +838,6 @@ async def api_last_memory():
         return {"memories": memories}
     except Exception as e:
         return {"error": str(e), "memories": []}
-
 
 @app.get("/api/phone")
 async def api_phone():
@@ -1477,7 +867,6 @@ async def api_phone():
     except Exception as e:
         return {"battery": None, "status": "offline", "last_notification": None, "error": str(e)}
 
-
 @app.get("/api/weather-status")
 async def api_weather_status():
     """Return current weather from weather.py get_current_weather()."""
@@ -1489,7 +878,6 @@ async def api_weather_status():
         return result
     except Exception as e:
         return {"error": str(e)}
-
 
 @app.get("/api/traces/recent")
 async def api_traces_recent(limit: int = 20):
@@ -1529,7 +917,6 @@ async def api_traces_recent(limit: int = 20):
     except Exception as e:
         return {"error": str(e), "traces": []}
 
-
 @app.get("/api/logs/stream")
 async def api_logs_stream():
     """SSE endpoint tailing edith.log. Sends last 100 lines on connect then streams new ones."""
@@ -1567,7 +954,6 @@ async def api_logs_stream():
 
     return StreamingResponse(_generate(), media_type="text/event-stream")
 
-
 # ────────────────────────────────────────────────────
 # MCP API Endpoints
 # ────────────────────────────────────────────────────
@@ -1583,7 +969,6 @@ async def api_mcp_status():
         log.error(f"MCP status error: {e}")
         return {"error": str(e)}
 
-
 @app.get("/api/mcp/tools/{server_name}")
 async def api_mcp_tools(server_name: str):
     """Return list of available tools for a named MCP server."""
@@ -1594,7 +979,6 @@ async def api_mcp_tools(server_name: str):
     except Exception as e:
         log.error(f"MCP tools error [{server_name}]: {e}")
         return {"server": server_name, "tools": [], "error": str(e)}
-
 
 @app.post("/api/mcp/call")
 async def api_mcp_call(req: Request):
@@ -1618,7 +1002,6 @@ async def api_mcp_call(req: Request):
         log.error(f"MCP call error [{server}/{tool}]: {e}")
         return {"result": None, "server": server, "tool": tool, "error": str(e)}
 
-
 @app.get("/api/mcp/config")
 async def api_mcp_config_get():
     """Return full mcp_config.json contents."""
@@ -1629,7 +1012,6 @@ async def api_mcp_config_get():
     except Exception as e:
         log.error(f"MCP config get error: {e}")
         return {"error": str(e)}
-
 
 @app.post("/api/mcp/config/add")
 async def api_mcp_config_add(req: Request):
@@ -1659,7 +1041,6 @@ async def api_mcp_config_add(req: Request):
         log.error(f"MCP config add error: {e}")
         return {"ok": False, "error": str(e)}
 
-
 @app.post("/api/mcp/config/toggle/{server_name}")
 async def api_mcp_config_toggle(server_name: str, req: Request):
     """Toggle enabled/disabled for a named server."""
@@ -1680,7 +1061,6 @@ async def api_mcp_config_toggle(server_name: str, req: Request):
         log.error(f"MCP toggle error [{server_name}]: {e}")
         return {"ok": False, "error": str(e)}
 
-
 @app.delete("/api/mcp/config/remove/{server_name}")
 async def api_mcp_config_remove(server_name: str, req: Request):
     """Remove an MCP server entry from config."""
@@ -1700,7 +1080,6 @@ async def api_mcp_config_remove(server_name: str, req: Request):
         log.error(f"MCP remove error [{server_name}]: {e}")
         return {"ok": False, "error": str(e)}
 
-
 # ══════════════════════════════════════════════════════════════
 # O6: Webhook Triggers — receive push events from external services
 # ══════════════════════════════════════════════════════════════
@@ -1712,7 +1091,6 @@ def _verify_webhook(req: Request) -> bool:
     if not _WEBHOOK_TOKEN:
         return True
     return req.headers.get("X-Webhook-Token", "") == _WEBHOOK_TOKEN
-
 
 @app.post("/webhook/{source}")
 async def webhook_trigger(source: str, req: Request):
@@ -1773,7 +1151,6 @@ async def webhook_trigger(source: str, req: Request):
 
     return {"ok": True, "source": source, "event": event, "reply": reply}
 
-
 @app.post("/tg_webhook")
 async def tg_webhook(req: Request):
     """
@@ -1793,7 +1170,6 @@ async def tg_webhook(req: Request):
     except Exception as e:
         log.error(f"tg_webhook handler error: {e}")
     return {"ok": True}
-
 
 def _graceful_shutdown():
     """Flush memories on shutdown."""
@@ -1821,7 +1197,6 @@ def _graceful_shutdown():
         _persist_session()
     except Exception as e:
         log.error(f"Session save failed: {e}")
-
 
 # ══════════════════════════════════════════════════════════════
 # DEV PANEL API
@@ -1862,7 +1237,6 @@ _SYSTEM_NEXT = (
     "No generic advice — ground everything in the actual code provided."
 )
 
-
 @app.get("/api/devpanel/modules")
 async def devpanel_modules():
     modules = []
@@ -1875,7 +1249,6 @@ async def devpanel_modules():
             lines = 0
         modules.append({"name": name, "lines": lines})
     return {"modules": modules}
-
 
 @app.post("/api/devpanel/query")
 async def devpanel_query(req: Request):
@@ -1923,7 +1296,6 @@ async def devpanel_query(req: Request):
 
     return {"response": answer}
 
-
 # ────────────────────────────────────────────────────
 # Session History Endpoints
 # ────────────────────────────────────────────────────
@@ -1966,7 +1338,6 @@ async def get_sessions():
         log.warning(f"get_sessions failed: {e}")
         return {"today": [], "yesterday": [], "older": []}
 
-
 @app.post("/api/sessions/new")
 async def create_session_endpoint(request: Request):
     try:
@@ -1987,7 +1358,6 @@ async def create_session_endpoint(request: Request):
         log.warning(f"create_session failed: {e}")
         return {"ok": False, "error": str(e)}
 
-
 @app.get("/api/sessions/{session_id}/messages")
 async def get_session_messages(session_id: str):
     try:
@@ -2004,11 +1374,9 @@ async def get_session_messages(session_id: str):
         log.warning(f"get_session_messages failed: {e}")
         return {"messages": []}
 
-
 # ── REPO DNA ENDPOINTS ──────────────────────────────────────────────────────
 
 _REPO_URL_RE = re.compile(r"^https://github\.com/[\w\-]+/[\w\-]+$")
-
 
 @app.post("/api/repo/analyze")
 async def repo_analyze(request: Request):
@@ -2033,7 +1401,6 @@ async def repo_analyze(request: Request):
         log.warning(f"[repo_dna] unexpected: {exc}")
         return JSONResponse({"error": "Internal error", "detail": str(exc)}, status_code=500)
 
-
 @app.get("/api/repo/analyses")
 async def repo_analyses():
     if not _REPO_DNA_OK:
@@ -2054,7 +1421,6 @@ async def repo_analyses():
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=500)
 
-
 @app.post("/api/repo/watch")
 async def repo_watch(request: Request):
     if not _REPO_DNA_OK:
@@ -2069,7 +1435,6 @@ async def repo_watch(request: Request):
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=500)
 
-
 @app.get("/api/repo/watched")
 async def repo_watched():
     if not _REPO_DNA_OK:
@@ -2078,7 +1443,6 @@ async def repo_watched():
         return JSONResponse(_get_watched_repos())
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=500)
-
 
 _COMPARE_CATEGORIES = [
     "Memory Systems", "LLM Routing", "Voice Pipeline", "Agent Capabilities",
@@ -2152,7 +1516,6 @@ Score 1-10. winner must be exactly edith, repo, or tie. Output exactly {len(_COM
         log.warning(f"[repo_compare] {exc}")
         return JSONResponse({"error": str(exc)}, status_code=500)
 
-
 @app.delete("/api/repo/cache")
 async def repo_clear_cache(repo_url: str = None):
     if not _REPO_DNA_OK:
@@ -2163,7 +1526,6 @@ async def repo_clear_cache(repo_url: str = None):
         return JSONResponse({"cleared": True, "repo_url": url or "all"})
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=500)
-
 
 # ── Repo DNA — Click-to-adapt endpoints ──────────────────────────────────────
 
@@ -2196,7 +1558,6 @@ _ADAPT_PREVIEW_SYSTEM = (
     "REASON: <one line>\n"
     "```python\n<Python implementation, or empty block if not applicable>\n```"
 )
-
 
 @app.post("/api/repo/adapt-preview")
 async def repo_adapt_preview(request: Request):
@@ -2271,7 +1632,6 @@ async def repo_adapt_preview(request: Request):
         log.warning(f"[repo_adapt] preview error: {exc}")
         return JSONResponse({"error": str(exc)}, status_code=500)
 
-
 @app.post("/api/repo/adapt-confirm")
 async def repo_adapt_confirm(request: Request):
     if not _AGENT_OK:
@@ -2332,12 +1692,10 @@ async def repo_adapt_confirm(request: Request):
         log.warning(f"[repo_adapt] confirm error: {exc}")
         return JSONResponse({"error": str(exc)}, status_code=500)
 
-
 @app.get("/api/repo/adapt-status/{task_id}")
 async def repo_adapt_status(task_id: str):
     result = _adapt_results.get(task_id, {"status": "pending"})
     return JSONResponse(result)
-
 
 # ── Repo DNA — Gap plan (strategic gap → sub-task decomposition) ──────────────
 
@@ -2399,7 +1757,6 @@ _GAP_PLAN_SYSTEM = (
     '{"target_file":"filename.py","reason":"one sentence",'
     '"subtasks":[{"id":1,"title":"...","function_name":"...","description":"...","lines_estimate":20,"depends_on":[]}]}'
 )
-
 
 @app.post("/api/repo/gap-plan")
 async def repo_gap_plan(request: Request):
@@ -2470,7 +1827,6 @@ async def repo_gap_plan(request: Request):
         log.warning(f"[repo_gap_plan] error: {exc}")
         return JSONResponse({"error": str(exc)}, status_code=500)
 
-
 # ── Repo DNA — Subtask completion status ─────────────────────────────────────
 
 @app.get("/api/repo/subtask-status")
@@ -2497,7 +1853,6 @@ async def repo_subtask_status(repo_url: str, capability: str):
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=500)
 
-
 # ── Repo DNA — Success rate tracking ─────────────────────────────────────────
 
 class _RateBody(BaseModel):
@@ -2505,7 +1860,6 @@ class _RateBody(BaseModel):
     capability: str = ""
     outcome: str = "success"
     notes: str = ""
-
 
 @app.post("/api/repo/rate-adaptation")
 async def repo_rate_adaptation(body: _RateBody):
@@ -2524,7 +1878,6 @@ async def repo_rate_adaptation(body: _RateBody):
         log.warning(f"[rate_adaptation] {exc}")
         return JSONResponse({"error": str(exc)}, status_code=500)
 
-
 @app.get("/api/repo/success-rate")
 async def repo_success_rate(repo_url: str = ""):
     if not _REPO_DNA_OK:
@@ -2536,26 +1889,21 @@ async def repo_success_rate(repo_url: str = ""):
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=500)
 
-
 # ── Repo DNA — Proactive alert config ────────────────────────────────────────
 
 _alert_config: dict = {"enabled": True}
 
-
 class _AlertConfigBody(BaseModel):
     enabled: bool = True
-
 
 @app.post("/api/repo/alert-config")
 async def repo_alert_config(body: _AlertConfigBody):
     _alert_config["enabled"] = body.enabled
     return JSONResponse({"enabled": _alert_config["enabled"]})
 
-
 @app.get("/api/repo/alert-config")
 async def repo_alert_config_get():
     return JSONResponse({"enabled": _alert_config.get("enabled", True)})
-
 
 # ── Repo DNA — Trend tracking ────────────────────────────────────────────────
 
@@ -2576,13 +1924,11 @@ async def repo_trend(repo_url: str):
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=500)
 
-
 # ── Repo DNA — Multi-repo parallel compare ────────────────────────────────────
 
 class _MultiCompareBody(BaseModel):
     repo_urls: list = []
     force_refresh: bool = False
-
 
 @app.post("/api/repo/multi-compare")
 def repo_multi_compare(body: _MultiCompareBody):
@@ -2606,11 +1952,9 @@ def repo_multi_compare(body: _MultiCompareBody):
         log.warning(f"[multi_compare] {exc}")
         return JSONResponse({"error": str(exc)}, status_code=500)
 
-
 # ── Repo DNA — EDITH self-audit ──────────────────────────────────────────────
 
 _audit_cache: dict = {"result": None, "ts": 0.0}
-
 
 def _audit_edith_self() -> dict:
     import time, re as _re, json as _json
@@ -2695,7 +2039,6 @@ def _audit_edith_self() -> dict:
         "timestamp": __import__("datetime").datetime.utcnow().isoformat(),
     }
 
-
 @app.post("/api/repo/self-audit")
 async def repo_self_audit():
     if not _REPO_DNA_OK:
@@ -2712,7 +2055,6 @@ async def repo_self_audit():
         log.warning(f"[self_audit] error: {exc}")
         return JSONResponse({"error": str(exc)}, status_code=500)
 
-
 def _send_watch_alert(repo_url: str, items: list) -> None:
     """Fire a Telegram alert when watched repo has new low-effort steal items."""
     try:
@@ -2726,7 +2068,6 @@ def _send_watch_alert(repo_url: str, items: list) -> None:
         send_telegram("\n".join(lines))
     except Exception as exc:
         log.warning(f"[watch_alert] failed to send Telegram: {exc}")
-
 
 @app.post("/api/repo/watch-check")
 async def repo_watch_check():
@@ -2761,7 +2102,6 @@ async def repo_watch_check():
         return JSONResponse({"updated": updated, "count": len(updated)})
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=500)
-
 
 if __name__ == "__main__":
     import atexit
