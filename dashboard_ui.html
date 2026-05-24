@@ -1,0 +1,1293 @@
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>E.D.I.T.H — Control Interface</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --gold: #f0b429;
+    --gold-dim: #f0b42944;
+    --gold-glow: #f0b42922;
+    --red: #ff4444;
+    --green: #00ff88;
+    --blue: #00aaff;
+    --bg: #050507;
+    --bg2: #0a0a0f;
+    --bg3: #0f0f18;
+    --text: #c8cdd8;
+    --text-dim: #5a6070;
+    --border: #f0b42930;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+    display: flex;
+  }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width: 210px; min-width: 210px; height: 100vh;
+    background: #08080c;
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    position: fixed; top: 0; left: 0; z-index: 100;
+    overflow-y: auto; overflow-x: hidden;
+    transition: transform 0.25s cubic-bezier(0.4,0,0.2,1);
+  }
+  .sidebar.collapsed { transform: translateX(-210px); }
+  .sidebar::-webkit-scrollbar { width: 3px; }
+  .sidebar::-webkit-scrollbar-thumb { background: var(--border); }
+
+  /* sidebar toggle button */
+  .sb-toggle {
+    position: fixed; top: 14px; left: 14px; z-index: 200;
+    width: 32px; height: 32px;
+    background: #08080c; border: 1px solid var(--border);
+    color: var(--gold); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; transition: left 0.25s cubic-bezier(0.4,0,0.2,1), background 0.15s;
+    border-radius: 4px;
+  }
+  .sb-toggle:hover { background: #0f0f18; }
+  .sb-toggle.open { left: 222px; }
+
+  .sb-top {
+    padding: 16px 14px 12px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+  }
+  .sb-brand { font-size: 11px; font-weight: 700; letter-spacing: 2px; color: var(--gold); font-family: 'Share Tech Mono', monospace; }
+  .sb-badge {
+    font-size: 9px; background: #1e3a5f; color: #3b82f6;
+    padding: 2px 6px; border-radius: 4px; font-weight: 600; letter-spacing: 0.5px;
+  }
+
+  .sb-body { flex: 1; padding: 12px 10px; display: flex; flex-direction: column; gap: 3px; }
+
+  .btn-new-session {
+    width: 100%; padding: 8px 12px; margin-bottom: 12px;
+    background: #2563eb; color: #fff; border: none; border-radius: 4px;
+    font-size: 11px; font-weight: 600; cursor: pointer; letter-spacing: 1px;
+    transition: background 0.15s; text-align: center; font-family: 'Share Tech Mono', monospace;
+  }
+  .btn-new-session:hover { background: #1d4ed8; }
+
+  .sb-section {
+    font-size: 9px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--text-dim); padding: 8px 4px 4px; margin-top: 4px;
+  }
+
+  .nav-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 8px; cursor: pointer;
+    font-size: 11px; color: #5a6070; letter-spacing: 0.5px;
+    transition: background 0.12s, color 0.12s;
+    border-left: 2px solid transparent;
+  }
+  .nav-item:hover { background: #0f0f1a; color: var(--text); }
+  .nav-item.active { background: #0a1628; color: #3b82f6; border-left-color: #3b82f6; }
+  .nav-item .ni { font-size: 12px; width: 15px; text-align: center; flex-shrink: 0; }
+
+  .sb-hist-sub {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 9px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+    color: var(--text-dim); padding: 6px 4px 2px; margin-top: 2px;
+  }
+
+  .hist-item {
+    padding: 4px 8px; font-size: 10px; color: #3a4050;
+    cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    transition: background 0.12s, color 0.12s; letter-spacing: 0.3px;
+  }
+  .hist-item:hover { background: #0f0f1a; color: var(--text); }
+
+  .sb-health {
+    padding: 10px 14px 8px;
+    border-top: 1px solid var(--border);
+    display: flex; flex-direction: column; gap: 7px;
+  }
+  .h-row { display: flex; align-items: center; gap: 6px; font-size: 10px; }
+  .h-lbl { color: var(--text-dim); width: 28px; flex-shrink: 0; letter-spacing: 0.5px; }
+  .h-bar-wrap { flex: 1; height: 3px; background: #1a1a2e; border-radius: 2px; overflow: hidden; }
+  .h-bar { height: 100%; border-radius: 2px; width: 0; transition: width 1s ease; }
+  .hb-blue   { background: #3b82f6; box-shadow: 0 0 4px #3b82f6; }
+  .hb-orange { background: var(--gold); box-shadow: 0 0 4px var(--gold); }
+  .h-pct { font-size: 10px; color: var(--text-dim); width: 30px; text-align: right; flex-shrink: 0; }
+  .h-llm { display: flex; align-items: center; gap: 5px; }
+  .h-llm-prov { font-size: 10px; font-weight: 700; color: var(--gold); letter-spacing: 1px; }
+  .h-dot-green { width: 5px; height: 5px; border-radius: 50%; background: var(--green); box-shadow: 0 0 4px var(--green); margin-left: auto; }
+
+  .sb-user {
+    display: flex; align-items: center; gap: 9px;
+    padding: 10px 14px; border-top: 1px solid var(--border); cursor: pointer;
+    transition: background 0.12s;
+  }
+  .sb-user:hover { background: #0f0f1a; }
+  .sb-avatar {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: #2563eb; color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; flex-shrink: 0;
+  }
+  .sb-uinfo { flex: 1; min-width: 0; }
+  .sb-uname  { font-size: 11px; font-weight: 700; color: var(--text); letter-spacing: 0.5px; }
+  .sb-uemail { font-size: 9px; color: var(--text-dim); }
+
+  /* push main content right of sidebar */
+  .page-wrap { margin-left: 210px; flex: 1; min-width: 0; transition: margin-left 0.25s cubic-bezier(0.4,0,0.2,1); }
+  .page-wrap.expanded { margin-left: 0; }
+
+  /* Scanline effect */
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.08) 2px,
+      rgba(0,0,0,0.08) 4px
+    );
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  /* Grid background */
+  body::after {
+    content: '';
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background-image:
+      linear-gradient(var(--gold-glow) 1px, transparent 1px),
+      linear-gradient(90deg, var(--gold-glow) 1px, transparent 1px);
+    background-size: 60px 60px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px;
+  }
+
+  /* Header */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--gold);
+    padding-bottom: 16px;
+    margin-bottom: 24px;
+    position: relative;
+  }
+
+  .header::after {
+    content: '';
+    position: absolute;
+    bottom: -3px; left: 0;
+    width: 30%;
+    height: 1px;
+    background: var(--gold);
+    box-shadow: 0 0 12px var(--gold);
+  }
+
+  .logo {
+    font-family: 'Orbitron', monospace;
+    font-size: 28px;
+    font-weight: 900;
+    color: var(--gold);
+    text-shadow: 0 0 20px var(--gold), 0 0 40px var(--gold-dim);
+    letter-spacing: 4px;
+  }
+
+  .logo span {
+    font-size: 11px;
+    display: block;
+    color: var(--text-dim);
+    letter-spacing: 6px;
+    font-weight: 300;
+    font-family: 'Rajdhani', sans-serif;
+    margin-top: 2px;
+  }
+
+  .header-right {
+    text-align: right;
+  }
+
+  .time-display {
+    font-family: 'Orbitron', monospace;
+    font-size: 22px;
+    color: var(--gold);
+    text-shadow: 0 0 10px var(--gold-dim);
+  }
+
+  .date-display {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-family: 'Rajdhani', sans-serif;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  /* Status bar */
+  .status-bar {
+    display: flex;
+    gap: 24px;
+    margin-bottom: 24px;
+    padding: 10px 16px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--gold);
+  }
+
+  .status-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .status-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 6px var(--green);
+    animation: pulse 2s infinite;
+  }
+
+  .status-dot.warn { background: var(--gold); box-shadow: 0 0 6px var(--gold); }
+  .status-dot.err { background: var(--red); box-shadow: 0 0 6px var(--red); }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* Grid layout */
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-rows: auto auto auto;
+    gap: 16px;
+  }
+
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 3px; height: 100%;
+    background: var(--gold);
+  }
+
+  .card::after {
+    content: '';
+    position: absolute;
+    top: 0; right: 0;
+    width: 0; height: 0;
+    border-style: solid;
+    border-width: 0 16px 16px 0;
+    border-color: transparent var(--gold) transparent transparent;
+  }
+
+  .card-label {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 10px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .card-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* Span cards */
+  .span-2 { grid-column: span 2; }
+  .span-3 { grid-column: span 3; }
+
+  /* Metric */
+  .metric-big {
+    font-family: 'Orbitron', monospace;
+    font-size: 36px;
+    font-weight: 700;
+    color: var(--gold);
+    text-shadow: 0 0 20px var(--gold-dim);
+    line-height: 1;
+  }
+
+  .metric-sub {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 4px;
+    font-family: 'Rajdhani', sans-serif;
+    letter-spacing: 1px;
+  }
+
+  /* Progress bar */
+  .bar-container {
+    margin-top: 12px;
+    background: #ffffff08;
+    height: 6px;
+    width: 100%;
+    position: relative;
+  }
+
+  .bar-fill {
+    height: 100%;
+    transition: width 0.8s ease;
+    position: relative;
+  }
+
+  .bar-fill::after {
+    content: '';
+    position: absolute;
+    right: 0; top: -3px;
+    width: 2px; height: 12px;
+    background: inherit;
+    box-shadow: 0 0 8px currentColor;
+  }
+
+  .bar-gold { background: var(--gold); }
+  .bar-green { background: var(--green); }
+  .bar-red { background: var(--red); }
+  .bar-blue { background: var(--blue); }
+
+  /* Model display */
+  .model-name {
+    font-family: 'Orbitron', monospace;
+    font-size: 16px;
+    color: var(--gold);
+    text-shadow: 0 0 10px var(--gold-dim);
+    word-break: break-all;
+  }
+
+  /* Models list */
+  .model-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+    font-size: 11px;
+    color: var(--text);
+    margin: 3px;
+    font-family: 'Rajdhani', sans-serif;
+    letter-spacing: 1px;
+  }
+
+  .model-pill .dot {
+    width: 5px; height: 5px;
+    background: var(--green);
+    border-radius: 50%;
+    box-shadow: 0 0 4px var(--green);
+  }
+
+  /* Modules grid */
+  .modules-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 8px;
+  }
+
+  .module-item {
+    padding: 8px;
+    border: 1px solid;
+    text-align: center;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 11px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    transition: all 0.3s;
+  }
+
+  .module-item.on {
+    border-color: var(--green);
+    color: var(--green);
+    background: rgba(0,255,136,0.05);
+    text-shadow: 0 0 8px var(--green);
+  }
+
+  .module-item.off {
+    border-color: var(--text-dim);
+    color: var(--text-dim);
+    opacity: 0.4;
+  }
+
+  /* Logs */
+  .log-list {
+    font-size: 11px;
+    line-height: 2;
+    color: var(--text-dim);
+    max-height: 140px;
+    overflow-y: auto;
+  }
+
+  .log-list::-webkit-scrollbar { width: 3px; }
+  .log-list::-webkit-scrollbar-track { background: transparent; }
+  .log-list::-webkit-scrollbar-thumb { background: var(--gold); }
+
+  .log-line { border-bottom: 1px solid #ffffff05; padding: 2px 0; }
+  .log-line:first-child { color: var(--gold); }
+
+  /* Phase progress */
+  .phase-track {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+
+  .phase-block {
+    width: 28px; height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    font-family: 'Orbitron', monospace;
+    border: 1px solid;
+    transition: all 0.3s;
+  }
+
+  .phase-block.done {
+    border-color: var(--gold);
+    background: var(--gold-dim);
+    color: var(--gold);
+    text-shadow: 0 0 6px var(--gold);
+  }
+
+  .phase-block.pending {
+    border-color: var(--text-dim);
+    color: var(--text-dim);
+    opacity: 0.3;
+  }
+
+  /* CPU cores */
+  .cores-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .core-bar {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .core-visual {
+    width: 100%;
+    height: 40px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+  }
+
+  .core-fill {
+    background: var(--blue);
+    width: 100%;
+    transition: height 1s ease;
+  }
+
+  .core-label {
+    font-size: 9px;
+    color: var(--text-dim);
+    font-family: 'Rajdhani', sans-serif;
+  }
+
+  /* Corner decorations */
+  .corner-deco {
+    position: absolute;
+    bottom: 8px; right: 12px;
+    font-size: 9px;
+    color: var(--text-dim);
+    font-family: 'Orbitron', monospace;
+    opacity: 0.4;
+  }
+
+  /* Glow animation on values */
+  @keyframes glow-pulse {
+    0%, 100% { text-shadow: 0 0 20px var(--gold-dim); }
+    50% { text-shadow: 0 0 30px var(--gold), 0 0 60px var(--gold-dim); }
+  }
+
+  .metric-big { animation: glow-pulse 3s ease-in-out infinite; }
+
+  /* Footer */
+  .footer {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: var(--text-dim);
+    font-family: 'Rajdhani', sans-serif;
+    letter-spacing: 2px;
+  }
+</style>
+</head>
+<body>
+<button class="sb-toggle open" id="sb-toggle" onclick="toggleSidebar()" title="Toggle sidebar">☰</button>
+<!-- ── SIDEBAR ── -->
+<aside class="sidebar" id="sidebar">
+  <div class="sb-top">
+    <span class="sb-brand">E.D.I.T.H</span>
+    <span class="sb-badge">v5.0</span>
+  </div>
+  <div class="sb-body">
+    <div class="sb-section">Menu</div>
+    <div class="nav-item active"><span class="ni">🖥️</span> Dashboard</div>
+    <div class="nav-item"><span class="ni">🔮</span> Life OS</div>
+    <div class="nav-item"><span class="ni">📱</span> Phone</div>
+    <div class="nav-item" id="nav-devpanel"><span class="ni">🧠</span> Dev Panel</div>
+
+    <div class="sb-section">Customize</div>
+    <div class="nav-item"><span class="ni">🧩</span> Connectors</div>
+    <div class="nav-item"><span class="ni">⚡</span> Skills</div>
+    <div class="nav-item"><span class="ni">⚙️</span> MCP</div>
+    <div class="nav-item"><span class="ni">🖥️</span> Commands</div>
+
+    <div class="sb-section">History</div>
+    <div class="sb-hist-sub"><span>🕐</span> Today</div>
+    <div class="hist-item" id="sb-hist-1">Loading...</div>
+    <div class="hist-item" id="sb-hist-2">Loading...</div>
+    <div class="sb-hist-sub"><span>📅</span> Yesterday</div>
+    <div class="hist-item">Orchestrator refactor</div>
+    <div class="hist-item">Weekly briefing</div>
+  </div>
+
+  <div class="sb-health">
+    <div class="h-row">
+      <span class="h-lbl">RAM</span>
+      <div class="h-bar-wrap"><div class="h-bar hb-blue" id="sb-ram-bar"></div></div>
+      <span class="h-pct" id="sb-ram-pct">—</span>
+    </div>
+    <div class="h-row">
+      <span class="h-lbl">CPU</span>
+      <div class="h-bar-wrap"><div class="h-bar hb-orange" id="sb-cpu-bar"></div></div>
+      <span class="h-pct" id="sb-cpu-pct">—</span>
+    </div>
+    <div class="h-row h-llm">
+      <span class="h-lbl">LLM</span>
+      <span>⚙️</span>
+      <span class="h-llm-prov" id="sb-llm">GROQ</span>
+      <span class="h-dot-green"></span>
+    </div>
+  </div>
+
+  <div class="sb-user">
+    <div class="sb-avatar">V</div>
+    <div class="sb-uinfo">
+      <div class="sb-uname">Vaibhav</div>
+      <div class="sb-uemail">vaibhav@edith</div>
+    </div>
+    <span style="color:var(--text-dim);font-size:13px">⚙️</span>
+  </div>
+</aside>
+
+<!-- ── MAIN CONTENT ── -->
+<div class="page-wrap">
+<div class="container">
+
+  <div class="header">
+    <div class="logo">
+      E.D.I.T.H
+      <span>Even Dead I'm The Hero — v5.0 Control Interface</span>
+    </div>
+    <div class="header-right">
+      <div class="time-display" id="clock">--:--:--</div>
+      <div class="date-display" id="date-display">Loading...</div>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    <div class="status-item"><div class="status-dot" id="ollama-dot"></div> <span id="ollama-status">Ollama</span></div>
+    <div class="status-item"><div class="status-dot"></div> FIREWALL ACTIVE</div>
+    <div class="status-item"><div class="status-dot"></div> VAULT SECURED</div>
+    <div class="status-item"><div class="status-dot" id="ram-dot"></div> <span id="ram-status">RAM OK</span></div>
+    <div class="status-item"><div class="status-dot"></div> KDE CONNECT</div>
+    <div class="status-item" style="margin-left:auto; font-size:10px;" id="refresh-counter">REFRESH IN 10s</div>
+  </div>
+
+  <div class="grid">
+
+    <!-- RAM -->
+    <div class="card">
+      <div class="card-label">RAM Usage</div>
+      <div class="metric-big" id="ram-val">--</div>
+      <div class="metric-sub" id="ram-sub">-- GB / -- GB</div>
+      <div class="bar-container">
+        <div class="bar-fill bar-gold" id="ram-bar" style="width:0%"></div>
+      </div>
+      <div class="corner-deco">MEM</div>
+    </div>
+
+    <!-- CPU -->
+    <div class="card">
+      <div class="card-label">CPU Load</div>
+      <div class="metric-big" id="cpu-val">--</div>
+      <div class="metric-sub">Intel i5-12400 — 6C/12T</div>
+      <div class="bar-container">
+        <div class="bar-fill bar-blue" id="cpu-bar" style="width:0%"></div>
+      </div>
+      <div class="corner-deco">CPU</div>
+    </div>
+
+    <!-- Disk -->
+    <div class="card">
+      <div class="card-label">Disk</div>
+      <div class="metric-big" id="disk-val">--</div>
+      <div class="metric-sub" id="disk-sub">-- GB / -- GB</div>
+      <div class="bar-container">
+        <div class="bar-fill bar-green" id="disk-bar" style="width:0%"></div>
+      </div>
+      <div class="corner-deco">SSD</div>
+    </div>
+
+    <!-- Active Model -->
+    <div class="card">
+      <div class="card-label">Active Model</div>
+      <div class="model-name" id="active-model">Scanning...</div>
+      <div class="metric-sub" style="margin-top:8px">Primary AI Brain</div>
+      <div class="corner-deco">LLM</div>
+    </div>
+
+    <!-- Installed Models -->
+    <div class="card span-2">
+      <div class="card-label">Installed Models</div>
+      <div id="models-list">Loading...</div>
+      <div class="corner-deco">OLLAMA</div>
+    </div>
+
+    <!-- EDITH Modules -->
+    <div class="card span-3">
+      <div class="card-label">EDITH Modules — v5.0</div>
+      <div class="modules-grid" id="modules-grid">Loading...</div>
+    </div>
+
+    <!-- Phase Progress -->
+    <div class="card span-2">
+      <div class="card-label">Build Progress — Phase Tracker</div>
+      <div class="phase-track" id="phase-track"></div>
+      <div class="metric-sub" style="margin-top:12px" id="phase-summary">Loading...</div>
+    </div>
+
+    <!-- Security Logs -->
+    <div class="card">
+      <div class="card-label">Security Audit Log</div>
+      <div class="log-list" id="logs">Loading...</div>
+      <div class="corner-deco">SEC</div>
+    </div>
+
+    <!-- MCP Manager -->
+    <div class="card span-3" style="padding-bottom:24px">
+      <div class="card-label">MCP Servers — Model Context Protocol Manager</div>
+
+      <!-- Server Table -->
+      <div id="mcp-table-wrap" style="overflow-x:auto;margin-bottom:20px">
+        <table id="mcp-table" style="width:100%;border-collapse:collapse;font-size:12px;font-family:'Rajdhani',sans-serif">
+          <thead>
+            <tr style="color:var(--gold);border-bottom:1px solid var(--border);text-align:left">
+              <th style="padding:6px 10px">Server</th>
+              <th style="padding:6px 10px">Status</th>
+              <th style="padding:6px 10px">Description</th>
+              <th style="padding:6px 10px">Tools</th>
+              <th style="padding:6px 10px">Last Called</th>
+              <th style="padding:6px 10px">Env Vars</th>
+              <th style="padding:6px 10px">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="mcp-tbody">
+            <tr><td colspan="7" style="padding:12px;color:var(--text-dim)">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Add Server Form -->
+      <div style="border:1px solid var(--border);padding:16px;background:var(--bg3);position:relative">
+        <div style="font-family:'Rajdhani',sans-serif;font-size:10px;letter-spacing:3px;color:var(--gold);text-transform:uppercase;margin-bottom:14px">
+          ＋ Add MCP Server
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div>
+            <label style="font-size:10px;color:var(--text-dim);display:block;margin-bottom:4px;letter-spacing:1px;text-transform:uppercase">Name *</label>
+            <input id="mcp-add-name" placeholder="e.g. filesystem" style="width:100%;background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:6px 10px;font-family:'Share Tech Mono',monospace;font-size:12px;outline:none">
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-dim);display:block;margin-bottom:4px;letter-spacing:1px;text-transform:uppercase">Command *</label>
+            <input id="mcp-add-command" placeholder="e.g. npx" style="width:100%;background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:6px 10px;font-family:'Share Tech Mono',monospace;font-size:12px;outline:none">
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-dim);display:block;margin-bottom:4px;letter-spacing:1px;text-transform:uppercase">Args (comma-separated)</label>
+            <input id="mcp-add-args" placeholder="-y, @modelcontextprotocol/server-filesystem, /home/vaibhav" style="width:100%;background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:6px 10px;font-family:'Share Tech Mono',monospace;font-size:12px;outline:none">
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-dim);display:block;margin-bottom:4px;letter-spacing:1px;text-transform:uppercase">Description</label>
+            <input id="mcp-add-desc" placeholder="What does this server do?" style="width:100%;background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:6px 10px;font-family:'Share Tech Mono',monospace;font-size:12px;outline:none">
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-dim);display:block;margin-bottom:4px;letter-spacing:1px;text-transform:uppercase">Env Vars (KEY=value, one per line)</label>
+            <textarea id="mcp-add-env" rows="3" placeholder="BRAVE_API_KEY=sk-xxx&#10;GITHUB_TOKEN=ghp_xxx" style="width:100%;background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:6px 10px;font-family:'Share Tech Mono',monospace;font-size:12px;outline:none;resize:vertical"></textarea>
+          </div>
+          <div style="display:flex;flex-direction:column;justify-content:flex-end;gap:8px">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-family:'Rajdhani',sans-serif;font-size:13px;color:var(--text)">
+              <input type="checkbox" id="mcp-add-enabled" style="accent-color:var(--gold)"> Enable immediately
+            </label>
+            <button onclick="mcpAddServer()" style="background:var(--gold);color:#000;border:none;padding:8px 20px;font-family:'Orbitron',monospace;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:2px">
+              ADD SERVER
+            </button>
+          </div>
+        </div>
+        <div id="mcp-add-msg" style="margin-top:10px;font-size:12px;font-family:'Rajdhani',sans-serif"></div>
+      </div>
+
+      <div class="corner-deco">MCP</div>
+    </div>
+
+  </div>
+
+  <div class="footer">
+    <span>EDITH v5.0 — VAIBHAV KASHYAP — FATEHPUR, UP, IN</span>
+    <span>i5-12400 | 8GB DDR4 | 1TB SSD | MANJARO LINUX</span>
+    <span id="last-updated">Last updated: --</span>
+  </div>
+
+</div><!-- /container -->
+</div><!-- /page-wrap -->
+
+<script>
+let countdown = 10;
+
+async function fetchStats() {
+  try {
+    const res = await fetch('/api/stats');
+    const data = await res.json();
+    updateDashboard(data);
+  } catch(e) {
+    console.error('Failed to fetch stats', e);
+  }
+}
+
+function updateDashboard(data) {
+  const sys = data.system;
+
+  // Time
+  document.getElementById('clock').textContent = data.time;
+  document.getElementById('date-display').textContent = data.date;
+  document.getElementById('last-updated').textContent = 'Last updated: ' + data.time;
+
+  // RAM
+  const ramPct = sys.ram_percent;
+  document.getElementById('ram-val').textContent = ramPct.toFixed(1) + '%';
+  document.getElementById('ram-sub').textContent = sys.ram_used + ' GB / ' + sys.ram_total + ' GB';
+  document.getElementById('ram-bar').style.width = ramPct + '%';
+  document.getElementById('ram-bar').className = 'bar-fill ' + (ramPct > 85 ? 'bar-red' : ramPct > 70 ? 'bar-gold' : 'bar-green');
+
+  const ramDot = document.getElementById('ram-dot');
+  const ramStatus = document.getElementById('ram-status');
+  if (ramPct > 85) {
+    ramDot.className = 'status-dot err';
+    ramStatus.textContent = 'RAM CRITICAL';
+  } else if (ramPct > 70) {
+    ramDot.className = 'status-dot warn';
+    ramStatus.textContent = 'RAM WARNING';
+  } else {
+    ramDot.className = 'status-dot';
+    ramStatus.textContent = 'RAM OK';
+  }
+
+  // CPU
+  document.getElementById('cpu-val').textContent = sys.cpu_percent.toFixed(1) + '%';
+  document.getElementById('cpu-bar').style.width = sys.cpu_percent + '%';
+
+  // Disk
+  document.getElementById('disk-val').textContent = sys.disk_percent.toFixed(1) + '%';
+  document.getElementById('disk-sub').textContent = sys.disk_used + ' GB / ' + sys.disk_total + ' GB';
+  document.getElementById('disk-bar').style.width = sys.disk_percent + '%';
+  document.getElementById('disk-bar').className = 'bar-fill ' + (sys.disk_percent > 85 ? 'bar-red' : 'bar-green');
+
+  // Active model
+  const modelEl = document.getElementById('active-model');
+  modelEl.textContent = data.model;
+  const ollamaDot = document.getElementById('ollama-dot');
+  const ollamaStatus = document.getElementById('ollama-status');
+  if (data.model === 'Ollama offline') {
+    ollamaDot.className = 'status-dot err';
+    ollamaStatus.textContent = 'OLLAMA OFFLINE';
+  } else {
+    ollamaDot.className = 'status-dot';
+    ollamaStatus.textContent = 'OLLAMA ONLINE';
+  }
+
+  // Models list
+  const modelsEl = document.getElementById('models-list');
+  if (data.models.length > 0) {
+    modelsEl.innerHTML = data.models.map(m =>
+      `<span class="model-pill"><span class="dot"></span>${m}</span>`
+    ).join('');
+  } else {
+    modelsEl.innerHTML = '<span style="color:var(--text-dim);font-size:12px">No models loaded</span>';
+  }
+
+  // Modules
+  const modulesEl = document.getElementById('modules-grid');
+  modulesEl.innerHTML = data.modules.map(m =>
+    `<div class="module-item ${m.active ? 'on' : 'off'}">${m.name}</div>`
+  ).join('');
+
+  // Phase tracker (30 phases, 26 done based on current progress)
+  const donePhases = 26;
+  const phaseEl = document.getElementById('phase-track');
+  phaseEl.innerHTML = Array.from({length: 30}, (_, i) => {
+    const n = i + 1;
+    const done = n <= donePhases;
+    return `<div class="phase-block ${done ? 'done' : 'pending'}" title="Phase ${n}">${n}</div>`;
+  }).join('');
+  document.getElementById('phase-summary').textContent =
+    donePhases + '/30 phases complete — ' + Math.round(donePhases/30*100) + '% — EDITH v5.0 almost there';
+
+  // Logs
+  const logsEl = document.getElementById('logs');
+  logsEl.innerHTML = data.logs.map(l =>
+    `<div class="log-line">${l}</div>`
+  ).join('') || '<div class="log-line">No logs yet</div>';
+
+}
+
+// ── MCP Manager ──────────────────────────────────────
+
+async function mcpLoadTable() {
+  const tbody = document.getElementById('mcp-tbody');
+  try {
+    const res = await fetch('/api/mcp/status');
+    const data = await res.json();
+    if (data.error || Object.keys(data).length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="padding:12px;color:var(--text-dim)">No MCP servers configured.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = Object.entries(data).map(([name, info]) => {
+      const enabled = info.enabled;
+      const dotColor = enabled ? 'var(--green)' : 'var(--text-dim)';
+      const btnLabel = enabled ? 'DISABLE' : 'ENABLE';
+      const btnColor = enabled ? 'var(--red)' : 'var(--green)';
+      const envRes = Object.keys(info.env_vars || {}).join(', ') || '—';
+      return `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:8px 10px;color:var(--gold);font-weight:bold">${name}</td>
+        <td style="padding:8px 10px">
+          <span style="display:inline-flex;align-items:center;gap:6px">
+            <span style="width:8px;height:8px;border-radius:50%;background:${dotColor};box-shadow:0 0 6px ${dotColor}"></span>
+            <span style="font-size:11px;color:${dotColor}">${enabled ? 'ENABLED' : 'DISABLED'}</span>
+          </span>
+        </td>
+        <td style="padding:8px 10px;color:var(--text-dim);font-size:11px;max-width:200px">${info.description || '—'}</td>
+        <td style="padding:8px 10px;text-align:center">${info.tool_count}</td>
+        <td style="padding:8px 10px;font-size:10px;color:var(--text-dim)">${info.last_called}</td>
+        <td style="padding:8px 10px;font-size:10px;color:var(--text-dim)">${envRes}</td>
+        <td style="padding:8px 10px;white-space:nowrap">
+          <button onclick="mcpToggle('${name}')" style="background:transparent;border:1px solid ${btnColor};color:${btnColor};padding:3px 10px;font-family:'Rajdhani',sans-serif;font-size:11px;cursor:pointer;margin-right:4px;letter-spacing:1px">${btnLabel}</button>
+          <button onclick="mcpRemove('${name}')" style="background:transparent;border:1px solid var(--red);color:var(--red);padding:3px 10px;font-family:'Rajdhani',sans-serif;font-size:11px;cursor:pointer;letter-spacing:1px">✕ REMOVE</button>
+        </td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="7" style="padding:12px;color:var(--red)">Error: ${e}</td></tr>`;
+  }
+}
+
+async function mcpToggle(name) {
+  try {
+    const res = await fetch(`/api/mcp/config/toggle/${name}`, {method:'POST'});
+    const data = await res.json();
+    if (data.ok) mcpLoadTable();
+    else alert('Toggle failed: ' + data.error);
+  } catch(e) { alert('Error: ' + e); }
+}
+
+async function mcpRemove(name) {
+  if (!confirm(`Remove MCP server "${name}"? This cannot be undone.`)) return;
+  try {
+    const res = await fetch(`/api/mcp/config/remove/${name}`, {method:'DELETE'});
+    const data = await res.json();
+    if (data.ok) mcpLoadTable();
+    else alert('Remove failed: ' + data.error);
+  } catch(e) { alert('Error: ' + e); }
+}
+
+async function mcpAddServer() {
+  const name    = document.getElementById('mcp-add-name').value.trim();
+  const command = document.getElementById('mcp-add-command').value.trim();
+  const argsRaw = document.getElementById('mcp-add-args').value.trim();
+  const desc    = document.getElementById('mcp-add-desc').value.trim();
+  const envRaw  = document.getElementById('mcp-add-env').value.trim();
+  const enabled = document.getElementById('mcp-add-enabled').checked;
+  const msgEl   = document.getElementById('mcp-add-msg');
+
+  if (!name || !command) {
+    msgEl.style.color = 'var(--red)';
+    msgEl.textContent = '⚠ Name and command are required.';
+    return;
+  }
+
+  const args = argsRaw ? argsRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+  const env_vars = {};
+  envRaw.split('\n').forEach(line => {
+    const eq = line.indexOf('=');
+    if (eq > 0) {
+      const k = line.slice(0, eq).trim();
+      const v = line.slice(eq + 1).trim();
+      if (k) env_vars[k] = v || 'required';
+    }
+  });
+
+  try {
+    const res = await fetch('/api/mcp/config/add', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({name, command, args, description: desc, env_vars, enabled})
+    });
+    const data = await res.json();
+    if (data.ok) {
+      msgEl.style.color = 'var(--green)';
+      msgEl.textContent = `✓ Server "${name}" added successfully.`;
+      document.getElementById('mcp-add-name').value = '';
+      document.getElementById('mcp-add-command').value = '';
+      document.getElementById('mcp-add-args').value = '';
+      document.getElementById('mcp-add-desc').value = '';
+      document.getElementById('mcp-add-env').value = '';
+      document.getElementById('mcp-add-enabled').checked = false;
+      mcpLoadTable();
+    } else {
+      msgEl.style.color = 'var(--red)';
+      msgEl.textContent = '⚠ ' + data.error;
+    }
+  } catch(e) {
+    msgEl.style.color = 'var(--red)';
+    msgEl.textContent = 'Error: ' + e;
+  }
+}
+
+// Countdown timer
+setInterval(() => {
+  countdown--;
+  document.getElementById('refresh-counter').textContent = 'REFRESH IN ' + countdown + 's';
+  if (countdown <= 0) {
+    countdown = 10;
+    fetchStats();
+    mcpLoadTable();
+  }
+}, 1000);
+
+// Clock
+setInterval(() => {
+  const now = new Date();
+  const t = now.toTimeString().split(' ')[0];
+  document.getElementById('clock').textContent = t;
+}, 1000);
+
+// Initial load
+fetchStats();
+mcpLoadTable();
+sbFetchStats();
+sbFetchHistory();
+
+// ── Sidebar live data ──
+async function sbFetchStats() {
+  try {
+    const res = await fetch('/api/stats');
+    if (!res.ok) throw new Error();
+    const d = await res.json();
+    const sys = d.system;
+    const ram = Math.round(sys.ram_percent);
+    const cpu = Math.round(sys.cpu_percent);
+    document.getElementById('sb-ram-bar').style.width = ram + '%';
+    document.getElementById('sb-ram-pct').textContent = ram + '%';
+    document.getElementById('sb-cpu-bar').style.width = cpu + '%';
+    document.getElementById('sb-cpu-pct').textContent = cpu + '%';
+    // LLM — try /api/status from chat_server
+    try {
+      const r2 = await fetch('http://127.0.0.1:8001/api/status');
+      const d2 = await r2.json();
+      const p = (d2.active_provider || 'LOCAL').toUpperCase();
+      document.getElementById('sb-llm').textContent = p;
+    } catch(e) {}
+  } catch(e) {}
+}
+
+async function sbFetchHistory() {
+  try {
+    const res = await fetch('http://127.0.0.1:8001/api/traces/recent?limit=2');
+    if (!res.ok) throw new Error();
+    const d = await res.json();
+    const traces = d.traces || [];
+    if (traces[0]) document.getElementById('sb-hist-1').textContent = (traces[0].user_input || '—').slice(0, 24);
+    if (traces[1]) document.getElementById('sb-hist-2').textContent = (traces[1].user_input || '—').slice(0, 24);
+  } catch(e) {}
+}
+
+setInterval(sbFetchStats, 10000);
+setInterval(sbFetchHistory, 30000);
+
+// Sidebar nav
+// ── Dev Panel state ─────────────────────────────────────────────
+let dpMode = 'qa';
+let dpModules = [];
+let dpSelected = new Set();
+let dpInited = false;
+
+async function dpInit() {
+  if (dpInited) return;
+  dpInited = true;
+  document.getElementById('dp-status').textContent = 'LOADING MODULES...';
+  try {
+    const r = await fetch('/api/devpanel/modules');
+    const data = await r.json();
+    dpModules = data.modules;
+    const container = document.getElementById('dp-chips');
+    container.innerHTML = '';
+    dpModules.forEach(m => {
+      const chip = document.createElement('div');
+      chip.textContent = m.name;
+      chip.title = m.lines + ' lines';
+      chip.style.cssText = 'padding:3px 10px;font-size:10px;border:1px solid var(--border);cursor:pointer;border-radius:10px;color:var(--text-dim);user-select:none;transition:all 0.15s;font-family:Share Tech Mono,monospace';
+      chip.dataset.name = m.name;
+      chip.addEventListener('click', () => {
+        if (dpSelected.has(m.name)) {
+          dpSelected.delete(m.name);
+          chip.style.borderColor = 'var(--border)';
+          chip.style.color = 'var(--text-dim)';
+          chip.style.background = '';
+        } else {
+          dpSelected.add(m.name);
+          chip.style.borderColor = 'var(--gold)';
+          chip.style.color = 'var(--gold)';
+          chip.style.background = 'var(--gold-glow)';
+        }
+        dpUpdateCtx();
+      });
+      container.appendChild(chip);
+    });
+    document.getElementById('dp-status').textContent = dpModules.length + ' MODULES READY';
+    dpUpdateCtx();
+  } catch(e) {
+    document.getElementById('dp-status').textContent = 'ERROR LOADING MODULES';
+    document.getElementById('dp-chips').innerHTML = '<span style="color:var(--red);font-size:11px">Failed to load modules — is dashboard.py running?</span>';
+  }
+}
+
+function dpUpdateCtx() {
+  const total = dpModules.filter(m => dpSelected.has(m.name)).reduce((s,m) => s + m.lines, 0);
+  const el = document.getElementById('dp-ctx-info');
+  if (el) el.textContent = dpSelected.size + ' files selected · ~' + total + ' lines in context';
+}
+
+function dpSelectAll() {
+  dpSelected.clear();
+  document.querySelectorAll('#dp-chips div').forEach((chip, i) => {
+    if (!dpModules[i]) return;
+    dpSelected.add(dpModules[i].name);
+    chip.style.borderColor = 'var(--gold)';
+    chip.style.color = 'var(--gold)';
+    chip.style.background = 'var(--gold-glow)';
+  });
+  dpUpdateCtx();
+}
+
+function dpClearAll() {
+  dpSelected.clear();
+  document.querySelectorAll('#dp-chips div').forEach(chip => {
+    chip.style.borderColor = 'var(--border)';
+    chip.style.color = 'var(--text-dim)';
+    chip.style.background = '';
+  });
+  dpUpdateCtx();
+}
+
+function dpSetMode(btn) {
+  dpMode = btn.dataset.mode;
+  document.querySelectorAll('.dp-mode-btn').forEach(b => {
+    b.style.borderColor = 'var(--border)';
+    b.style.background = '#0a0a0f';
+    b.style.color = 'var(--text-dim)';
+  });
+  btn.style.borderColor = 'var(--gold)';
+  btn.style.background = '#1a120a';
+  btn.style.color = 'var(--gold)';
+}
+
+async function dpSubmit() {
+  const query = document.getElementById('dp-input').value.trim();
+  if (!query) return;
+  if (dpSelected.size === 0) {
+    document.getElementById('dp-response').innerHTML = '<span style="color:var(--gold)">⚠ Select at least one module first.</span>';
+    return;
+  }
+  const btn  = document.getElementById('dp-btn');
+  const resp = document.getElementById('dp-response');
+  const meta = document.getElementById('dp-resp-meta');
+  btn.disabled = true;
+  btn.textContent = '...';
+  btn.style.opacity = '0.6';
+  resp.innerHTML = '<span style="color:var(--gold)">⟳ Processing — this may take up to 60s...</span>';
+  meta.textContent = '';
+  const t0 = Date.now();
+  try {
+    const r = await fetch('/api/devpanel/query', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ query, mode: dpMode, files: Array.from(dpSelected) })
+    });
+    const data = await r.json();
+    const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+    resp.textContent = data.response || data.error || JSON.stringify(data);
+    meta.textContent = 'mode:' + dpMode + ' · ' + dpSelected.size + ' files · ' + elapsed + 's';
+  } catch(e) {
+    resp.innerHTML = '<span style="color:var(--red)">✗ Error: ' + e.message + '</span>';
+  }
+  btn.disabled = false;
+  btn.textContent = 'QUERY';
+  btn.style.opacity = '1';
+}
+
+// ── Nav item switching ──────────────────────────────────────────
+document.querySelectorAll('.nav-item').forEach(el => {
+  el.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    el.classList.add('active');
+    const overlay = document.getElementById('dp-overlay');
+    if (el.id === 'nav-devpanel') {
+      overlay.style.display = 'block';
+      dpInit();
+    } else {
+      overlay.style.display = 'none';
+    }
+  });
+});
+
+// ── Collapsible sidebar ──
+function toggleSidebar() {
+  const sidebar   = document.getElementById('sidebar');
+  const pageWrap  = document.querySelector('.page-wrap');
+  const btn       = document.getElementById('sb-toggle');
+  const collapsed = sidebar.classList.toggle('collapsed');
+  pageWrap.classList.toggle('expanded', collapsed);
+  btn.classList.toggle('open', !collapsed);
+  btn.textContent = collapsed ? '☰' : '✕';
+  localStorage.setItem('edith_sidebar', collapsed ? '0' : '1');
+}
+
+// Restore sidebar state
+(function() {
+  const state = localStorage.getItem('edith_sidebar');
+  if (state === '0') {
+    const sidebar  = document.getElementById('sidebar');
+    const pageWrap = document.querySelector('.page-wrap');
+    const btn      = document.getElementById('sb-toggle');
+    sidebar.classList.add('collapsed');
+    pageWrap.classList.add('expanded');
+    btn.classList.remove('open');
+    btn.textContent = '☰';
+  }
+})();
+</script>
+
+  <!-- ══ DEV PANEL ══════════════════════════════════════════════ -->
+  <div id="dp-overlay" style="display:none;position:fixed;top:0;left:210px;right:0;bottom:0;background:var(--bg);overflow-y:auto;z-index:50;padding:28px 32px">
+
+    <div style="font-family:'Orbitron',monospace;font-size:15px;color:var(--gold);margin-bottom:24px;letter-spacing:3px;text-shadow:0 0 20px var(--gold-dim);display:flex;align-items:center;gap:12px">
+      🧠 DEV PANEL — SELF-AWARENESS MODULE
+      <span id="dp-status" style="font-size:9px;letter-spacing:2px;color:var(--text-dim);font-family:'Rajdhani',sans-serif;margin-left:auto"></span>
+    </div>
+
+    <!-- Module chips -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-label">Context Scope — select modules to load</div>
+      <div id="dp-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;min-height:32px">
+        <span style="color:var(--text-dim);font-size:11px">Loading modules...</span>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
+        <button onclick="dpSelectAll()" style="font-size:10px;padding:3px 12px;background:#0f0f18;border:1px solid var(--border);color:var(--text);cursor:pointer;font-family:'Share Tech Mono',monospace;letter-spacing:1px">ALL</button>
+        <button onclick="dpClearAll()" style="font-size:10px;padding:3px 12px;background:#0f0f18;border:1px solid var(--border);color:var(--text);cursor:pointer;font-family:'Share Tech Mono',monospace;letter-spacing:1px">CLEAR</button>
+        <span id="dp-ctx-info" style="font-size:10px;color:var(--text-dim);font-family:'Rajdhani',sans-serif;letter-spacing:1px"></span>
+      </div>
+    </div>
+
+    <!-- Mode tabs -->
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <button class="dp-mode-btn" data-mode="qa" id="dpbtn-qa"
+        style="padding:5px 16px;font-size:10px;letter-spacing:1px;border:1px solid var(--gold);background:#1a120a;color:var(--gold);cursor:pointer;font-family:'Share Tech Mono',monospace"
+        onclick="dpSetMode(this)">Q &amp; A</button>
+      <button class="dp-mode-btn" data-mode="council" id="dpbtn-council"
+        style="padding:5px 16px;font-size:10px;letter-spacing:1px;border:1px solid var(--border);background:#0a0a0f;color:var(--text-dim);cursor:pointer;font-family:'Share Tech Mono',monospace"
+        onclick="dpSetMode(this)">⚔ COUNCIL</button>
+      <button class="dp-mode-btn" data-mode="next" id="dpbtn-next"
+        style="padding:5px 16px;font-size:10px;letter-spacing:1px;border:1px solid var(--border);background:#0a0a0f;color:var(--text-dim);cursor:pointer;font-family:'Share Tech Mono',monospace"
+        onclick="dpSetMode(this)">🔮 WHAT NEXT</button>
+    </div>
+
+    <!-- Input -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-label">Query</div>
+      <textarea id="dp-input" rows="4"
+        placeholder="Ask EDITH about her own architecture...  (Ctrl+Enter to submit)"
+        style="width:100%;background:#050507;border:1px solid var(--border);color:var(--text);padding:10px 12px;font-family:'Share Tech Mono',monospace;font-size:12px;resize:vertical;outline:none;margin-top:8px;line-height:1.6"
+        onkeydown="if(event.ctrlKey&&event.key==='Enter')dpSubmit()"></textarea>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+        <span style="font-size:10px;color:var(--text-dim);font-family:'Rajdhani',sans-serif">Ctrl+Enter to submit</span>
+        <button id="dp-btn" onclick="dpSubmit()"
+          style="padding:6px 24px;background:var(--gold);color:#000;font-weight:700;border:none;cursor:pointer;font-family:'Share Tech Mono',monospace;letter-spacing:2px;font-size:11px">
+          QUERY
+        </button>
+      </div>
+    </div>
+
+    <!-- Response -->
+    <div class="card">
+      <div class="card-label" style="display:flex;justify-content:space-between">
+        Response
+        <span id="dp-resp-meta" style="font-size:9px;color:var(--text-dim);font-family:'Rajdhani',sans-serif;letter-spacing:1px;font-weight:400"></span>
+      </div>
+      <div id="dp-response"
+        style="min-height:140px;font-size:12px;line-height:1.8;white-space:pre-wrap;margin-top:8px;color:var(--text)">
+        <span style="color:var(--text-dim)">Awaiting query...</span>
+      </div>
+    </div>
+
+  </div>
+  <!-- ══ END DEV PANEL ══════════════════════════════════════════ -->
+</body>
