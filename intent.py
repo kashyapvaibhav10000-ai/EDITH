@@ -262,7 +262,7 @@ def classify_intent_via_llm(user_input: str) -> str:
         prompt = f"Categorize the following input into EXACTLY ONE word from this exact list: [search, weather, email, agent, council, memory, chat, code, reminder, system]. Return ONLY the single word. Do not add punctuation. Input: '{user_input}'"
         result = smart_call(prompt, intent="reason").strip().lower()
         import string
-        valid = ["search", "weather", "email", "agent", "council", "memory", "chat", "code", "reminder", "system"]
+        valid = ["search", "weather", "email", "agent", "council", "memory", "chat", "code", "reminder", "system", "identity", "greeting"]
         for p in string.punctuation:
             result = result.replace(p, "")
         if result in valid:

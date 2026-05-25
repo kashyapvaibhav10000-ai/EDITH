@@ -18,7 +18,8 @@ import subprocess
 import shlex
 import threading
 
-from config import get_logger
+from config import get_logger, get_user_dir, USER_HOME, EDITH_PATH
+from command_runner import run_piped_command, run_command
 from context import DispatchContext
 from errors import Result
 
@@ -213,6 +214,16 @@ def _handle_unread_email(ctx) -> Result:
         return Result.from_exception(e)
 
 
+def _handle_identity(ctx: DispatchContext) -> Result:
+    """Handle identity/greeting intents dynamically via chat_fn."""
+    system_hint = (
+        "You are EDITH (Even Dead, I'm The Hero), a personal AI OS built by Vaibhav Kashyap. "
+        "Answer questions about yourself, your purpose, your creator naturally and conversationally."
+    )
+    response = ctx.chat_fn(f"{system_hint}\n\nUser: {ctx.user_input}", intent="chat")
+    return Result(ok=True, value=response)
+
+
 # Kept for stream-endpoint backward compat — real logic lives in _run_local_exec
 _LOCAL_SYSINFO = []
 
@@ -273,8 +284,8 @@ def _run_local_exec(user_input: str):
             cmd = f"ps aux --sort={sort_col} | awk 'NR==1 || ${col_idx}>{threshold}' | head -30"
         else:
             cmd = f"ps aux --sort={sort_col} | head -25"
-        r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=10)
-        out = (r.stdout or r.stderr or "").strip()
+        r = run_piped_command(cmd, timeout=10)
+        out = (r.output or "").strip()
         if out:
             return f"```\n{out}\n```"
 
@@ -283,8 +294,8 @@ def _run_local_exec(user_input: str):
     if len(matched_sys) >= 2:
         parts = []
         for label, cmd in matched_sys:
-            r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=5)
-            v = (r.stdout or r.stderr or "").strip()
+            r = run_piped_command(cmd, timeout=5)
+            v = (r.output or "").strip()
             if v:
                 parts.append(f"**{label}:**\n```\n{v}\n```")
         if parts:
@@ -293,8 +304,8 @@ def _run_local_exec(user_input: str):
     # ── 3. Single sysinfo term ──────────────────────────────────────────────
     if len(matched_sys) == 1:
         label, cmd = matched_sys[0]
-        r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=5)
-        v = (r.stdout or r.stderr or "").strip()
+        r = run_piped_command(cmd, timeout=5)
+        v = (r.output or "").strip()
         if v:
             return f"```\n{v}\n```"
 
@@ -306,28 +317,26 @@ def _run_local_exec(user_input: str):
         re.I
     )
     if _DUP_PAT.search(user_input):
-        dir_keywords = {"downloads": "/home/vaibhav/Downloads", "documents": "/home/vaibhav/Documents",
-                        "home": "/home/vaibhav", "desktop": "/home/vaibhav/Desktop"}
-        search_dir = "/home/vaibhav"
-        for kw, path in dir_keywords.items():
+        search_dir = USER_HOME
+        for kw in ["downloads", "documents", "desktop"]:
             if kw in lower:
-                search_dir = path
+                search_dir = get_user_dir(kw)
                 break
         abs_m = re.search(r"(/[^\s]+)", user_input)
         if abs_m:
             search_dir = abs_m.group(1)
-        r = subprocess.run(
+        r = run_piped_command(
             f"fdupes -r '{search_dir}' 2>/dev/null | head -50",
-            shell=True, capture_output=True, text=True, timeout=30
+            timeout=30
         )
-        out = (r.stdout or "").strip()
+        out = (r.output or "").strip()
         if not out:
-            r2 = subprocess.run(
+            r2 = run_piped_command(
                 f"find '{search_dir}' -type f -not -empty 2>/dev/null | xargs md5sum 2>/dev/null "
                 f"| sort | awk '{{if(prev==$1)print $0; prev=$1}}' | head -20",
-                shell=True, capture_output=True, text=True, timeout=30
+                timeout=30
             )
-            out = (r2.stdout or "").strip() or "No duplicate files found."
+            out = (r2.output or "").strip() or "No duplicate files found."
         return f"```\n{out}\n```"
 
     # ── 5. Find files by extension / size / date ────────────────────────────
@@ -351,17 +360,17 @@ def _run_local_exec(user_input: str):
         name_part = f'-name "*{ext}"' if ext else '-type f'
         size_part = f"-size {size_flag}" if size_flag else ""
         cmd = (
-            f"find /home/vaibhav {name_part} {size_part} 2>/dev/null "
+            f"find {USER_HOME} {name_part} {size_part} 2>/dev/null "
             f"-exec ls -lh {{}} \\; 2>/dev/null"
         )
         if sort_desc or size_flag:
             cmd += " | sort -k5 -rh"
         cmd += " | head -30"
-        r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=20)
-        out = (r.stdout or r.stderr or "").strip()
+        r = run_piped_command(cmd, timeout=20)
+        out = (r.output or "").strip()
         if out:
             return f"```\n{out}\n```"
-        return f"No {ext or ''} files found matching criteria in /home/vaibhav."
+        return f"No {ext or ''} files found matching criteria in {USER_HOME}."
 
     # ── 6. Random file selection + actual copy ──────────────────────────────
     _RAND_PAT = re.compile(
@@ -374,13 +383,10 @@ def _run_local_exec(user_input: str):
         count_m = re.search(r"\b(\d+)\b", user_input)
         count = int(count_m.group(1)) if count_m else 10
 
-        dir_map = {"downloads": "/home/vaibhav/Downloads", "download": "/home/vaibhav/Downloads",
-                   "documents": "/home/vaibhav/Documents", "desktop": "/home/vaibhav/Desktop",
-                   "pictures": "/home/vaibhav/Pictures", "home": "/home/vaibhav"}
-        dest_dir = "/home/vaibhav/Downloads"
-        for kw, path in dir_map.items():
+        dest_dir = get_user_dir("downloads")
+        for kw in ["downloads", "download", "documents", "desktop", "pictures", "home"]:
             if kw in lower:
-                dest_dir = path
+                dest_dir = get_user_dir(kw)
                 break
 
         # "test folder" / "folder named X" → subdirectory
@@ -393,10 +399,10 @@ def _run_local_exec(user_input: str):
             dest_dir = os.path.join(dest_dir, folder_name)
 
         # Source dir — "from X" or default to home
-        src_dir = "/home/vaibhav"
+        src_dir = USER_HOME
         src_m = re.search(r"\bfrom\s+(\w+)\b", lower)
         if src_m:
-            src_dir = dir_map.get(src_m.group(1), "/home/vaibhav")
+            src_dir = get_user_dir(src_m.group(1))
 
         try:
             all_files = [f for f in os.listdir(src_dir) if os.path.isfile(os.path.join(src_dir, f))]
@@ -435,15 +441,15 @@ def _run_local_exec(user_input: str):
     )
     if _NET_PAT.search(user_input):
         parts = []
-        r1 = subprocess.run("ping -c 3 -W 2 8.8.8.8 2>&1", shell=True, capture_output=True, text=True, timeout=15)
-        if r1.stdout.strip():
-            parts.append(f"**Ping (8.8.8.8):**\n```\n{r1.stdout.strip()}\n```")
-        r2 = subprocess.run("ping -c 2 -W 2 google.com 2>&1 | tail -3", shell=True, capture_output=True, text=True, timeout=10)
-        if r2.stdout.strip():
-            parts.append(f"**DNS + Ping (google.com):**\n```\n{r2.stdout.strip()}\n```")
-        r3 = subprocess.run("nslookup google.com 2>/dev/null | tail -4", shell=True, capture_output=True, text=True, timeout=8)
-        if r3.stdout.strip():
-            parts.append(f"**DNS Lookup:**\n```\n{r3.stdout.strip()}\n```")
+        r1 = run_piped_command("ping -c 3 -W 2 8.8.8.8 2>&1", timeout=15)
+        if r1.output:
+            parts.append(f"**Ping (8.8.8.8):**\n```\n{r1.output}\n```")
+        r2 = run_piped_command("ping -c 2 -W 2 google.com 2>&1 | tail -3", timeout=10)
+        if r2.output:
+            parts.append(f"**DNS + Ping (google.com):**\n```\n{r2.output}\n```")
+        r3 = run_piped_command("nslookup google.com 2>/dev/null | tail -4", timeout=8)
+        if r3.output:
+            parts.append(f"**DNS Lookup:**\n```\n{r3.output}\n```")
         if parts:
             return "\n\n".join(parts)
         return "❌ All network checks failed — likely offline."
@@ -457,18 +463,18 @@ def _run_local_exec(user_input: str):
     )
     if _PRIV_PAT.search(user_input):
         parts = []
-        r1 = subprocess.run("whoami && id && groups", shell=True, capture_output=True, text=True, timeout=5)
-        if r1.stdout.strip():
-            parts.append(f"**User / Groups:**\n```\n{r1.stdout.strip()}\n```")
-        r2 = subprocess.run("sudo -l 2>&1 | head -20", shell=True, capture_output=True, text=True, timeout=8)
-        if r2.stdout.strip():
-            parts.append(f"**Sudo Permissions:**\n```\n{r2.stdout.strip()}\n```")
-        r3 = subprocess.run(
+        r1 = run_piped_command("whoami && id && groups", timeout=5)
+        if r1.output:
+            parts.append(f"**User / Groups:**\n```\n{r1.output}\n```")
+        r2 = run_piped_command("sudo -l 2>&1 | head -20", timeout=8)
+        if r2.output:
+            parts.append(f"**Sudo Permissions:**\n```\n{r2.output}\n```")
+        r3 = run_piped_command(
             "ls -ld /root /etc/sudoers /etc/shadow 2>&1 | awk '{print $1, $3, $4, $NF}'",
-            shell=True, capture_output=True, text=True, timeout=5
+            timeout=5
         )
-        if r3.stdout.strip():
-            parts.append(f"**Restricted Paths:**\n```\n{r3.stdout.strip()}\n```")
+        if r3.output:
+            parts.append(f"**Restricted Paths:**\n```\n{r3.output}\n```")
         if parts:
             return "\n\n".join(parts)
 
@@ -487,8 +493,8 @@ def _run_local_exec(user_input: str):
             found_cmds = ["ls", "pwd", "df", "free", "ps"]  # default set
         parts = []
         for c in found_cmds:
-            r = subprocess.run(c, shell=True, capture_output=True, text=True, timeout=5)
-            out = (r.stdout or r.stderr or "").strip()
+            r = run_command(c, timeout=5, check_paths=False)
+            out = (r.output or "").strip()
             if out:
                 parts.append(f"**`{c}`:**\n```\n{out[:300]}\n```")
         if parts:
@@ -521,9 +527,8 @@ def _handle_search(ctx) -> Result:
             prompt = (
                 f"Current Date: {today_str}\n\nUser Query: {ctx.user_input}\n\n"
                 f"Search results:\n{search_text}\n\n"
-                f"IMPORTANT: Use the Current Date to verify words like 'today'!\n"
-                f"Answer with EXACT facts — scores, names, numbers, dates. "
-                f"No fluff, no 'based on search results'. Just the answer."
+                f"IMPORTANT: Verify dates against Current Date! "
+                f"Answer with EXACT facts. No fluff. Just the answer."
             )
             return Result.success(ctx.chat_fn(prompt, intent="search"))
         return Result.success("I searched but couldn't find reliable results right now. Want me to try a different query, Boss?")
@@ -678,11 +683,11 @@ def _handle_shell(ctx) -> Result:
                 break
         cmd = cmd.strip("\"'`")
         if not cmd or cmd.lower() in ["run", "execute", "command", "shell"]:
-            return Result.success("What command should I run, Boss? Something like 'run ls -la /home/vaibhav'.")
+            return Result.success(f"What command should I run, Boss? Something like 'run ls -la {USER_HOME}'.")
 
         if _is_safe_command(cmd):
             try:
-                result = subprocess.run(shlex.split(cmd), capture_output=True, text=True, timeout=15, cwd="/home/vaibhav")
+                result = subprocess.run(shlex.split(cmd), capture_output=True, text=True, timeout=15, cwd=USER_HOME)
                 output = (result.stdout or result.stderr or "").strip()
                 if not output:
                     return Result.success(f"Ran `{cmd}` — no output returned.")
@@ -707,10 +712,13 @@ def _handle_shell(ctx) -> Result:
 def _handle_file_query(ctx) -> Result:
     try:
         dir_map = {
-            "download": "/home/vaibhav/Downloads", "document": "/home/vaibhav/Documents",
-            "desktop": "/home/vaibhav/Desktop", "home": "/home/vaibhav",
-            "picture": "/home/vaibhav/Pictures", "video": "/home/vaibhav/Videos",
-            "music": "/home/vaibhav/Music",
+            "download": get_user_dir("downloads"),
+            "document": get_user_dir("documents"),
+            "desktop": get_user_dir("desktop"),
+            "home": USER_HOME,
+            "picture": get_user_dir("pictures"),
+            "video": os.path.join(USER_HOME, "Videos"),
+            "music": os.path.join(USER_HOME, "Music"),
         }
         target_dir = None
         lower = ctx.user_input.lower()
@@ -720,7 +728,7 @@ def _handle_file_query(ctx) -> Result:
                 break
         if not target_dir:
             path_match = re.search(r'(/[\w/.-]+)', ctx.user_input)
-            target_dir = os.path.expanduser(path_match.group(1)) if path_match else "/home/vaibhav"
+            target_dir = os.path.expanduser(path_match.group(1)) if path_match else USER_HOME
 
         if not os.path.isdir(target_dir):
             return Result.success(f"Can't find `{target_dir}`. Sure it exists?")
@@ -780,7 +788,7 @@ def _handle_create_file(ctx) -> Result:
     try:
         filepath = _extract_filepath(ctx.user_input)
         if not filepath:
-            return Result.success("📁 I need a file path. Try: 'create file /home/vaibhav/notes/todo.txt'")
+            return Result.success(f"📁 I need a file path. Try: 'create file {USER_HOME}/notes/todo.txt'")
         content_match = re.search(r"(?:with content|containing|with text|content)\s+(.+)", ctx.user_input, re.IGNORECASE | re.DOTALL)
         content = content_match.group(1).strip() if content_match else "(empty)"
         set_pending_action({"type": "create_file", "path": filepath, "content": content})
@@ -793,7 +801,7 @@ def _handle_delete_file(ctx) -> Result:
     try:
         filepath = _extract_filepath(ctx.user_input)
         if not filepath:
-            return Result.success("🗑️ I need a file path. Try: 'delete file /home/vaibhav/old_notes.txt'")
+            return Result.success(f"🗑️ I need a file path. Try: 'delete file {USER_HOME}/old_notes.txt'")
         set_pending_action({"type": "delete_file", "path": filepath})
         return Result.success(f"🗑️ Deletion Request:\nPath: {filepath}\n\n⚠️ Proceed with permanently deleting this file? Type YES or NO.")
     except Exception as e:
@@ -816,7 +824,7 @@ def _handle_data_analysis(ctx) -> Result:
     try:
         filepath = _extract_filepath(ctx.user_input)
         if not filepath:
-            return Result.success("📊 I need a file path. Try: 'analyze /home/vaibhav/data.csv what month had highest sales'")
+            return Result.success(f"📊 I need a file path. Try: 'analyze {USER_HOME}/data.csv what month had highest sales'")
         question = ctx.user_input.replace(filepath, "").strip()
         for word in ["analyze", "analyse", "read", "load", "open", "chart", "graph", "plot"]:
             question = re.sub(rf"\b{word}\b", "", question, flags=re.IGNORECASE).strip()
@@ -971,11 +979,11 @@ def _handle_whatsapp(ctx) -> Result:
 
 def _handle_mcp(ctx) -> Result:
     def _safe_path(raw: str) -> tuple:
-        """Expand and jail path to /home/vaibhav. Returns (resolved, error_str)."""
+        """Expand and jail path to USER_HOME. Returns (resolved, error_str)."""
         expanded = os.path.expanduser(raw.strip())
         resolved = os.path.realpath(expanded)
-        if not resolved.startswith("/home/vaibhav"):
-            return None, f"Access denied — path outside /home/vaibhav: `{resolved}`"
+        if not resolved.startswith(USER_HOME):
+            return None, f"Access denied — path outside {USER_HOME}: `{resolved}`"
         return resolved, None
 
     try:
@@ -1022,7 +1030,7 @@ def _handle_mcp(ctx) -> Result:
                 """Resolve base path with 4-step fallback. Returns (resolved, err_or_None).
                 err sentinel values: None=ok, __fuzzy__:typed:matched, __notfound__:typed:csv_of_dirs"""
                 if not raw_base.startswith("/") and not raw_base.startswith("~"):
-                    candidate = f"/home/vaibhav/{raw_base}"
+                    candidate = os.path.join(USER_HOME, raw_base)
                 else:
                     candidate = raw_base
                 resolved, err = _safe_path(candidate)
@@ -1035,8 +1043,8 @@ def _handle_mcp(ctx) -> Result:
                 import difflib
                 typed_leaf = os.path.basename(resolved)
                 try:
-                    actual_dirs = [d for d in os.listdir("/home/vaibhav/")
-                                   if os.path.isdir(f"/home/vaibhav/{d}")]
+                    actual_dirs = [d for d in os.listdir(USER_HOME)
+                                   if os.path.isdir(os.path.join(USER_HOME, d))]
                 except OSError:
                     actual_dirs = []
 
@@ -1044,17 +1052,17 @@ def _handle_mcp(ctx) -> Result:
                 lower_map = {d.lower(): d for d in actual_dirs}
                 if typed_leaf.lower() in lower_map:
                     matched = lower_map[typed_leaf.lower()]
-                    return f"/home/vaibhav/{matched}", f"__fuzzy__:{typed_leaf}:{matched}"
+                    return os.path.join(USER_HOME, matched), f"__fuzzy__:{typed_leaf}:{matched}"
 
                 # Step 2: case-insensitive startswith ("down" → "Downloads")
                 sw = [d for d in actual_dirs if d.lower().startswith(typed_leaf.lower())]
                 if len(sw) == 1:
-                    return f"/home/vaibhav/{sw[0]}", f"__fuzzy__:{typed_leaf}:{sw[0]}"
+                    return os.path.join(USER_HOME, sw[0]), f"__fuzzy__:{typed_leaf}:{sw[0]}"
 
                 # Step 3: difflib fuzzy (handles typos like "Downlaods")
                 fuzzy = difflib.get_close_matches(typed_leaf, actual_dirs, n=1, cutoff=0.6)
                 if fuzzy:
-                    return f"/home/vaibhav/{fuzzy[0]}", f"__fuzzy__:{typed_leaf}:{fuzzy[0]}"
+                    return os.path.join(USER_HOME, fuzzy[0]), f"__fuzzy__:{typed_leaf}:{fuzzy[0]}"
 
                 # Step 4: total fail — surface available dirs to user
                 top = ", ".join(sorted(actual_dirs)[:10])
@@ -1083,7 +1091,7 @@ def _handle_mcp(ctx) -> Result:
             if path_m:
                 raw_base = path_m.group(1)
             else:
-                raw_base = "/home/vaibhav"
+                raw_base = USER_HOME
 
             base, base_err = _resolve_base(raw_base)
             if base_err and base_err.startswith("__fuzzy__:"):
@@ -1102,14 +1110,14 @@ def _handle_mcp(ctx) -> Result:
                         "named": _named,
                     })
                     return Result.success(
-                        f"⚠️ No folder named `{typed}` found in /home/vaibhav/.\n"
+                        f"⚠️ No folder named `{typed}` found in {USER_HOME}/.\n"
                         f"Did you mean `{matched}`? Reply YES to confirm or give the full path."
                     )
             elif base_err and base_err.startswith("__notfound__:"):
                 parts = base_err.split(":", 2)
                 typed = parts[1]
                 available = parts[2] if len(parts) > 2 else ""
-                msg = f"⚠️ No folder called `{typed}` found in /home/vaibhav/."
+                msg = f"⚠️ No folder called `{typed}` found in {USER_HOME}/."
                 if available:
                     msg += f"\nAvailable folders: {available}"
                 msg += f"\nProvide full path or correct name."
@@ -1180,7 +1188,7 @@ def _handle_mcp(ctx) -> Result:
         if re.search(r"\b(move|rename|mv)\b", lower):
             paths = re.findall(r"(/[^\s]+|\b[\w./~-]+\.\w+)", ctx.user_input)
             if len(paths) < 2:
-                return Result.success("📦 Need source and destination. Try: 'move /home/vaibhav/a.txt /home/vaibhav/b.txt'")
+                return Result.success(f"📦 Need source and destination. Try: 'move {USER_HOME}/a.txt {USER_HOME}/b.txt'")
             src, err = _safe_path(paths[0])
             if err:
                 return Result.success(f"❌ {err}")
@@ -1202,7 +1210,7 @@ def _handle_mcp(ctx) -> Result:
         # ── Filesystem: search files ──────────────────────────────────────
         if re.search(r"\b(find|search for file|search file|locate)\b", lower):
             path_m = re.search(r"in\s+(/[^\s]+)", ctx.user_input)
-            base = os.path.expanduser(path_m.group(1)) if path_m else "/home/vaibhav"
+            base = os.path.expanduser(path_m.group(1)) if path_m else USER_HOME
             safe_base, err = _safe_path(base)
             if err:
                 return Result.success(f"❌ {err}")
@@ -1232,7 +1240,7 @@ def _handle_mcp(ctx) -> Result:
         if re.search(r"\b(read|open|show|cat)\b", lower) and re.search(r"(/[^\s]+|\S+\.\w+)", ctx.user_input):
             path_m = re.search(r"(/[^\s]+|\b[\w./~-]+\.\w+)", ctx.user_input)
             if not path_m:
-                return Result.success("📄 I need a file path. Try: 'read /home/vaibhav/notes/todo.txt'")
+                return Result.success(f"📄 I need a file path. Try: 'read {USER_HOME}/notes/todo.txt'")
             safe, err = _safe_path(path_m.group(1))
             if err:
                 return Result.success(f"❌ {err}")
@@ -1248,7 +1256,7 @@ def _handle_mcp(ctx) -> Result:
         # ── Filesystem: list directory ────────────────────────────────────
         if re.search(r"\b(list|ls|dir|what.s in|show files)\b", lower):
             path_m = re.search(r"(/[^\s]+)", ctx.user_input)
-            raw = path_m.group(1) if path_m else "/home/vaibhav"
+            raw = path_m.group(1) if path_m else USER_HOME
             safe, err = _safe_path(raw)
             if err:
                 return Result.success(f"❌ {err}")
@@ -1265,7 +1273,7 @@ def _handle_mcp(ctx) -> Result:
         if re.search(r"\b(write|save|create)\b", lower) and not re.search(r"\b(folder|directory|dir)\b", lower):
             path_m = re.search(r"(/[^\s]+|\b[\w./~-]+\.\w+)", ctx.user_input)
             if not path_m:
-                return Result.success("📄 I need a file path. Try: 'write /home/vaibhav/notes/test.txt with content Hello'")
+                return Result.success(f"📄 I need a file path. Try: 'write {USER_HOME}/notes/test.txt with content Hello'")
             safe, err = _safe_path(path_m.group(1))
             if err:
                 return Result.success(f"❌ {err}")
@@ -1306,18 +1314,18 @@ def _handle_mcp(ctx) -> Result:
         if not enabled:
             return Result.success(
                 "🔌 No MCP servers currently enabled.\n"
-                "Enable servers in `/home/vaibhav/EDITH/mcp_config.json` and restart EDITH."
+                f"Enable servers in `{os.path.join(EDITH_PATH, 'mcp_config.json')}` and restart EDITH."
             )
         return Result.success(
             f"🔌 MCP active servers: {', '.join(enabled)}\n\n"
             "Filesystem commands:\n"
             "• `create 5 folders in Downloads` — create N folders with random names\n"
             "• `create folder named test in Downloads` — named folder\n"
-            "• `list /home/vaibhav/Downloads` — list directory\n"
+            f"• `list {get_user_dir('downloads')}` — list directory\n"
             "• `read /path/to/file` — read file contents\n"
             "• `write /path/to/file with content ...` — write file\n"
             "• `move /src /dst` — move or rename\n"
-            "• `find *.py in /home/vaibhav/EDITH` — search files\n"
+            f"• `find *.py in {EDITH_PATH}` — search files\n"
             "• `info /path/to/file` — file metadata\n"
             "• `delete /path/to/file` — delete (requires confirmation)\n\n"
             "Other:\n"
@@ -1578,6 +1586,8 @@ def _handle_list_skills(ctx: DispatchContext) -> Result:
 
 
 INTENT_HANDLERS = {
+    "identity":        _handle_identity,
+    "greeting":        _handle_identity,
     "weather":         _handle_weather,
     "calendar_today":  _handle_calendar_today,
     "calendar_week":   _handle_calendar_week,
@@ -1692,7 +1702,7 @@ def execute_pending_action(action) -> str:
     elif atype == "shell":
         cmd = action.get("cmd")
         try:
-            result = subprocess.run(shlex.split(cmd), capture_output=True, text=True, timeout=30, cwd="/home/vaibhav")
+            result = subprocess.run(shlex.split(cmd), capture_output=True, text=True, timeout=30, cwd=USER_HOME)
             output = result.stdout or result.stderr
             return f"💻 Execution Complete:\n\n{output.strip() or 'No output returned.'}"
         except Exception as e:
@@ -1713,7 +1723,7 @@ def execute_pending_action(action) -> str:
                 results.append(f"⛔ Step {i} Blocked (Dangerous): `{cmd}`")
                 continue
             try:
-                subprocess.run(shlex.split(cmd), capture_output=True, text=True, timeout=30, cwd="/home/vaibhav")
+                subprocess.run(shlex.split(cmd), capture_output=True, text=True, timeout=30, cwd=USER_HOME)
                 results.append(f"✅ Step {i}: `{cmd}` -> OK")
             except Exception as e:
                 results.append(f"❌ Step {i}: `{cmd}` -> ERROR ({e})")
