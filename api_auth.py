@@ -17,9 +17,9 @@ from fastapi.responses import JSONResponse
 _keys_raw = os.getenv("EDITH_API_KEYS", "") + "," + os.getenv("EDITH_API_KEY", "")
 VALID_API_KEYS = set(filter(None, _keys_raw.split(",")))
 
-# Paths that don't require authentication
-PUBLIC_EXACT_PATHS = {"/", "/dashboard", "/ui"}
-PUBLIC_PREFIXES = ("/static/",)
+# Paths that require an API key (fail-open logic)
+PROTECTED_EXACT_PATHS = {"/api/chat", "/api/feedback", "/tg_webhook"}
+PROTECTED_PREFIXES = ("/webhook/",)
 
 
 # ──────────────────────────────────────────────────
@@ -27,8 +27,15 @@ PUBLIC_PREFIXES = ("/static/",)
 # ──────────────────────────────────────────────────
 
 def is_path_public(path: str) -> bool:
-    """Check if path requires authentication."""
-    return path in PUBLIC_EXACT_PATHS or any(path.startswith(p) for p in PUBLIC_PREFIXES)
+    """
+    Check if a path is public. With fail-open, we define what's *protected*.
+    Everything else is considered public by default.
+    """
+    is_protected_exact = path in PROTECTED_EXACT_PATHS
+    is_protected_prefix = any(path.startswith(p) for p in PROTECTED_PREFIXES)
+    
+    # If it's a protected path, it's NOT public.
+    return not (is_protected_exact or is_protected_prefix)
 
 
 def extract_api_key(request: Request) -> Optional[str]:
