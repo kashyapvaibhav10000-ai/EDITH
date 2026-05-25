@@ -56,11 +56,21 @@ _ensure_x11_auth()
 PRIVATE_INTENTS = {"vault", "shell", "email"}
 
 # ──────────────────────────────────────────────
-# Base Paths
+# Base Paths — Configurable for portability
 # ──────────────────────────────────────────────
 EDITH_PATH = os.path.dirname(os.path.abspath(__file__))
-VENV_PATH = os.getenv("VENV_PATH", "/home/vaibhav/edith-env")
+USER_HOME = os.path.expanduser("~")
+SERVICE_VENV = os.getenv("SERVICE_VENV", os.path.join(USER_HOME, "edith-env"))
+VENV_PATH = os.getenv("VENV_PATH", SERVICE_VENV)
 VENV_PYTHON = os.getenv("VENV_PYTHON", os.path.join(VENV_PATH, "bin/python"))
+
+# External service URLs (configurable)
+LOCAL_BRIDGE_URL = os.getenv("LOCAL_BRIDGE_URL", "http://localhost:5000")
+CHAT_SERVER_URL = os.getenv("CHAT_SERVER_URL", "http://localhost:8001")
+
+# External project paths (defaults can be overridden via env or .local.json)
+PROJECTS_BASE = os.getenv("PROJECTS_BASE", os.path.join(USER_HOME, "Documents"))
+AYURSTOCK_PATH = os.getenv("AYURSTOCK_PATH", os.path.join(PROJECTS_BASE, "Ayur-stock pro"))
 
 # ──────────────────────────────────────────────
 # Ollama / LLM Configuration
@@ -201,7 +211,7 @@ CITY = "Fatehpur"
 # ──────────────────────────────────────────────
 CODE_DIRS = [
     EDITH_PATH,
-    "/home/vaibhav/Documents/Ayur-stock pro",
+    AYURSTOCK_PATH,
 ]
 SUPPORTED_CODE_EXTENSIONS = {".py", ".ts", ".tsx", ".js", ".jsx"}
 SKIPPED_DIRS = {"node_modules", ".git", "__pycache__", ".next", "dist", "build", ".venv", "edith-env", "whisper.cpp"}
@@ -213,7 +223,7 @@ CODING_PERSONALITY_JSON = os.path.join(EDITH_PATH, "coding_personality.json")
 CODING_PERSONALITY_TXT = os.path.join(EDITH_PATH, "coding_personality.txt")
 REPOS = [
     EDITH_PATH,
-    "/home/vaibhav/Documents/Ayur-stock pro",
+    AYURSTOCK_PATH,
 ]
 
 # ──────────────────────────────────────────────
@@ -368,7 +378,8 @@ GROQ_TTS_VOICE  = "Fritz-PlayAI"
 USE_GROQ_TTS    = False  # playai-tts removed from Groq API — disabled until new model confirmed
 USE_CHATTERBOX  = False  # CPU load >120s → always times out; re-enable if GPU available
 PREFER_FAST_TTS = False  # False = Chatterbox first → Piper fallback
-CHATTERBOX_VENV_PYTHON = os.getenv("CHATTERBOX_VENV_PYTHON", "/home/vaibhav/chatterbox-env/bin/python3")
+CHATTERBOX_VENV = os.getenv("CHATTERBOX_VENV", os.path.join(USER_HOME, "chatterbox-env"))
+CHATTERBOX_VENV_PYTHON = os.getenv("CHATTERBOX_VENV_PYTHON", os.path.join(CHATTERBOX_VENV, "bin/python3"))
 
 # Voice mode triggers (spoken phrases to switch TTS engine)
 FRIEND_VOICE_TRIGGER = "edith friend mode"
@@ -440,3 +451,73 @@ CHANNEL_PERSONAS: dict[str, str] = {
     "widget": os.getenv("PERSONA_WIDGET", ""),
     "cli":    os.getenv("PERSONA_CLI", ""),
 }
+
+# ──────────────────────────────────────────────
+# Path Validation & Startup Diagnostics
+# ──────────────────────────────────────────────
+
+def get_user_dir(name: str) -> str:
+    """Get common user directories (Downloads, Documents, Desktop, Pictures, home)."""
+    dirs = {
+        "downloads": os.path.join(USER_HOME, "Downloads"),
+        "documents": os.path.join(USER_HOME, "Documents"),
+        "desktop": os.path.join(USER_HOME, "Desktop"),
+        "pictures": os.path.join(USER_HOME, "Pictures"),
+        "home": USER_HOME,
+    }
+    return dirs.get(name.lower(), USER_HOME)
+
+def validate_paths() -> dict[str, any]:
+    """
+    Verify critical paths exist and are accessible.
+    Returns dict of {path_name: (exists, is_accessible, path_value)}.
+    Called on startup to catch configuration issues early.
+    """
+    paths_to_check = {
+        "EDITH_PATH": EDITH_PATH,
+        "VENV_PATH": VENV_PATH,
+        "AYURSTOCK_PATH": AYURSTOCK_PATH,
+        "CHATTERBOX_VENV": CHATTERBOX_VENV,
+        "USER_HOME": USER_HOME,
+    }
+    
+    validation_result = {}
+    for name, path in paths_to_check.items():
+        try:
+            exists = os.path.exists(path)
+            # Try to list for accessibility
+            if exists and os.path.isdir(path):
+                try:
+                    os.listdir(path)
+                    is_accessible = True
+                except PermissionError:
+                    is_accessible = False
+            else:
+                is_accessible = exists
+            validation_result[name] = {
+                "exists": exists,
+                "accessible": is_accessible,
+                "path": path,
+            }
+        except Exception as e:
+            validation_result[name] = {
+                "exists": False,
+                "accessible": False,
+                "path": path,
+                "error": str(e),
+            }
+    
+    return validation_result
+
+def print_path_status():
+    """Print startup path diagnostics to logger."""
+    logger = get_logger("config")
+    validation = validate_paths()
+    logger.info("=== Path Validation at Startup ===")
+    for name, info in validation.items():
+        status = "✓" if info.get("accessible") else "✗"
+        logger.info(f"{status} {name}: {info['path']}")
+        if "error" in info:
+            logger.warning(f"  Error: {info['error']}")
+        if not info.get("exists"):
+            logger.warning(f"  Path does not exist")
