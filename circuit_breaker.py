@@ -138,7 +138,7 @@ def check_ollama_health() -> Result:
 def check_searxng_health() -> Result:
     """Ping SearXNG to check if it's responsive."""
     try:
-        r = requests.get("http://localhost:8888/healthz", timeout=3)
+        r = requests.get("http://localhost:8080/search?q=test", timeout=3)
         if r.status_code == 200:
             record_success("searxng")
             return Result.success()
