@@ -39,6 +39,20 @@ log = get_logger("chat_server")
 
 app = FastAPI()
 
+@app.on_event("shutdown")
+async def shutdown_event():
+    import glob
+    for f in glob.glob("/tmp/edith_*.lock") + glob.glob("/tmp/edith_*.pid"):
+        try: os.remove(f)
+        except: pass
+    pid_file = "/tmp/edith_daemon.pid"
+    if os.path.exists(pid_file):
+        try:
+            with open(pid_file) as f: pid = int(f.read())
+            os.kill(pid, 15)
+        except: pass
+    log.info("EDITH shutdown complete")
+
 # ────────────────────────────────────────────────────
 # API Key Authentication Middleware
 # ────────────────────────────────────────────────────
@@ -51,9 +65,15 @@ async def api_key_middleware(request: Request, call_next):
         return create_unauthorized_response()
     return await call_next(request)
 
+_ALLOWED_ORIGINS = [
+    o.strip()
+    for o in os.getenv("EDITH_ALLOWED_ORIGINS", "http://localhost:8001,http://127.0.0.1:8001").split(",")
+    if o.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_ALLOWED_ORIGINS,
     allow_methods=["POST", "GET", "DELETE"],
     allow_headers=["Content-Type", "X-API-Key", "Authorization", "X-Admin-Token"],
     allow_credentials=False,
@@ -109,6 +129,7 @@ def index():
 import time
 
 _rate_limit_cache = {}
+_rate_limit_lock = asyncio.Lock()
 _RATE_LIMIT_MAX = 120
 _RATE_LIMIT_WINDOW = 60
 
@@ -117,21 +138,24 @@ async def rate_limit_middleware(request: Request, call_next):
     ip = request.client.host if request.client else "127.0.0.1"
     now = time.time()
 
-    expired = [k for k, (_, ts) in _rate_limit_cache.items() if now - ts > 86400]
-    for k in expired:
-        del _rate_limit_cache[k]
+    async with _rate_limit_lock:
+        # First, build a list of stale keys to delete
+        stale_keys = [k for k, (_, ts) in _rate_limit_cache.items() if now - ts > 86400]
+        # Then, delete them in a separate loop
+        for k in stale_keys:
+            del _rate_limit_cache[k]
 
-    if ip in _rate_limit_cache:
-        count, start_time = _rate_limit_cache[ip]
-        if now - start_time > _RATE_LIMIT_WINDOW:
-            _rate_limit_cache[ip] = (1, now)
+        if ip in _rate_limit_cache:
+            count, start_time = _rate_limit_cache[ip]
+            if now - start_time > _RATE_LIMIT_WINDOW:
+                _rate_limit_cache[ip] = (1, now)
+            else:
+                if count >= _RATE_LIMIT_MAX:
+                    return JSONResponse(status_code=429, content={"error": "Rate limit exceeded. Too many requests."})
+                _rate_limit_cache[ip] = (count + 1, start_time)
         else:
-            if count >= _RATE_LIMIT_MAX:
-                return JSONResponse(status_code=429, content={"error": "Rate limit exceeded. Too many requests."})
-            _rate_limit_cache[ip] = (count + 1, start_time)
-    else:
-        _rate_limit_cache[ip] = (1, now)
-        
+            _rate_limit_cache[ip] = (1, now)
+
     return await call_next(request)
 # ────────────────────────────────────────────────────
 # Multi-turn conversation context for the widget
@@ -139,6 +163,20 @@ async def rate_limit_middleware(request: Request, call_next):
 # M9: Import from shared_state to avoid circular imports
 from shared_state import _widget_history, _widget_history_lock, add_to_history, get_history
 _MAX_WIDGET_HISTORY = 10
+_MAX_WIDGET_HISTORY_BYTES = 512 * 1024  # 512KB total cap
+
+def _trim_history_if_needed():
+    with _widget_history_lock:
+        # First, trim by count
+        while len(_widget_history) > _MAX_WIDGET_HISTORY * 2:
+            _widget_history.pop(next(iter(_widget_history)))
+            
+        # Then, trim by size
+        while len(_widget_history) > 1:
+            total = sum(len(str(v)) for v in _widget_history.values())
+            if total <= _MAX_WIDGET_HISTORY_BYTES:
+                break
+            _widget_history.pop(next(iter(_widget_history))) # remove oldest
 
 # ── Repo DNA — competitive intelligence engine ──
 try:
@@ -242,6 +280,9 @@ def _is_followup(user_input):
 # ────────────────────────────────────────────────────
 # Streaming Endpoint
 # ────────────────────────────────────────────────────
+_DISPATCH_LOCK = asyncio.Lock()
+_SIDE_EFFECT_INTENTS = {"email", "sms", "call", "calendar_create", "shell", "agent", "create_file", "delete_file"}
+
 @app.post("/api/chat/stream")
 async def chat_stream_endpoint(req: Request):
     """SSE Streaming endpoint for real-time chat replies."""
@@ -308,24 +349,32 @@ async def chat_stream_endpoint(req: Request):
                     user_input=user_input, intent=intent, source="stream",
                     chat_fn=chat, chat_stream_fn=chat_stream,
                 )
-                _result = await asyncio.to_thread(_dispatch_stream, _ctx)
+                
+                if intent in _SIDE_EFFECT_INTENTS:
+                    async with _DISPATCH_LOCK:
+                        _result = await asyncio.to_thread(_dispatch_stream, _ctx)
+                else:
+                    _result = await asyncio.to_thread(_dispatch_stream, _ctx)
+
                 full_reply = _result if isinstance(_result, str) else str(_result)
                 yield f"data: {json.dumps({'type': 'token', 'id': msg_id, 'token': full_reply})}\n\n"
                 yield f"data: {json.dumps({'type': 'done', 'id': msg_id, 'provider': provider, 'intent': intent, 'tts_engine': 'piper'})}\n\n"
                 return
 
-            # --- local exec shortcut: never web-search / hallucinate local system queries ---
+            # --- local exec shortcut: only if intent is 'shell' ---
             from intent_dispatch import _run_local_exec as _rle
-            try:
-                _local_reply = await asyncio.to_thread(_rle, user_input)
-            except Exception:
-                _local_reply = None
-            if _local_reply:
-                full_reply = _local_reply
-                yield f"data: {json.dumps({'type': 'start', 'id': msg_id, 'provider': 'local', 'intent': 'shell'})}\n\n"
-                yield f"data: {json.dumps({'type': 'token', 'id': msg_id, 'token': full_reply})}\n\n"
-                yield f"data: {json.dumps({'type': 'done', 'id': msg_id, 'provider': 'local', 'intent': 'shell', 'tts_engine': 'piper'})}\n\n"
-                return
+            if intent == "shell":
+                try:
+                    _local_reply = await asyncio.to_thread(_rle, user_input)
+                except Exception:
+                    _local_reply = None
+                
+                if _local_reply:
+                    full_reply = _local_reply
+                    yield f"data: {json.dumps({'type': 'start', 'id': msg_id, 'provider': 'local', 'intent': 'shell'})}\n\n"
+                    yield f"data: {json.dumps({'type': 'token', 'id': msg_id, 'token': full_reply})}\n\n"
+                    yield f"data: {json.dumps({'type': 'done', 'id': msg_id, 'provider': 'local', 'intent': 'shell', 'tts_engine': 'piper'})}\n\n"
+                    return
 
             # --- async search enrichment (thread-isolated to avoid blocking event loop) ---
             _enriched_input = user_input
@@ -453,7 +502,12 @@ async def chat_endpoint(req: Request):
         chat_fn=chat,
         chat_stream_fn=chat_stream,
     )
-    reply = await asyncio.to_thread(dispatch, ctx)
+
+    if intent in _SIDE_EFFECT_INTENTS:
+        async with _DISPATCH_LOCK:
+            reply = await asyncio.to_thread(dispatch, ctx)
+    else:
+        reply = await asyncio.to_thread(dispatch, ctx)
 
     _track_widget_msg(user_input, "user", intent)
     _track_widget_msg(reply, "assistant", intent)
@@ -482,9 +536,7 @@ def _track_widget_msg(content, role, intent):
     with _widget_history_lock:
         msg_id = len(_widget_history)
         _widget_history[msg_id] = {"role": role, "content": content, "intent": intent}
-        while len(_widget_history) > _MAX_WIDGET_HISTORY * 2:
-            oldest = next(iter(_widget_history))
-            del _widget_history[oldest]
+    _trim_history_if_needed()
 
 def _persist_exchange(user_msg: str, assistant_msg: str, session_id: str = None) -> str:
     """Persist a user+assistant exchange to conversation_json in sessions table. Returns used session_id."""
