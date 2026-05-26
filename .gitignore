@@ -57,6 +57,10 @@ models/
 cleanup.log
 maintenance_state.json
 tuner_state.json
+coding_personality.json
+coding_personality.txt
+mcp_config.json
+edith_modules.json
 memory_db_backup/
 chroma_db_deleted_backup/
 edith_memory_deleted_backup/
