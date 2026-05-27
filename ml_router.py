@@ -1,14 +1,11 @@
-from config import MODELS, get_logger
+from config import get_logger
+from smart_router import smart_call
 
-def _llm(*args, **kwargs):
-    from config import safe_ollama_call
-    r = safe_ollama_call(*args, **kwargs)
-    return r.value if r.ok else r.error
+def _llm(prompt, intent="chat"):
+    return smart_call(prompt, intent=intent)
 
-def _llm_gen(*args, **kwargs):
-    from config import safe_ollama_generate
-    r = safe_ollama_generate(*args, **kwargs)
-    return r.value if r.ok else r.error
+def _llm_gen(prompt, intent="chat"):
+    return smart_call(prompt, intent=intent)
 
 log = get_logger("ml_router")
 
@@ -91,7 +88,7 @@ User message: {user_input}
 
 Respond helpfully and concisely."""
 
-    response = _llm_gen(MODELS["chat"], prompt)
+    response = _llm_gen(prompt, intent=analysis['route'])
     return analysis, response
 
 if __name__ == "__main__":

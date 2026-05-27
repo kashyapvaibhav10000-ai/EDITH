@@ -20,7 +20,6 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from dashboard_backend import (
     get_system_stats,
     get_active_model,
-    get_ollama_models,
     get_recent_logs,
     get_edith_modules,
     get_mcp_status,
@@ -79,7 +78,6 @@ def register_dashboard_routes(app: FastAPI):
         return {
             "system": get_system_stats(),
             "model": get_active_model(),
-            "models": get_ollama_models(),
             "logs": get_recent_logs(),
             "modules": get_edith_modules(),
             "mcp": get_mcp_status(),

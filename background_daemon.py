@@ -692,17 +692,7 @@ if __name__ == "__main__":
     log.info("EDITH Background Daemon v2.0 starting...")
     log.info("=" * 50)
 
-    # Hardware-aware model selection
-    try:
-        from config import detect_optimal_models, MODELS
-        chat_model, code_model, resource_mode = detect_optimal_models()
-        MODELS["chat"] = chat_model
-        MODELS["code"] = code_model
-        MODELS["reason"] = chat_model
-        MODELS["lookup"] = chat_model
-        log.info(f"Auto-selected models: chat={chat_model} code={code_model} mode={resource_mode}")
-    except Exception as e:
-        log.warning(f"Hardware model detection failed, using defaults: {e}")
+
 
     # Register signal handlers
     signal.signal(signal.SIGTERM, _graceful_shutdown)
@@ -712,28 +702,7 @@ if __name__ == "__main__":
     _start_subprocess("chat_server", "chat_server.py")
     _start_subprocess("wake_listener", "wake_listener.py")
 
-    # L3: Pre-warm Ollama on boot (ensures model is loaded into memory)
-    def _prewarm_ollama():
-        import urllib.request
-        deadline = time.time() + 30
-        while time.time() < deadline:
-            try:
-                urllib.request.urlopen("http://localhost:11434/api/tags", timeout=2)
-                break
-            except Exception:
-                log.debug("Ollama not ready yet — retrying in 2s")
-                time.sleep(2)
-        else:
-            log.warning("Ollama did not become ready within 30s — skipping prewarm")
-            return
-        try:
-            from smart_router import smart_call
-            response = smart_call("Say hello", intent="internal").strip()
-            log.info(f"✅ Ollama warmed up ({len(response)} chars)")
-        except Exception as e:
-            log.warning(f"Ollama warmup failed (non-fatal): {e}")
 
-    threading.Thread(target=_prewarm_ollama, daemon=True, name="ollama-prewarm").start()
 
     # Pre-warm enabled MCP servers in background (avoids cold-start on first user call)
     def _prewarm_mcp():

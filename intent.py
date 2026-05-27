@@ -174,7 +174,7 @@ REPO_ANALYZE_PATTERNS = [
 SYSTEM_HEALTH_PATTERNS = [
     r"(system health|health check|status check|all systems|system status)",
     r"(are you (ok|okay|running|working|online)|everything (ok|working|fine))",
-    r"(check (systems?|network|ollama|phone|calendar|disk|ram|memory|status))",
+    r"(check (systems?|network|phone|calendar|disk|ram|memory|status))",
     r"(what.s (wrong|broken|offline|down)|diagnos(e|tics?))",
 ]
 

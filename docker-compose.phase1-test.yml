@@ -103,27 +103,7 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  # ────────────────────────────────────────────────
-  # Optional: Local Ollama (if running in Docker)
-  # ────────────────────────────────────────────────
-  # Uncomment to run Ollama in a container instead of host machine
-  # ollama:
-  #   image: ollama/ollama:latest
-  #   container_name: edith-ollama
-  #   restart: unless-stopped
-  #   networks:
-  #     - edith-net
-  #   ports:
-  #     - "11434:11434"
-  #   volumes:
-  #     - ollama-data:/root/.ollama
-  #   environment:
-  #     OLLAMA_HOST: 0.0.0.0:11434
-  #   healthcheck:
-  #     test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags || exit 1"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 3
+
 
 networks:
   edith-net:
@@ -137,6 +117,4 @@ volumes:
   # SQLite memory archive
   edith-sqlite:
     driver: local
-  # Ollama models (if using container)
-  # ollama-data:
-  #   driver: local
+

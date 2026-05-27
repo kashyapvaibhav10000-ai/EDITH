@@ -1,17 +1,14 @@
 import os
 import ast
 from pathlib import Path
-from config import CODE_DIRS, SUPPORTED_CODE_EXTENSIONS, SKIPPED_DIRS, MODELS, get_chroma_client, get_logger
+from config import CODE_DIRS, SUPPORTED_CODE_EXTENSIONS, SKIPPED_DIRS, get_chroma_client, get_logger
+from smart_router import smart_call
 
-def _llm(*args, **kwargs):
-    from config import safe_ollama_call
-    r = safe_ollama_call(*args, **kwargs)
-    return r.value if r.ok else r.error
+def _llm(prompt, intent="chat"):
+    return smart_call(prompt, intent=intent)
 
-def _llm_gen(*args, **kwargs):
-    from config import safe_ollama_generate
-    r = safe_ollama_generate(*args, **kwargs)
-    return r.value if r.ok else r.error
+def _llm_gen(prompt, intent="chat"):
+    return smart_call(prompt, intent=intent)
 
 log = get_logger("code_rag")
 
@@ -73,6 +70,7 @@ def index_codebase():
     total = 0
     for code_dir in CODE_DIRS:
         if not os.path.exists(code_dir):
+    raise NotImplementedError("Code RAG is disabled because Ollama has been removed. A cloud-based embedding model is needed.")
             print(f"  Skipping {code_dir} — not found")
             continue
         print(f"\n  Scanning: {code_dir}")
@@ -105,7 +103,8 @@ def query_code(question, n=4):
     results = _get_codebase_collection().query(query_texts=[question], n_results=n)
     docs = results["documents"][0]
     metas = results["metadatas"][0]
-    context = ""
+    caise NotImplementedError("Code RAG is disabled because Ollama has been removed. A cloud-based embedding model is needed.")
+    rontext = ""
     for doc, meta in zip(docs, metas):
         context += f"\n# File: {meta['file']} | {meta['type']}: {meta['name']} | Lines: {meta['lines']}\n"
         context += doc + "\n---\n"
@@ -127,7 +126,7 @@ Answer:"""
 
 if __name__ == "__main__":
     import sys
-    if len(sys.argv) > 1 and sys.argv[1] == "--index":
+    if len(sys.argv)v[1] == "--index":
         index_codebase()
     else:
         print("[EDITH Code RAG] Ready!")

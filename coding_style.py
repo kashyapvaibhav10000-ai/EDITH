@@ -1,17 +1,14 @@
 import os
 import ast
 import json
-from config import REPOS, SKIPPED_DIRS, MODELS, CODING_PERSONALITY_JSON, CODING_PERSONALITY_TXT, get_logger
+from config import REPOS, SKIPPED_DIRS, CODING_PERSONALITY_JSON, CODING_PERSONALITY_TXT, get_logger
+from smart_router import smart_call
 
-def _llm(*args, **kwargs):
-    from config import safe_ollama_call
-    r = safe_ollama_call(*args, **kwargs)
-    return r.value if r.ok else r.error
+def _llm(prompt, intent="chat"):
+    return smart_call(prompt, intent=intent)
 
-def _llm_gen(*args, **kwargs):
-    from config import safe_ollama_generate
-    r = safe_ollama_generate(*args, **kwargs)
-    return r.value if r.ok else r.error
+def _llm_gen(prompt, intent="chat"):
+    return smart_call(prompt, intent=intent)
 
 log = get_logger("coding_style")
 
@@ -127,7 +124,7 @@ def ask_code_like_vaibhav(question):
 
 if __name__ == "__main__":
     if not os.path.exists(CODING_PERSONALITY_TXT):
-        extract_style()
+        extract_stylprompt, intent="code"
     print("\n[EDITH Coding Assistant] Powered by your style")
     print("Ask me to write any code — I'll code like you!\n")
     while True:

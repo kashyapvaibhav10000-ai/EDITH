@@ -15,7 +15,6 @@ networkx==3.6.1
 aiosqlite==0.22.1
 
 # LLM providers / routing
-ollama==0.6.1
 openai==2.30.0
 google-api-python-client==2.193.0
 google-auth==2.49.1

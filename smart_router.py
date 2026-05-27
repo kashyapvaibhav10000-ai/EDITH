@@ -1,9 +1,8 @@
 """
-EDITH Smart Router — 4-Tier Privacy-Aware AI Routing
+EDITH Smart Router — 4-Tier Cloud-Only AI Routing
 
-Routes requests through: Groq → Gemini → NVIDIA → OpenRouter → Ollama (local)
-Sensitive tasks are FORCED local (Ollama only). No exceptions.
-
+Routes requests through: Groq → Gemini → NVIDIA → OpenRouter
+Sensitive tasks are blocked.
 Rate-limit memory: if a provider fails, skip it for 60 seconds.
 """
 
@@ -16,10 +15,9 @@ import threading
 import requests
 import sqlite3
 import datetime
-import ollama as ollama_lib
 from collections import OrderedDict, deque
 from dotenv import load_dotenv
-from config import get_logger, MODELS, CONTEXT_FINGERPRINT_ENABLED, MEMORY_ARCHIVE_PATH
+from config import get_logger, CONTEXT_FINGERPRINT_ENABLED, MEMORY_ARCHIVE_PATH
 import vault
 
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
@@ -55,14 +53,13 @@ PROVIDER_MODELS = {
     "gemini":     "gemini-2.0-flash",
     "nvidia":     "meta/llama-3.1-70b-instruct",
     "openrouter": "meta-llama/llama-3.3-70b-instruct:free",
-    "ollama":     MODELS.get("reason", "qwen2.5:1.5b"),
 }
 
 # ──────────────────────────────────────────────
 # Privacy Classification
 # ──────────────────────────────────────────────
 # LOCAL_ONLY: These intents contain sensitive personal data.
-#   → Forced to local Ollama. Air-gapped. Never touches the internet.
+#   → Blocked since local model is removed.
 # CLOUD_OK: General knowledge tasks. Safe to send to cloud APIs.
 
 LOCAL_ONLY_INTENTS = {
@@ -77,7 +74,7 @@ LOCAL_ONLY_INTENTS = {
 }
 
 # Cloud node flag — set EDITH_NODE_TYPE=cloud in service env on DO droplet.
-# When true: Ollama stripped from all routing chains; private tasks rejected.
+# When true: private tasks rejected.
 _IS_CLOUD_NODE = os.getenv("EDITH_NODE_TYPE", "").lower() == "cloud"
 
 # Phase 3.5: PII Tagger — force local routing if PII detected in prompt
@@ -157,8 +154,8 @@ BASE_COOLDOWN = 60         # First failure: 60s cooldown
 MAX_COOLDOWN = 300         # Max cooldown: 5 minutes
 
 # Daily rate limit counters
-_daily_calls = {"groq": 0, "gemini": 0, "nvidia": 0, "openrouter": 0, "ollama": 0}
-DAILY_LIMITS = {"groq": 150, "gemini": 250, "nvidia": 80, "openrouter": 80, "ollama": 999999}
+_daily_calls = {"groq": 0, "gemini": 0, "nvidia": 0, "openrouter": 0}
+DAILY_LIMITS = {"groq": 150, "gemini": 250, "nvidia": 80, "openrouter": 80}
 
 # Response cache (LRU, 100 entries, 1 hour TTL)
 _response_cache = OrderedDict()
@@ -171,7 +168,7 @@ _internet_check_time: float = 0.0
 _INTERNET_CHECK_INTERVAL = 30.0
 
 # Response latency tracking — rolling window of 20 samples per provider
-_response_times: dict[str, deque] = {p: deque(maxlen=20) for p in ("groq", "gemini", "nvidia", "openrouter", "ollama")}
+_response_times: dict[str, deque] = {p: deque(maxlen=20) for p in ("groq", "gemini", "nvidia", "openrouter")}
 
 # Latest single latency per provider — exposed via /api/provider-latencies
 _provider_latencies: dict[str, float] = {}
@@ -364,15 +361,12 @@ def _apply_tuner_weights(chain: list[str]) -> list[str]:
     """Re-sort chain by tuner weights as a soft preference.
 
     Only reorders within the chain — never adds or removes providers.
-    Ollama stays last (privacy fallback).
     """
     weights = _get_tuner_weights()
     if not weights:
         return chain
-    non_ollama = [p for p in chain if p != "ollama"]
-    non_ollama.sort(key=lambda p: weights.get(p, 0.5), reverse=True)
-    result = non_ollama + (["ollama"] if "ollama" in chain else [])
-    return result
+    chain.sort(key=lambda p: weights.get(p, 0.5), reverse=True)
+    return chain
 
 
 def _is_provider_cooled_down(provider: str) -> bool:
@@ -486,8 +480,7 @@ def _has_key(provider: str) -> bool:
         return True
     return bool(keys.get(provider, ""))
 
-
-# ──────────────────────────────────────────────
+# ────────────────────────────────────────────
 # Provider API Calls
 # ──────────────────────────────────────────────
 
@@ -566,25 +559,14 @@ def _call_openrouter(prompt: str, system: str = "") -> str:
     return resp.json()["choices"][0]["message"]["content"]
 
 
-def _call_ollama(prompt: str, system: str = "") -> str:
-    """Call local Ollama (air-gapped, never leaves the machine)."""
-    # EDITH FIX v3.0 — Persona Injection
-    final_system = f"{EDITH_PERSONA_PREFIX}\n\n{system}" if system else EDITH_PERSONA_PREFIX
-    messages = []
-    messages.append({"role": "system", "content": final_system})
-    messages.append({"role": "user", "content": prompt})
-    response = ollama_lib.chat(model=PROVIDER_MODELS["ollama"], messages=messages)
-    return response["message"]["content"]
-
-
 # Provider function map
 _PROVIDER_CALLS = {
     "groq": _call_groq,
     "gemini": _call_gemini,
     "nvidia": _call_nvidia,
     "openrouter": _call_openrouter,
-    "ollama": _call_ollama,
 }
+
 
 def _call_groq_stream(prompt: str, system: str = ""):
     """Stream from Groq API."""
@@ -703,31 +685,25 @@ _PROVIDER_STREAM_CALLS = {
     "gemini": _call_gemini_stream,
     "nvidia": _call_nvidia_stream,
     "openrouter": _call_openrouter_stream,
-    "ollama": _call_ollama_stream,
 }
 
 
-# ──────────────────────────────────────────────
-# The Smart Router — Main Entry Point
-# ──────────────────────────────────────────────
-
 def smart_call(prompt: str, intent: str = "chat", system: str = "") -> str:
     """
-    The main EDITH routing function. Replaces safe_ollama_call everywhere.
+    Routes a prompt to the best available AI provider based on intent and provider health.
 
     Args:
-        prompt: The user prompt / question.
-        intent: The detected intent (e.g. "council", "email", "code").
-        system: Optional system prompt.
+        prompt: The user's query.
+        intent: The detected intent (e.g., "chat", "code", "reason").
+        system: An optional system message to guide the AI.
 
     Returns:
         The AI-generated response string.
 
     Routing logic:
-        1. If intent is in LOCAL_ONLY_INTENTS → force Ollama (air-gapped).
-        2. Otherwise, determine task type → follow the provider chain.
+        1. If intent is in LOCAL_ONLY_INTENTS -> block the request.
+        2. Otherwise, determine task type -> follow the provider chain.
         3. Skip providers that are on cooldown or missing API keys.
-        4. Ollama is always the final fallback.
     """
 
     # ── Check cache first ──
@@ -753,35 +729,33 @@ def smart_call(prompt: str, intent: str = "chat", system: str = "") -> str:
         else:
             log.info(f"🔒 PRIVATE [{intent}] → forced local Ollama")
         try:
-            result = _call_ollama(prompt, system)
+            result = _call_with_latency_track("ollama", _PROVIDER_CALLS["ollama"], prompt, system)
             _track_call("ollama")
             _cache_set(prompt, intent, result)
             return result
         except Exception as e:
             log.error(f"Local Ollama failed: {e}")
-            return f"[EDITH] Ollama is offline and this is a private task. Cannot use cloud APIs. Error: {e}"
+            return f"[EDITH] Ollama is offline (Private Task). Error: {e}"
 
     # ── Determine routing chain ──
     task_type = INTENT_TASK_TYPE.get(intent, "conversation")
     _live_chains = _routing_chains()
     chain = list(_live_chains.get(task_type, _live_chains["conversation"]))
 
+    # New chain order: groq → gemini → nvidia → openrouter
+    chain = ["groq", "gemini", "nvidia", "openrouter"]
+
+
     # ── Complexity routing: reorder chain based on query complexity ──
     complexity = _score_complexity(prompt)
-    if complexity == "low" and "ollama" in chain:
-        chain = ["ollama"] + [p for p in chain if p != "ollama"]
-        log.debug(f"Low-complexity query → Ollama-first chain")
-    elif complexity == "high" and "ollama" in chain:
-        chain = [p for p in chain if p != "ollama"] + ["ollama"]
-        log.debug(f"High-complexity query → cloud-first chain (Ollama last)")
-
+    
     # ── Short query bias: put Groq first (fastest for short completions) ──
     if complexity != "low" and len(prompt) <= _SHORT_QUERY_CHARS and "groq" in chain and chain[0] != "groq":
         chain = ["groq"] + [p for p in chain if p != "groq"]
         log.debug(f"Short query ({len(prompt)}c) → Groq-first chain")
 
     # ── Auto-tune: if we have latency data, prefer fastest available provider ──
-    fastest = _get_fastest_provider([p for p in chain if p != "ollama"])
+    fastest = _get_fastest_provider(chain)
     if fastest and fastest != chain[0]:
         chain = [fastest] + [p for p in chain if p != fastest]
         log.debug(f"Auto-tune: promoting {fastest} (lowest avg latency)")
@@ -804,20 +778,12 @@ def smart_call(prompt: str, intent: str = "chat", system: str = "") -> str:
 
     # ── Cloud node: strip Ollama from chain (not installed on DO droplet) ──
     if _IS_CLOUD_NODE:
-        chain = [p for p in chain if p != "ollama"]
-        log.debug("Cloud node: Ollama removed from chain")
+        log.debug("Cloud node: No local model available.")
 
-    # Skip cloud providers when offline — go straight to Ollama
-    if not _IS_CLOUD_NODE and not _has_internet():
-        log.warning("🔌 No internet — routing directly to Ollama")
-        try:
-            result = _call_ollama(prompt, system)
-            _track_call("ollama")
-            _cache_set(prompt, intent, result)
-            return result
-        except Exception as e:
-            log.error(f"Ollama failed offline: {e}")
-            return f"[EDITH] Offline and Ollama failed: {e}"
+    # Skip cloud providers when offline
+    if not _has_internet():
+        log.error("🔌 No internet and no local model available.")
+        return f"[EDITH] Offline and no local model available."
 
     log.info(f"🌐 CLOUD-OK [{intent}] → task_type={task_type} → chain={chain}")
 
@@ -855,42 +821,27 @@ def smart_call(prompt: str, intent: str = "chat", system: str = "") -> str:
             error_msg = str(e)[:100]
             log.warning(f"  ❌ {provider} failed: {error_msg}")
             errors.append(f"{provider}: {error_msg}")
-            if provider != "ollama":
-                _mark_provider_failed(provider)
 
-    # ── All providers failed ──
-    log.error(f"All providers exhausted for [{intent}]")
-    return f"[EDITH] All AI providers failed. Errors: {'; '.join(errors)}"
+    # If all providers failed
+    final_error = f"[EDITH] All AI providers failed. Errors: {'; '.join(errors)}"
+    log.error(final_error)
+    return final_error
 
 
-def smart_call_stream(prompt: str, intent: str = "chat", system: str = ""):
-    """Streaming variant of smart_call. Yields tokens in real-time.
-
-    Routing logic mirrors smart_call exactly: PII gate, complexity scoring,
-    short-query Groq bias, auto-tune, tuner weights, FORCE_DEEP_THINK, internet check.
+def smart_stream(prompt: str, intent: str = "chat", system: str = ""):
     """
-    # ── CoT injection: mirrored from smart_call() ──
+    Streaming version of smart_call.
+    """
+    # ── CoT injection ──
     _COT = "Think step by step. Be precise and direct. Show reasoning before giving final answer."
     system = f"{system}\n\n{_COT}" if system else _COT
 
-    # ── Privacy Gate (PII + intent) ──
+    # ── Privacy Gate ──
     pii = detect_pii(prompt)
     force_local = intent in LOCAL_ONLY_INTENTS or pii["has_pii"]
     if force_local:
-        if _IS_CLOUD_NODE:
-            log.warning(f"🚫 [{intent}] private task rejected on cloud node (stream)")
-            yield "[EDITH] This task requires local processing and cannot run on the cloud node."
-            return
-        if pii["has_pii"]:
-            log.debug("PII detected in stream — forcing local route")
-        else:
-            log.info(f"🔒 PRIVATE [{intent}] stream → forced local Ollama")
-        try:
-            for token in _call_ollama_stream(prompt, system):
-                yield token
-            _track_call("ollama")
-        except Exception as e:
-            yield f"[EDITH] Ollama is offline (Private Task). Error: {e}"
+        log.error(f"Local model required for intent '{intent}' or PII, but Ollama is removed.")
+        yield f"[EDITH] This is a private task, but no local model is available. Aborting."
         return
 
     # ── Determine routing chain ──
@@ -910,7 +861,7 @@ def smart_call_stream(prompt: str, intent: str = "chat", system: str = ""):
         chain = ["groq"] + [p for p in chain if p != "groq"]
 
     # ── Auto-tune: fastest provider first ──
-    fastest = _get_fastest_provider([p for p in chain if p != "ollama"])
+    fastest = _get_fastest_provider(chain)
     if fastest and fastest != chain[0]:
         chain = [fastest] + [p for p in chain if p != fastest]
 
@@ -931,14 +882,9 @@ def smart_call_stream(prompt: str, intent: str = "chat", system: str = ""):
         log.debug("Cloud node: Ollama removed from stream chain")
 
     # ── Skip cloud when offline ──
-    if not _IS_CLOUD_NODE and not _has_internet():
-        log.warning("🔌 No internet — streaming directly via Ollama")
-        try:
-            for token in _call_ollama_stream(prompt, system):
-                yield token
-            _track_call("ollama")
-        except Exception as e:
-            yield f"[EDITH] Offline and Ollama failed: {e}"
+    if not _has_internet():
+        log.warning("🔌 No internet and no local model available.")
+        yield f"[EDITH] Offline and no local model available."
         return
 
     log.info(f"🌐 CLOUD-OK [{intent}] stream → chain={chain}")
@@ -966,60 +912,28 @@ def smart_call_stream(prompt: str, intent: str = "chat", system: str = ""):
             return
         except Exception as e:
             log.warning(f"  ❌ {provider} stream failed: {e}")
-            if provider != "ollama":
-                _mark_provider_failed(provider)
+    
+    yield "[EDITH] All AI streaming providers failed."
 
-    yield "[EDITH] All streaming providers failed. Try a non-stream request."
-
-
-# ──────────────────────────────────────────────
-# Convenience wrappers
-# ──────────────────────────────────────────────
-
-def smart_chat(prompt: str, intent: str = "chat") -> str:
-    """For general chat — no system prompt needed."""
-    return smart_call(prompt, intent=intent)
-
-
-def smart_reason(prompt: str, intent: str = "reason") -> str:
-    """For deep reasoning tasks (Council, Decisions, etc.)."""
-    return smart_call(prompt, intent=intent,
-                      system="You are EDITH, a deeply analytical AI assistant. Think step by step. Be precise and direct.")
-
-
-def smart_code(prompt: str) -> str:
-    """For coding tasks."""
-    return smart_call(prompt, intent="code",
-                      system="You are EDITH, an expert software engineer. Write clean, production-quality code.")
-
-
-# ──────────────────────────────────────────────
-# Status & Diagnostics
-# ──────────────────────────────────────────────
 
 def router_status() -> str:
-    """Show which providers are available and their status."""
-    lines = ["EDITH Smart Router Status:", "─" * 40]
-    providers = [
-        ("Groq",       "groq",       GROQ_KEY),
-        ("Gemini",     "gemini",     GEMINI_KEY),
-        ("NVIDIA",     "nvidia",     NVIDIA_KEY),
-        ("OpenRouter", "openrouter", OPENROUTER_KEY),
-        ("Ollama",     "ollama",     "local"),
-    ]
-    for name, key, api_key in providers:
-        has_key = "✅ Key set" if api_key else "❌ No key"
-        cooldown = ""
-        daily = ""
-        if not _is_provider_cooled_down(key):
-            info = _provider_failures.get(key, {})
-            cd = min(BASE_COOLDOWN * (2 ** (info.get("count", 1) - 1)), MAX_COOLDOWN)
-            remaining = int(cd - (time.time() - info.get("time", 0)))
-            cooldown = f" (⏳ cooldown {remaining}s)"
-        if key in _daily_calls and _daily_calls[key] > 0:
-            daily = f" [{_daily_calls[key]}/{DAILY_LIMITS.get(key, '?')} today]"
-        lines.append(f"  {name:<12} {has_key}{cooldown}{daily}")
-    lines.append("─" * 40)
+    """Return a human-readable status report of the router."""
+    lines = ["=" * 40]
+    lines.append("Smart Router Status")
+    lines.append("=" * 40)
+
+    lines.append("\nProvider Health:")
+    for provider in ["groq", "gemini", "nvidia", "openrouter"]:
+        status = "OK"
+        if not _has_key(provider):
+            status = "NO KEY"
+        elif not _is_provider_cooled_down(provider):
+            status = "COOLDOWN"
+        elif not _is_under_daily_limit(provider):
+            status = "RATE LIMIT"
+        lines.append(f"  - {provider:<12} {status}")
+
+    lines.append("-" * 40)
 
     # Show routing chains
     lines.append("\nRouting Chains:")
@@ -1042,3 +956,5 @@ if __name__ == "__main__":
         print(f"Response: {result}")
     else:
         print("No API keys configured. Add them to .env and try again.")
+
+

@@ -41,7 +41,6 @@ PROVIDER_MODELS = {
     "gemini":     "gemini-2.0-flash",
     "nvidia":     "meta/llama-3.1-70b-instruct",
     "openrouter": "meta-llama/llama-3.3-70b-instruct:free",
-    "ollama":     MODELS.get("reason", "qwen2.5:1.5b"),
 }
 
 # ──────────────────────────────────────────────
@@ -107,8 +106,6 @@ def _has_key(provider: str) -> bool:
     """Check if the API key exists for a provider."""
     keys = {"groq": GROQ_KEY, "gemini": GEMINI_KEY,
             "nvidia": NVIDIA_KEY, "openrouter": OPENROUTER_KEY}
-    if provider == "ollama":
-        return True
     return bool(keys.get(provider, ""))
 
 

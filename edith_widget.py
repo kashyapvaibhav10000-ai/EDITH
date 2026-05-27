@@ -344,7 +344,7 @@ class EdithWidget(QWidget):
         prov_l.setSpacing(4)
         prov_l.addWidget(self._section_label("Providers"))
         self.provider_labels = {}
-        for p in ["groq", "gemini", "nvidia", "openrouter", "ollama"]:
+        for p in ["groq", "gemini", "nvidia", "openrouter"]:
             row = QHBoxLayout()
             name_l = QLabel(p.capitalize())
             name_l.setStyleSheet(f"color:{TEXT};font-size:11px;")

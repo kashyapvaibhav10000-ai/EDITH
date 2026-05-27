@@ -12,7 +12,7 @@ from rag import build_index, query_rag
 from vision import analyze_screenshot, analyze_photo
 from phone import ring_phone, send_sms, get_notifications, phone_status, get_battery, send_notification
 from intent import is_coding_request, detect_intent
-from config import MEMORY_DB_PATH, MEMORY_ARCHIVE_PATH, SMART_MEMORY_MAX_RAM_ITEMS, SMART_MEMORY_MAX_RAM_MB, MODELS, get_logger, get_chroma_client, DANGER_KEYWORDS, INPUT_SCOPE_CATEGORIES
+from config import MEMORY_DB_PATH, MEMORY_ARCHIVE_PATH, SMART_MEMORY_MAX_RAM_ITEMS, SMART_MEMORY_MAX_RAM_MB, get_logger, get_chroma_client, DANGER_KEYWORDS, INPUT_SCOPE_CATEGORIES
 from smart_memory import SmartMemoryManager, compress_context
 from conversation_dna import get_response_modifiers
 from context import DispatchContext

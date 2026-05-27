@@ -29,9 +29,10 @@ from enum import Enum
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-from config import MODELS, DANGEROUS_PATTERNS, OllamaError, get_logger, EDITH_PATH
+from config import DANGEROUS_PATTERNS, get_logger, EDITH_PATH
 from errors import Result
 from event_bus import bus, Topic
+from smart_router import smart_call
 
 log = get_logger("agent")
 
@@ -144,15 +145,11 @@ def _load_run(task_id: str) -> Optional[AgentRun]:
 # ──────────────────────────────────────────────
 # LLM helpers
 # ──────────────────────────────────────────────
-def _llm(*args, **kwargs):
-    from config import safe_ollama_call
-    r = safe_ollama_call(*args, **kwargs)
-    return r.value if r.ok else r.error
+def _llm(prompt, intent="reason"):
+    return smart_call(prompt, intent=intent)
 
-def _llm_gen(*args, **kwargs):
-    from config import safe_ollama_generate
-    r = safe_ollama_generate(*args, **kwargs)
-    return r.value if r.ok else r.error
+def _llm_gen(prompt, intent="reason"):
+    return smart_call(prompt, intent=intent)
 
 
 # ──────────────────────────────────────────────
@@ -244,11 +241,7 @@ Reply ONLY like this:
 1. First action
 2. Second action
 3. Third action"""
-    try:
-        return _llm(MODELS["chat"], prompt)
-    except OllamaError as e:
-        log.error(f"Agent planning failed: {e}")
-        raise
+    return _llm(prompt, intent="reason")
 
 
 def get_command(step) -> str:
@@ -267,11 +260,7 @@ Step: {step}"""
         cmd = _llm(MODELS["chat"], prompt)
     except OllamaError as e:
         log.error(f"Agent get_command failed: {e}")
-        raise
-    cmd = cmd.replace("```bash", "").replace("```sh", "").replace("```", "").strip()
-    return cmd.split("\n")[0].strip()
-
-
+    cmd = _llm(prompt, intent="reason")
 # ──────────────────────────────────────────────
 # AgentRunner — state machine
 # ──────────────────────────────────────────────

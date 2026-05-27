@@ -1,7 +1,7 @@
 """
 EDITH Circuit Breaker — Phase 4.7
 
-Checks health of Ollama, SearXNG, and cloud providers BEFORE firing agents.
+Checks health of SearXNG, and cloud providers BEFORE firing agents.
 Per-service state: CLOSED (healthy) / OPEN (broken) / HALF_OPEN (testing).
 Exponential backoff with jitter for recovery.
 """
@@ -10,7 +10,7 @@ import time
 import random
 import threading
 import requests
-from config import get_logger, OLLAMA_URL
+from config import get_logger
 
 log = get_logger("circuit_breaker")
 
@@ -87,7 +87,6 @@ class CircuitBreaker:
 
 # Global circuit breakers
 _breakers = {
-    "ollama": CircuitBreaker("ollama", failure_threshold=3, recovery_timeout=30),
     "searxng": CircuitBreaker("searxng", failure_threshold=2, recovery_timeout=60),
     "groq": CircuitBreaker("groq", failure_threshold=3, recovery_timeout=120),
     "gemini": CircuitBreaker("gemini", failure_threshold=3, recovery_timeout=120),
@@ -121,20 +120,6 @@ def record_failure(service: str):
 
 from errors import Result
 
-def check_ollama_health() -> Result:
-    """Ping Ollama to check if it's responsive."""
-    try:
-        r = requests.get(f"{OLLAMA_URL}/api/tags", timeout=5)
-        if r.status_code == 200:
-            record_success("ollama")
-            return Result.success()
-    except Exception as e:
-        record_failure("ollama")
-        return Result.from_exception(e)
-    record_failure("ollama")
-    return Result.failure("Bad status code")
-
-
 def check_searxng_health() -> Result:
     """Ping SearXNG to check if it's responsive."""
     try:
@@ -157,23 +142,25 @@ def get_all_status() -> dict:
 
 
 def pre_flight_check() -> dict:
-    """Run pre-flight health checks before agent dispatch.
-
-    Returns dict with service availability.
-    """
-    res = check_ollama_health()
+    """Run quick checks on essential services (internet, SearXNG)."""
+    res = check_searxng_health()
     is_ok = res.ok if isinstance(res, Result) else res
     results = {
-        "ollama": is_ok,
+        "searxng": is_ok,
         "timestamp": time.time(),
     }
-    log.info(f"Pre-flight: ollama={'OK' if results['ollama'] else 'DOWN'}")
+    log.info(f"Pre-flight: searxng={'OK' if results['searxng'] else 'DOWN'}")
     return results
+
+
+def is_service_available(service_name: str) -> bool:
+    """Check if a service is available."""
+    return get_breaker(service_name).is_available()
 
 
 if __name__ == "__main__":
     print("Circuit Breaker Status:")
     pf = pre_flight_check()
-    print(f"  Ollama: {'OK' if pf['ollama'] else 'DOWN'}")
-    for name, status in get_all_status().items():
-        print(f"  {name}: {status['state']} (failures: {status['failures']})")
+    print(f"  SearXNG: {'OK' if pf['searxng'] else 'DOWN'}")
+    for name, st in _breakers.items():
+        print(f"  {name}: {st.get_status()}")

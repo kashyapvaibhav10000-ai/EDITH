@@ -1,14 +1,76 @@
 import os
 from llama_index.core import VectorStoreIndex, SimpleDirectoryReader, Settings
-from llama_index.embeddings.ollama import OllamaEmbedding
-from llama_index.llms.ollama import Ollama
-from config import NOTES_DIR, MODELS, get_logger
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+from llama_index.core.llms import LLM, CompletionResponse, LLMMetadata
+from typing import Any, Sequence, List
+from llama_index.core.llms.callbacks import llm_completion_callback
+from llama_index.core.llms import ChatMessage
+
+# FIXME: Ollama has been removed. RAG needs a new embedding model and LLM.
+# from llama_index.embeddings.ollama import OllamaEmbedding
+# from llama_index.llms.ollama import Ollama
+from config import NOTES_DIR, get_logger
 from errors import Result
+from smart_router import smart_call
 
 log = get_logger("rag")
 
-Settings.embed_model = OllamaEmbedding(model_name="nomic-embed-text")
-Settings.llm = Ollama(model=MODELS["chat"], request_timeout=60.0)
+class SmartCallLLM(LLM):
+    @property
+    def metadata(self) -> LLMMetadata:
+        """LLM metadata."""
+        return LLMMetadata(
+            model_name="smart_call_llm",
+            context_window=4096,
+            num_output=2048,
+        )
+
+    def complete(self, prompt: str, **kwargs: Any) -> CompletionResponse:
+        response_text = smart_call(prompt, intent="reasoning")
+        return CompletionResponse(text=response_text)
+
+    @llm_completion_callback()
+    def stream_complete(self, prompt: str, **kwargs: Any) -> CompletionResponse:
+        # Not a true stream, but satisfies the interface
+        response_text = smart_call(prompt, intent="reasoning")
+        yield CompletionResponse(text=response_text)
+
+    @llm_completion_callback()
+    def chat(self, messages: Sequence[ChatMessage], **kwargs: Any) -> CompletionResponse:
+        prompt = "\n".join([f"{m.role}: {m.content}" for m in messages])
+        return self.complete(prompt, **kwargs)
+
+    @llm_completion_callback()
+    def stream_chat(self, messages: Sequence[ChatMessage], **kwargs: Any) -> CompletionResponse:
+        prompt = "\n".join([f"{m.role}: {m.content}" for m in messages])
+        return self.stream_complete(prompt, **kwargs)
+
+    # Async methods
+    @llm_completion_callback()
+    async def acomplete(self, prompt: str, **kwargs: Any) -> CompletionResponse:
+        return self.complete(prompt, **kwargs)
+
+    @llm_completion_callback()
+    async def astream_complete(self, prompt: str, **kwargs: Any) -> CompletionResponse:
+        # Not a true stream
+        response = await self.acomplete(prompt, **kwargs)
+        yield response
+
+    @llm_completion_callback()
+    async def achat(self, messages: Sequence[ChatMessage], **kwargs: Any) -> CompletionResponse:
+        return self.chat(messages, **kwargs)
+
+    @llm_completion_callback()
+    async def astream_chat(self, messages: Sequence[ChatMessage], **kwargs: Any) -> CompletionResponse:
+        # Not a true stream
+        response = await self.achat(messages, **kwargs)
+        yield response
+
+
+# Settings.embed_model = OllamaEmbedding(model_name="nomic-embed-text")
+# Settings.llm = Ollama(model=MODELS["chat"], request_timeout=60.0)
+Settings.embed_model = HuggingFaceEmbedding(model_name="all-MiniLM-L6-v2")
+Settings.llm = SmartCallLLM()
 Settings.chunk_size = 512
 Settings.chunk_overlap = 50
 
@@ -49,7 +111,8 @@ def index_directory(path: str) -> Result:
     except Exception as e:
         return Result.from_exception(e)
 
-
+# # raise NotImplementedError("RAG is disabled because Ollama has been removed. A cloud-based embedding model and LLM are needed.")
+    
 def query_rag(question, index) -> Result:
     try:
         query_engine = index.as_query_engine()

@@ -808,7 +808,6 @@ async def api_stats_proxy():
         return await asyncio.to_thread(lambda: {
             "system": _dash.get_system_stats(),
             "model": _dash.get_active_model(),
-            "models": _dash.get_ollama_models(),
             "logs": _dash.get_recent_logs(),
             "modules": _dash.get_edith_modules(),
             "mcp": _dash.get_mcp_status(),
@@ -821,14 +820,13 @@ async def api_stats_proxy():
 
 @app.get("/api/status")
 async def api_status_combined():
-    """Combined system, active provider, Ollama state, and circuit breaker status."""
+    """Combined system, active provider, and circuit breaker status."""
     try:
-        from circuit_breaker import get_all_status, check_ollama_health
+        from circuit_breaker import get_all_status
         from smart_router import _daily_calls, DAILY_LIMITS, _has_key, _is_provider_cooled_down, _is_under_daily_limit
         from monitor import check_ram, check_disk, check_cpu
 
-        res = await asyncio.to_thread(check_ollama_health)
-        ollama_up = res.ok if hasattr(res, 'ok') else res
+
         
         cb_states = get_all_status()
 
@@ -839,7 +837,7 @@ async def api_status_combined():
         })
 
         providers = {}
-        for p in ["groq", "gemini", "nvidia", "openrouter", "ollama"]:
+        for p in ["groq", "gemini", "nvidia", "openrouter"]:
             providers[p] = {
                 "has_key": _has_key(p),
                 "cooled_down": _is_provider_cooled_down(p),
@@ -849,8 +847,8 @@ async def api_status_combined():
                 "circuit": cb_states.get(p, {}).get("state", "CLOSED"),
             }
 
-        active_provider = "ollama"
-        for p in ["groq", "gemini", "nvidia", "openrouter", "ollama"]:
+        active_provider = "unknown"
+        for p in ["groq", "gemini", "nvidia", "openrouter"]:
             if providers[p]["has_key"] and providers[p]["cooled_down"] and providers[p]["under_limit"] and providers[p]["circuit"] != "OPEN":
                 active_provider = p
                 break
@@ -859,7 +857,6 @@ async def api_status_combined():
         return {
             "system": sys_data,
             "active_provider": active_provider,
-            "ollama_running": ollama_up,
             "circuit_breakers": cb_states,
             "providers": providers,
             "search_providers": get_search_status(),
@@ -1846,7 +1843,7 @@ async def repo_gap_plan(request: Request):
         for attempt in [
             lambda: _json.loads(raw.strip()),
             lambda: _json.loads(_re.sub(r'```[a-z]*\n?', '', raw).strip()),
-            lambda: _json.loads(_re.search(r'\{[\s\S]+\}', raw).group(0)),
+            lambda: _json.loads((_re.search(r'\[[\s\S]+\]', raw) or type('x', (), {'group': lambda *_: '[]'})()).group(0)),
         ]:
             try:
                 result = attempt()

@@ -5,17 +5,14 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
-from config import TOKEN_PICKLE_FILE, MODELS, get_logger
+from config import TOKEN_PICKLE_FILE, get_logger
+from smart_router import smart_call
 
-def _llm(*args, **kwargs):
-    from config import safe_ollama_call
-    r = safe_ollama_call(*args, **kwargs)
-    return r.value if r.ok else r.error
+def _llm(prompt, intent="chat"):
+    return smart_call(prompt, intent=intent)
 
-def _llm_gen(*args, **kwargs):
-    from config import safe_ollama_generate
-    r = safe_ollama_generate(*args, **kwargs)
-    return r.value if r.ok else r.error
+def _llm_gen(prompt, intent="chat"):
+    return smart_call(prompt, intent=intent)
 
 log = get_logger("email_compose")
 
@@ -44,7 +41,7 @@ Respond ONLY in this exact JSON format, nothing else:
     # Strip markdown fences if present
     if response.startswith("```"):
         response = response.split("```")[1]
-        if response.startswith("json"):
+        if response.starprompt, intent="email"
             response = response[4:]
     response = response.strip()
     return json.loads(response)

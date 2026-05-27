@@ -4,18 +4,15 @@ from email.header import decode_header
 import os
 import vault
 from dotenv import load_dotenv
-from config import get_logger, MODELS
+from config import get_logger
 from errors import Result
+from smart_router import smart_call
 
-def _llm(*args, **kwargs):
-    from config import safe_ollama_call
-    r = safe_ollama_call(*args, **kwargs)
-    return r.value if r.ok else r.error
+def _llm(prompt, intent="chat"):
+    return smart_call(prompt, intent=intent)
 
-def _llm_gen(*args, **kwargs):
-    from config import safe_ollama_generate
-    r = safe_ollama_generate(*args, **kwargs)
-    return r.value if r.ok else r.error
+def _llm_gen(prompt, intent="chat"):
+    return smart_call(prompt, intent=intent)
 
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 log = get_logger("email_reader")
@@ -105,13 +102,11 @@ Body: {em['body']}
 
 Summary:"""
         try:
-            summary = _llm(MODELS["chat"], prompt)
-            if summary.startswith("[EDITH] Ollama"):
-                summary = "(Could not summarize — Ollama offline)"
+            # summary = _llm(MODELS["chat"], prompt)
+            summary = smart_call(prompt, intent="reason")
         except Exception as e:
-            log.error(f"Email summarize failed: {e}")
-            summary = "(Could not summarize)"
-        summaries.append(f"Email {i} from {em['from']}:\n  Subject: {em['subject']}\n  Summary: {summary}")
+            log.error(f"Email summarization failed: {e}")
+            summary = f"(Could not summarize: {e})"
     return "\n\n".join(summaries)
 
 def check_inbox(limit=5, unread_only=True) -> Result:

@@ -12,7 +12,7 @@ import datetime
 import vault
 import time
 import base64
-from config import MODELS, get_logger, EDITH_PATH
+from config import get_logger, EDITH_PATH
 from errors import Result
 
 log = get_logger("vision")
@@ -92,71 +92,16 @@ def take_screenshot():
     return None
 
 
-def _check_vision_model():
-    """Check if the vision model is available in Ollama."""
-    try:
-        import ollama
-        models = ollama.list(timeout=60)
-        model_list = models.get("models", []) if isinstance(models, dict) else getattr(models, "models", [])
-        model_names = []
-        for m in model_list:
-            if isinstance(m, dict):
-                model_names.append(m.get("name", ""))
-            else:
-                model_names.append(str(getattr(m, "model", "")))
-        target = MODELS.get("vision", "llava-phi3:latest")
-        # Check partial match (e.g., "gemma4:e2b" matches "gemma4:e2b")
-        for name in model_names:
-            if target.split(":")[0] in str(name):
-                return True
-        log.warning(f"Vision model '{target}' not found. Available: {model_names[:5]}")
-        return False
-    except Exception as e:
-        log.error(f"Cannot check Ollama models: {e}")
-        return False
-
-
 def analyze_image(image_path, question="What do you see in this image?"):
-    """Analyze an image using the vision model (gemma4 multimodal via chat API)."""
-    try:
-        import ollama
-        # gemma4 uses chat API with image content
-        result = ollama.chat(
-            model=MODELS["vision"],
-            messages=[{
-                "role": "user",
-                "content": question,
-                "images": [image_path],
-            }],
-            options={"num_predict": 512},
-            timeout=60,
-        )
-        response = ""
-        if isinstance(result, dict):
-            response = result.get("message", {}).get("content", "").strip()
-        else:
-            response = str(getattr(result, "message", {}).get("content", "")).strip() if hasattr(result, "message") else ""
-        if response:
-            return response
-        return "I analyzed the image but couldn't generate a description. Try asking a more specific question."
-    except Exception as e:
-        error_str = str(e).lower()
-        if "timeout" in error_str or "timed out" in error_str:
-            return "Vision analysis taking too long — the model might be loading. Try again in a moment."
-        if "connection" in error_str or "refused" in error_str:
-            # Try Gemini cloud fallback
-            cloud_result = _cloud_vision_fallback(image_path, question)
-            if cloud_result:
-                return cloud_result
-            return "Ollama isn't running. Start it with `ollama serve` and try again."
-        if "not found" in error_str or "does not exist" in error_str:
-            return f"Vision model ({MODELS['vision']}) isn't installed. Run `ollama pull {MODELS['vision']}` to set it up."
-        log.error(f"Vision analysis failed: {e}")
-        # Try cloud fallback on any error
-        cloud_result = _cloud_vision_fallback(image_path, question)
-        if cloud_result:
-            return cloud_result
-        return "Ran into an issue analyzing that image. Want me to try again?"
+    """Analyze an image using the vision model."""
+    # FIXME: Ollama has been removed. Vision analysis needs a cloud-based alternative
+    # like Llava via an API, or another multimodal model from a cloud provider.
+    # The existing Gemini fallback is a good starting point.
+    cloud_result = _cloud_vision_fallback(image_path, question)
+    if cloud_result:
+        return cloud_result
+    
+    return "Vision analysis is currently disabled because the local Ollama model has been removed. A cloud-based alternative is needed."
 
 
 def _cloud_vision_fallback(image_path, question):
@@ -199,11 +144,6 @@ def _cloud_vision_fallback(image_path, question):
 def analyze_screenshot(question="What is on my screen right now?") -> Result:
     """Take a screenshot and analyze it. Returns Result[str]."""
     try:
-        if not _check_vision_model():
-            return Result.success(
-                f"I can't analyze your screen right now — the vision model ({MODELS['vision']}) "
-                f"isn't loaded in Ollama. Run `ollama pull {MODELS['vision']}` to install it."
-            )
         path = take_screenshot()
         if path:
             log.info("Screenshot captured, analyzing...")
@@ -228,10 +168,7 @@ def analyze_photo(image_path, question="What do you see in this image?"):
 
     log.info(f"Analyzing photo: {image_path}")
     description = analyze_image(image_path, question)
-    _log_vision_analysis(image_path, description)
-    return description
-
-
+    
 if __name__ == "__main__":
     print("EDITH Vision Test")
     print("1. Analyze screenshot")

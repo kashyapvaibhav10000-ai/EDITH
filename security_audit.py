@@ -40,15 +40,6 @@ def audit():
     else:
         lines.append("No LUKS encryption WARNING — consider encrypting /home")
 
-    lines.append("\n[OLLAMA EXPOSURE]")
-    ollama_check = run("ss -tlnp | grep 11434")
-    if "127.0.0.1" in ollama_check:
-        lines.append("Ollama localhost only OK")
-    elif ollama_check:
-        lines.append("WARNING: Ollama exposed! " + ollama_check)
-    else:
-        lines.append("Ollama not running")
-
     lines.append("\n[EDITH FILES PERMISSIONS]")
     lines.append(run(f"ls -la {EDITH_PATH}/*.py | awk '{{print $1, $9}}'"))
 

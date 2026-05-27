@@ -6,7 +6,7 @@ Decision simulation (5 branches), weekly briefings, persistent open loop trackin
 import datetime
 import hashlib
 import time
-from config import MODELS, get_chroma_client, get_logger
+from config import get_chroma_client, get_logger
 from smart_router import smart_call
 from cognitive_profile import get_prime_directive, query_profile, get_recent_queries
 

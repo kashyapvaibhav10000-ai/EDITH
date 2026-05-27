@@ -73,37 +73,6 @@ PROJECTS_BASE = os.getenv("PROJECTS_BASE", os.path.join(USER_HOME, "Documents"))
 AYURSTOCK_PATH = os.getenv("AYURSTOCK_PATH", os.path.join(PROJECTS_BASE, "Ayur-stock pro"))
 
 # ──────────────────────────────────────────────
-# Ollama / LLM Configuration
-# ──────────────────────────────────────────────
-OLLAMA_URL = "http://localhost:11434"
-MODELS = {
-    "chat": "gemma3:1b",
-    "code": "gemma3:1b",
-    "reason": "gemma3:1b",
-    "lookup": "gemma3:1b",
-    "vision": "llava-phi3:latest",
-}
-
-
-def detect_optimal_models() -> tuple:
-    """Auto-select Ollama models based on available RAM at boot."""
-    import psutil
-    available_gb = psutil.virtual_memory().available / (1024 ** 3)
-    if available_gb >= 5.0:
-        chat_model = "gemma3:4b"
-        code_model = "qwen2.5-coder:1.5b"
-        resource_mode = "normal"
-    elif available_gb >= 3.0:
-        chat_model = "gemma3:1b"
-        code_model = "qwen2.5-coder:1.5b"
-        resource_mode = "low"
-    else:
-        chat_model = "gemma3:1b"
-        code_model = "gemma3:1b"
-        resource_mode = "minimal"
-    return chat_model, code_model, resource_mode
-
-# ──────────────────────────────────────────────
 # Voice (STT + TTS)
 # ──────────────────────────────────────────────
 PIPER_PATH = os.path.join(VENV_PATH, "bin/piper")
@@ -318,36 +287,6 @@ def get_simplenote_creds():
         _get_vault_secret("SIMPLENOTE_PASSWORD", "") or os.getenv("SIMPLENOTE_PASSWORD", "")
     )
 
-class OllamaError(RuntimeError):
-    """Raised when Ollama is unreachable or returns an error."""
-    pass
-
-
-def safe_ollama_call(model, prompt, timeout=60):
-    """Call Ollama chat. Returns Result dataclass."""
-    import ollama
-    try:
-        response = ollama.chat(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            options={"num_keep": 0}
-        )
-        return Result(ok=True, value=response["message"]["content"].strip())
-    except Exception as e:
-        err_type = "timeout" if "timeout" in str(e).lower() else "connection" if "connect" in str(e).lower() else "unknown"
-        return Result(ok=False, error=str(e), error_type=err_type)
-
-
-def safe_ollama_generate(model, prompt, timeout=60):
-    """Call Ollama generate (non-chat). Returns Result dataclass."""
-    import ollama
-    try:
-        response = ollama.generate(model=model, prompt=prompt)
-        return Result(ok=True, value=response.get("response", "").strip())
-    except Exception as e:
-        err_type = "timeout" if "timeout" in str(e).lower() else "connection" if "connect" in str(e).lower() else "unknown"
-        return Result(ok=False, error=str(e), error_type=err_type)
-
 # ──────────────────────────────────────────────
 # Search Router Limits
 # ──────────────────────────────────────────────
@@ -399,15 +338,14 @@ TRACE_ENABLED = True  # Set False via /trace off to silence trace_logger writes
 # T7: Config-driven Provider Failover
 # ──────────────────────────────────────────────
 # Override routing order per task type via env vars:
-#   PROVIDER_ORDER_SYSTEM=groq,gemini,ollama
-#   PROVIDER_ORDER_CODING=nvidia,openrouter,ollama
-#   PROVIDER_ORDER=groq,gemini,nvidia,ollama   (applies to all unset task types)
-_VALID_PROVIDERS = {"groq", "gemini", "nvidia", "openrouter", "ollama"}
+#   PROVIDER_ORDER_CODING=nvidia,openrouter
+#   PROVIDER_ORDER=groq,gemini,nvidia   (applies to all unset task types)
+_VALID_PROVIDERS = {"groq", "gemini", "nvidia", "openrouter"}
 _DEFAULT_CHAINS = {
-    "system":       ["openrouter", "groq", "gemini", "nvidia", "ollama"],
-    "conversation": ["openrouter", "groq", "gemini", "nvidia", "ollama"],
-    "coding":       ["openrouter", "nvidia", "gemini", "groq", "ollama"],
-    "reasoning":    ["openrouter", "nvidia", "gemini", "groq", "ollama"],
+    "system":       ["openrouter", "groq", "gemini", "nvidia"],
+    "conversation": ["openrouter", "groq", "gemini", "nvidia"],
+    "coding":       ["openrouter", "nvidia", "gemini", "groq"],
+    "reasoning":    ["openrouter", "nvidia", "gemini", "groq"],
 }
 
 def _parse_provider_order(env_val: str) -> list[str]:

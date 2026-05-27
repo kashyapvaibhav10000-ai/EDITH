@@ -1,17 +1,14 @@
 import os
 import urllib.parse
 import requests
-from config import IMAGES_DIR, MODELS, get_logger
+from config import IMAGES_DIR, get_logger
+from smart_router import smart_call
 
-def _llm(*args, **kwargs):
-    from config import safe_ollama_call
-    r = safe_ollama_call(*args, **kwargs)
-    return r.value if r.ok else r.error
+def _llm(prompt, intent="chat"):
+    return smart_call(prompt, intent=intent)
 
-def _llm_gen(*args, **kwargs):
-    from config import safe_ollama_generate
-    r = safe_ollama_generate(*args, **kwargs)
-    return r.value if r.ok else r.error
+def _llm_gen(prompt, intent="chat"):
+    return smart_call(prompt, intent=intent)
 
 log = get_logger("image_gen")
 os.makedirs(IMAGES_DIR, exist_ok=True)
@@ -38,7 +35,7 @@ def generate_image(prompt):
 def enhance_prompt_with_qwen(raw_prompt):
     print("[EDITH] Enhancing prompt with Qwen...")
     prompt = f"Turn this into a detailed image generation prompt in one sentence, no explanation: {raw_prompt}"
-    return _llm_gen(MODELS["chat"], prompt)
+    return _llm_gen(prompt, intent="reason")
 
 def image_generator():
     print("\n[EDITH Image Generator] Powered by Pollinations.ai")

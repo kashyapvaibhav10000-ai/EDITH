@@ -8,7 +8,8 @@ import vault
 import time
 import threading
 from dotenv import load_dotenv
-from config import get_logger, MODELS
+from config import get_logger
+from smart_router import smart_call
 
 try:
     import httpx as req
@@ -18,15 +19,11 @@ except ImportError:
     _USE_HTTPX = False
 
 
-def _llm(*args, **kwargs):
-    from config import safe_ollama_call
-    r = safe_ollama_call(*args, **kwargs)
-    return r.value if r.ok else r.error
+def _llm(prompt, intent="chat"):
+    return smart_call(prompt, intent=intent)
 
-def _llm_gen(*args, **kwargs):
-    from config import safe_ollama_generate
-    r = safe_ollama_generate(*args, **kwargs)
-    return r.value if r.ok else r.error
+def _llm_gen(prompt, intent="chat"):
+    return smart_call(prompt, intent=intent)
 
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 log = get_logger("telegram")

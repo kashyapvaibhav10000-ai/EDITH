@@ -12,7 +12,7 @@ import subprocess
 import requests
 import psutil
 
-from config import OLLAMA_URL, MODELS, KDE_DEVICE_ID, EDITH_PATH, CHATTERBOX_VENV_PYTHON, get_logger
+from config import KDE_DEVICE_ID, EDITH_PATH, CHATTERBOX_VENV_PYTHON, get_logger
 from errors import Result
 
 log = get_logger("validator")
@@ -37,23 +37,7 @@ def validate_network() -> Result:
         return Result.failure(f"Network unreachable: {e}", error_type="connection")
 
 
-def validate_ollama() -> Result:
-    """Check Ollama is running and the primary chat model is available."""
-    try:
-        r = requests.get(f"{OLLAMA_URL}/api/tags", timeout=5)
-        r.raise_for_status()
-        models = r.json().get("models", [])
-        names = [m.get("name", "") for m in models]
-        target = MODELS["chat"]
-        available = any(target.split(":")[0] in n for n in names)
-        if available:
-            return Result.success(f"Ollama running, model '{target}' available")
-        return Result.failure(
-            f"Ollama running but '{target}' not found. Available: {names[:5]}",
-            error_type="not_found"
-        )
-    except Exception as e:
-        return Result.failure(f"Ollama not reachable: {e}", error_type="connection")
+
 
 
 def validate_phone() -> Result:
@@ -141,21 +125,6 @@ def validate_vision_model() -> Result:
     except Exception as e:
         return Result.failure(f"Ollama not reachable for vision check: {e}", error_type="connection")
 
-
-def validate_chatterbox() -> Result:
-    """Check Chatterbox TTS venv is available."""
-    if not os.path.exists(CHATTERBOX_VENV_PYTHON):
-        return Result.failure(
-            f"Chatterbox venv missing at {CHATTERBOX_VENV_PYTHON}",
-            error_type="not_found"
-        )
-    voices_dir = os.path.join(EDITH_PATH, "voices", "friend.wav")
-    if not os.path.exists(voices_dir):
-        return Result.failure("friend.wav missing — voice cloning unavailable", error_type="not_found")
-    return Result.success("Chatterbox venv and friend.wav present")
-
-
-# ──────────────────────────────────────────────
 # Full System Snapshot
 # ──────────────────────────────────────────────
 
@@ -176,12 +145,10 @@ def validate_all(emit_events: bool = False) -> dict:
 
     If emit_events=True, publishes HEALTH_CRITICAL to event_bus for each failed check.
     """
-    results = {}
-    for name, fn in _VALIDATORS:
-        try:
-            results[name] = fn()
-        except Exception as e:
-            results[name] = Result.from_exception(e)
+    rephone",       validate_phone),
+    ("calendar",    validate_calendar),
+    ("disk",        validate_disk),
+    ("memory",      validate_memoryxception(e)
 
     if emit_events:
         try:

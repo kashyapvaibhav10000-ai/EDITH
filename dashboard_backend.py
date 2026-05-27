@@ -29,37 +29,6 @@ def get_system_stats():
         "disk_percent": disk.percent,
     }
 
-
-def get_active_model():
-    """Get the currently loaded model in Ollama. Returns 'Ollama offline' if unavailable."""
-    try:
-        result = subprocess.run(
-            ["curl", "-s", "http://localhost:11434/api/ps"],
-            capture_output=True, text=True, timeout=3
-        )
-        data = json.loads(result.stdout)
-        models = data.get("models", [])
-        if models:
-            return models[0].get("name", "None")
-        return "None loaded"
-    except:
-        return "Ollama offline"
-
-
-def get_ollama_models():
-    """Get list of all available Ollama models. Returns empty list if offline."""
-    try:
-        result = subprocess.run(
-            ["curl", "-s", "http://localhost:11434/api/tags"],
-            capture_output=True, text=True, timeout=3
-        )
-        data = json.loads(result.stdout)
-        models = data.get("models", [])
-        return [m["name"] for m in models]
-    except:
-        return []
-
-
 def get_recent_logs():
     """Fetch last 8 lines from security audit log."""
     log_path = os.path.join(EDITH_PATH, "logs", "security_audit.log")

@@ -3,7 +3,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import os
-from config import CHARTS_DIR, MODELS, get_logger
+from config import CHARTS_DIR, get_logger
 from smart_router import smart_call
 from errors import Result
 

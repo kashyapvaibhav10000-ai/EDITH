@@ -6,7 +6,7 @@ Reads ArXiv abstracts, proposes module rewrites and prompt upgrades.
 import requests
 import xml.etree.ElementTree as ET
 import datetime
-from config import MODELS, get_logger
+from config import get_logger
 from smart_router import smart_call
 
 log = get_logger("self_improve")
