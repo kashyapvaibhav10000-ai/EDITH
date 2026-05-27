@@ -87,10 +87,5 @@ echo "────────────────────────�
 sleep 2
 echo "Wait complete."
 
-# 5. Start chat_server.py in the foreground
-echo -e "\n──────────────────────────────────"
-echo "Step 5: Starting EDITH chat server..."
-echo "──────────────────────────────────"
-python -m uvicorn chat_server:app --host 0.0.0.0 --port 8001 --workers 1 &
-UVICORN_PID=$!
-wait $UVICORN_PID
+# Keep script running to handle cleanup
+wait $DAEMON_PID
