@@ -22,7 +22,7 @@ from intent_dispatch import (INTENT_HANDLERS, _run_local_exec,
                              execute_pending_action, get_pending_action)
 from life_os import add_open_loop
 from orchestrator import chat, chat_stream
-from phone import _extract_phone_number, _extract_sms_body, initiate_call, send_sms
+from phone import initiate_call, send_sms
 from search import format_results as _fmt
 from search import web_search as _web_search
 from session import get_session_id
