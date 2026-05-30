@@ -37,6 +37,18 @@ log = get_logger("chat_server")
 app = FastAPI()
 
 # ── Shutdown ───────────────────────────────────
+@app.on_event("startup")
+async def startup_event():
+    import threading
+    def _warmup():
+        try:
+            from voice import _get_chatterbox_worker
+            _get_chatterbox_worker()
+            log.info("Chatterbox warmed up on startup")
+        except Exception as e:
+            log.warning(f"Chatterbox warmup skipped: {e}")
+    threading.Thread(target=_warmup, daemon=True, name="chatterbox-startup-warmup").start()
+
 @app.on_event("shutdown")
 async def shutdown_event():
     for f in glob.glob("/tmp/edith_*.lock") + glob.glob("/tmp/edith_*.pid"):
