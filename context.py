@@ -24,4 +24,5 @@ class DispatchContext:
     chat_stream_fn: Optional[Callable] = None     # LLM streaming function
     emotion: str = "neutral"                       # detected emotion from ml_router
     urgency: str = "LOW"                           # detected urgency: LOW / MEDIUM / HIGH
+    memory_context: str = ""                       # recalled memories injected before dispatch
     metadata: dict = field(default_factory=dict)   # arbitrary extra data

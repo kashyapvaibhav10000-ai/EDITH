@@ -299,7 +299,17 @@ async def chat_endpoint(req: Request):
         return {"reply": reply, "intent": intent}
     intent = detect_intent(user_input)
     log.info(f"[Widget] Intent: {intent} | Input: {user_input[:80]}")
-    ctx = DispatchContext(user_input=user_input, intent=intent, source="widget", chat_fn=chat, chat_stream_fn=chat_stream)
+    # Recall memory for context injection
+    from orchestrator import recall, recall_episodes
+    _memories = recall(user_input)
+    _episodes = recall_episodes(user_input, n=1)
+    _mem_list = [m["value"] for m in _memories if isinstance(m, dict) and "value" in m] or _memories
+    _memory_context = "\n".join(str(m) for m in _mem_list) if _mem_list else ""
+    if _episodes:
+        _memory_context += f"\n\nPast Session: {_episodes[0]}"
+    ctx = DispatchContext(user_input=user_input, intent=intent, source="widget",
+                          chat_fn=chat, chat_stream_fn=chat_stream,
+                          memory_context=_memory_context)
     if intent in _SIDE_EFFECT_INTENTS:
         async with _DISPATCH_LOCK:
             reply = await asyncio.to_thread(dispatch, ctx)
