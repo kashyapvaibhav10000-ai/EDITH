@@ -818,7 +818,12 @@ def chat_stream(user_input: str, intent: str = None, context: str = "", system_p
     style_inst = dna.get("style_instruction", "")
     
     # Assembly of same system prompt as chat()
-    memory_context = "" # Simplified for stream start to avoid lag
+    memories = recall(user_input)
+    episodes = recall_episodes(user_input, n=1)
+    memory_list = [m["value"] for m in memories if isinstance(m, dict) and "value" in m] or memories
+    memory_context = "\n".join(str(m) for m in memory_list) if memory_list else "No specific facts recalled."
+    if episodes:
+        memory_context += f"\n\nPast Session Context:\n{episodes[0]}"
     system_prompt = f"""You are EDITH — Vaibhav's personal AI operating system, built by him, for him.
 You are not a generic assistant. You are not a chatbot. You are the most capable 
 mind Vaibhav has access to, and you treat every conversation like it matters.
