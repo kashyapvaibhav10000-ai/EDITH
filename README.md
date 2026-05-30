@@ -1,4 +1,24 @@
-# EDITH — Even Dead I'm The Hero
+<div align="center">
+
+# ⚡ EDITH
+
+### *Even Dead I'm The Hero*
+
+> A personal AI operating system. Not a chatbot. Not a wrapper. A daemon that knows your life.
+
+![Python](https://img.shields.io/badge/Python-3.11-blue?style=flat-square&logo=python)
+![FastAPI](https://img.shields.io/badge/FastAPI-async-green?style=flat-square&logo=fastapi)
+![License](https://img.shields.io/badge/license-personal-red?style=flat-square)
+![Status](https://img.shields.io/badge/status-active-brightgreen?style=flat-square)
+![Platform](https://img.shields.io/badge/platform-Linux-lightgrey?style=flat-square&logo=linux)
+
+> 🗂️ **50+ modules** • 🧠 **4-tier memory** • 🎙️ **3 TTS engines** • ⚡ **30+ intents** • 🔒 **zero GPU required**
+
+**[Features](#-features) • [Architecture](#-architecture) • [Setup](#-setup--installation) • [API](#-api-endpoints) • [Memory](#-memory-system) • [Roadmap](#-roadmap)**
+
+</div>
+
+---
 
 A personal AI operating system built by one developer, for one developer. Not a chatbot. Not a wrapper around ChatGPT. A full-stack AI daemon that runs on your hardware, knows your life, and gets smarter over time.
 
@@ -6,22 +26,35 @@ Built by Vaibhav Kashyap. Production v1.0.
 
 ---
 
-## What is EDITH
+## ⚡ Quick Start
+
+```bash
+git clone https://github.com/kashyapvaibhav10000-ai/EDITH ~/EDITH
+cd ~/EDITH && cp .env.example .env   # add your API keys
+./start.sh                           # EDITH boots on http://localhost:8001
+```
+
+> **First run?** You'll also need to [initialize the vault](#3-initialize-the-vault) and add your API keys before `./start.sh` will fully work.
+
+---
+
+## 🤔 What is EDITH
 
 EDITH is a privacy-first, local-first AI assistant that runs as a background daemon on Linux. It handles voice commands, web search, email, calendar, phone control, file operations, code execution, and long-term memory — all through a single conversational interface.
 
 The design philosophy: EDITH should feel like a brilliant friend who happens to know everything about your projects, your schedule, and your thinking patterns. Not a generic assistant that forgets you after every session.
 
-Key properties:
-- **Persistent memory** across sessions — four-tier storage (RAM → SQLite → ChromaDB → graph)
-- **Privacy-classified routing** — sensitive intents (vault, shell, email) never leave your machine
-- **Multi-modal** — voice in, voice out, screen vision, image generation
-- **Self-improving** — monitors ArXiv, proposes its own upgrades, tracks behavioral drift
-- **No GPU required** — runs entirely on free-tier cloud LLM APIs with local Piper TTS
+**Key properties:**
+
+- 🧠 **Persistent memory** across sessions — four-tier storage (RAM → SQLite → ChromaDB → graph)
+- 🔒 **Privacy-classified routing** — sensitive intents (vault, shell, email) never leave your machine
+- 🎙️ **Multi-modal** — voice in, voice out, screen vision, image generation
+- 🔬 **Self-improving** — monitors ArXiv, proposes its own upgrades, tracks behavioral drift
+- 💻 **No GPU required** — runs entirely on free-tier cloud LLM APIs with local Piper TTS
 
 ---
 
-## Architecture
+## 🏗️ Architecture
 
 ### Request Lifecycle
 
@@ -68,7 +101,7 @@ Input (voice / Telegram / web widget)
   cognitive_profile.update_profile()   Behavioral drift tracking
 ```
 
-### LLM Routing Chain
+### 🔀 LLM Routing Chain
 
 ```
 smart_router.smart_call()
@@ -76,20 +109,19 @@ smart_router.smart_call()
   ├─ Privacy check: vault/shell/email → Ollama (local only)
   │
   └─ Cloud chain (first available):
-       1. Groq          llama-3.3-70b-versatile
-       2. Gemini        gemini-2.0-flash
-       3. NVIDIA NIM    meta/llama-3.1-70b-instruct
-       4. OpenRouter    meta-llama/llama-3.3-70b-instruct:free
+       1. Groq          llama-3.3-70b-versatile       (limit: 150/day)
+       2. Gemini        gemini-2.0-flash               (limit: 250/day)
+       3. NVIDIA NIM    meta/llama-3.1-70b-instruct    (limit:  80/day)
+       4. OpenRouter    meta-llama/llama-3.3-70b-instruct:free  (limit: 80/day)
        5. Ollama        local fallback (if configured)
 
 Each provider has:
-  - Daily call limits (Groq: 150, Gemini: 250, NVIDIA: 80, OpenRouter: 80)
   - 60s cooldown on failure, up to 5 min max
   - Circuit breaker (CLOSED → OPEN → HALF_OPEN)
   - Per-provider latency tracking
 ```
 
-### 4-Vision Cognitive System
+### 🧠 4-Vision Cognitive System
 
 All routed through `orchestrator.py`:
 
@@ -102,62 +134,69 @@ All routed through `orchestrator.py`:
 
 ---
 
-## Features
+## ✨ Features
 
-**Conversation & Intelligence**
-- Multi-turn conversation with full session memory
-- Compound intent detection — "check email and then tell me the weather" executes as a DAG
-- Context-aware responses using recalled memories injected into every prompt
-- Behavioral drift detection — EDITH notices when your goals shift
+### 💬 Conversation & Intelligence
 
-**Voice**
-- Always-on wake word detection via Vosk (offline, no cloud)
-- STT: Groq Whisper large-v3-turbo (fast) with local tiny.en fallback
-- TTS: Piper (offline, en_GB-cori-high voice) or Groq Orpheus or Chatterbox voice clone
-- Barge-in support — interrupt EDITH mid-sentence
-- PyQt6 desktop widget with real-time waveform
+- 🔄 Multi-turn conversation with full session memory
+- 🔀 Compound intent detection — "check email and then tell me the weather" executes as a DAG
+- 🧠 Context-aware responses using recalled memories injected into every prompt
+- 📊 Behavioral drift detection — EDITH notices when your goals shift
 
-**Memory**
-- Hot RAM cache (50 items, ~100MB cap) for instant recall
-- SQLite archive with full-text search for long-term storage
-- ChromaDB vector embeddings for semantic similarity search
-- NetworkX knowledge graph for entity relationships
-- Episodic memory — remembers past conversation sessions
-- Automatic consolidation during idle periods
+### 🎙️ Voice
 
-**Productivity**
-- Email: read inbox, check unread, compose (Gmail OAuth)
-- Calendar: today's schedule, week view, create events (Google Calendar)
-- Phone: KDE Connect battery, notifications, ring, SMS
-- WhatsApp: send messages via bridge
-- Web search: SearXNG (self-hosted, privacy-preserving)
-- Weather: current conditions with IST timezone awareness
+- 👂 Always-on wake word detection via Vosk (offline, no cloud)
+- 🗣️ STT: Groq Whisper large-v3-turbo (fast) with local tiny.en fallback
+- 🔊 TTS: Piper (offline, en_GB-cori-high voice) or Groq Orpheus or Chatterbox voice clone
+- ⚡ Barge-in support — interrupt EDITH mid-sentence
+- 🖥️ PyQt6 desktop widget with real-time waveform
 
-**System & Files**
-- Shell command execution with HITL safety gates
-- File operations: create, read, delete, query directory contents
-- Docker sandbox for untrusted code execution (network-disabled)
-- MCP (Model Context Protocol) server integration
-- Screen vision via llava-phi3 (analyze screenshots)
-- Image generation
+### 🧠 Memory
 
-**Intelligence Tools**
-- RAG over personal notes (LlamaIndex + ChromaDB)
-- Code RAG over your project files
-- Data analysis: CSV/Excel with chart generation
-- Repo DNA: competitive intelligence — analyze GitHub repos, find steal-worthy patterns
-- Council of Minds: 4-persona debate for complex decisions
-- Agent mode: multi-step task planning and execution
+- ⚡ Hot RAM cache (50 items, ~100MB cap) for instant recall
+- 🗄️ SQLite archive with full-text search for long-term storage
+- 🔍 ChromaDB vector embeddings for semantic similarity search
+- 🕸️ NetworkX knowledge graph for entity relationships
+- 📖 Episodic memory — remembers past conversation sessions
+- 🔄 Automatic consolidation during idle periods
 
-**Integrations**
-- Telegram bot (alerts, briefings, remote control)
-- Webhook receiver (GitHub, calendar, generic push events)
-- KDE Connect (phone bridge)
-- DevLog: automatic development journal with Simplenote sync
+### 📋 Productivity
+
+- 📧 Email: read inbox, check unread, compose (Gmail OAuth)
+- 📅 Calendar: today's schedule, week view, create events (Google Calendar)
+- 📱 Phone: KDE Connect battery, notifications, ring, SMS
+- 💬 WhatsApp: send messages via bridge
+- 🔎 Web search: SearXNG (self-hosted, privacy-preserving)
+- 🌤️ Weather: current conditions with IST timezone awareness
+
+### 🖥️ System & Files
+
+- 🛡️ Shell command execution with HITL safety gates
+- 📁 File operations: create, read, delete, query directory contents
+- 🐳 Docker sandbox for untrusted code execution (network-disabled)
+- 🔌 MCP (Model Context Protocol) server integration
+- 👁️ Screen vision via llava-phi3 (analyze screenshots)
+- 🎨 Image generation
+
+### 🤖 Intelligence Tools
+
+- 📚 RAG over personal notes (LlamaIndex + ChromaDB)
+- 💻 Code RAG over your project files
+- 📊 Data analysis: CSV/Excel with chart generation
+- 🧬 Repo DNA: competitive intelligence — analyze GitHub repos, find steal-worthy patterns
+- 🏛️ Council of Minds: 4-persona debate for complex decisions
+- 🤖 Agent mode: multi-step task planning and execution
+
+### 🔗 Integrations
+
+- ✈️ Telegram bot (alerts, briefings, remote control)
+- 🪝 Webhook receiver (GitHub, calendar, generic push events)
+- 📲 KDE Connect (phone bridge)
+- 📓 DevLog: automatic development journal with Simplenote sync
 
 ---
 
-## Tech Stack
+## 🛠️ Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
@@ -178,7 +217,7 @@ All routed through `orchestrator.py`:
 
 ---
 
-## Project Structure
+## 📁 Project Structure
 
 ```
 EDITH/
@@ -260,21 +299,26 @@ EDITH/
 
 ---
 
-## Setup & Installation
+## 🚀 Setup & Installation
 
 ### Hardware Requirements
 
-- **OS**: Linux (tested on Manjaro/Arch, works on Debian/Ubuntu)
-- **RAM**: 8GB minimum. 16GB recommended (ChromaDB + Piper + Python all in RAM)
-- **CPU**: Any modern x86_64. No GPU required — all LLM inference is cloud API
-- **Disk**: ~2GB for models (Vosk, Piper, whisper.cpp), ~500MB for Python deps
-- **Microphone**: Required for voice mode. Not required for web/Telegram mode
-- **Docker**: Required for SearXNG (web search) and sandboxed code execution
+| Component | Minimum | Recommended |
+|-----------|---------|-------------|
+| OS | Linux (Debian/Ubuntu) | Manjaro/Arch |
+| RAM | **8GB** | 16GB |
+| CPU | Any x86_64 | — |
+| GPU | **Not required** | — |
+| Disk | ~2.5GB | — |
+| Microphone | Optional (voice mode) | Required for voice |
+| Docker | Required (SearXNG + sandbox) | — |
+
+> All LLM inference is cloud API. No GPU needed.
 
 ### 1. Clone and set up Python environment
 
 ```bash
-git clone https://github.com/yourusername/EDITH.git ~/EDITH
+git clone https://github.com/kashyapvaibhav10000-ai/EDITH ~/EDITH
 cd ~/EDITH
 
 python3.11 -m venv ~/edith-env
@@ -291,9 +335,8 @@ pip install -r requirements-local.txt
 
 ```bash
 cp .env.example .env
+# Edit .env with your API keys — see Configuration section
 ```
-
-Edit `.env` with your API keys (see Configuration section below).
 
 ### 3. Initialize the vault
 
@@ -322,7 +365,6 @@ docker run -d --name searxng -p 8080:8080 searxng/searxng
 Piper models are already included in `voices/`. For Vosk wake word detection:
 
 ```bash
-# Download Vosk small model for wake word
 mkdir -p ~/EDITH/models
 wget https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip
 unzip vosk-model-small-en-us-0.15.zip -d ~/EDITH/models/
@@ -330,7 +372,7 @@ unzip vosk-model-small-en-us-0.15.zip -d ~/EDITH/models/
 
 ---
 
-## Configuration
+## ⚙️ Configuration
 
 All configuration lives in `.env`. Copy `.env.example` and fill in your values.
 
@@ -367,7 +409,7 @@ All configuration lives in `.env`. Copy `.env.example` and fill in your values.
 
 ---
 
-## Starting EDITH
+## ▶️ Starting EDITH
 
 ### Full startup (recommended)
 
@@ -401,13 +443,15 @@ systemctl --user status edith
 
 ### Access
 
-- **Web UI**: http://localhost:8001
-- **Dashboard**: http://localhost:8001/dashboard
-- **API docs**: http://localhost:8001/docs
+| Interface | URL |
+|-----------|-----|
+| 💬 Web UI | http://localhost:8001 |
+| 📊 Dashboard | http://localhost:8001/dashboard |
+| 📖 API docs | http://localhost:8001/docs |
 
 ---
 
-## Voice Pipeline
+## 🎙️ Voice Pipeline
 
 ```
 Microphone
@@ -442,7 +486,7 @@ aplay / PyAudio           Audio output
 
 ---
 
-## API Endpoints
+## 🌐 API Endpoints
 
 ### Chat
 
@@ -521,26 +565,26 @@ Stream events: `start` → `transcript` → `token` (repeated) → `done`
 
 ---
 
-## Memory System
+## 🧠 Memory System
 
 EDITH uses four memory tiers, all queried on every recall:
 
-### Tier 1 — Hot RAM (`smart_memory.py`)
+### Tier 1 — ⚡ Hot RAM (`smart_memory.py`)
 - `OrderedDict` capped at 50 items / ~100MB
 - Sub-millisecond recall
 - Evicted to SQLite when full
 
-### Tier 2 — Warm SQLite (`memory_archive.db`)
+### Tier 2 — 🗄️ Warm SQLite (`memory_archive.db`)
 - Full-text search indexed
 - Stores all memories that age out of RAM
 - Also stores API usage, feedback, and cost tracking
 
-### Tier 3 — Semantic ChromaDB (`memory/rag.py`)
+### Tier 3 — 🔍 Semantic ChromaDB (`memory/rag.py`)
 - Vector embeddings for similarity search
 - Indexes personal notes directory
 - Separate index for project source code (`memory/code_rag.py`)
 
-### Tier 4 — Knowledge Graph (`memory/graph_memory.py`)
+### Tier 4 — 🕸️ Knowledge Graph (`memory/graph_memory.py`)
 - NetworkX directed graph, persisted as `edith_graph.json`
 - Triples extracted from every conversation (subject → relation → object)
 - Queried by entity name with configurable depth
@@ -564,27 +608,22 @@ Memory context is injected into every chat request via `DispatchContext.memory_c
 
 ---
 
-## Security
+## 🔒 Security
 
-**Vault**: All API keys stored in `vault.enc` (Fernet symmetric encryption). Never in plaintext `.env` for production. Vault password required at startup.
-
-**HITL gates**: Dangerous operations (shell commands, file deletion, agent execution) require explicit `YES` confirmation before executing. Managed by `tools.py` and `handlers/pending_action.py`.
-
-**Sandbox**: Untrusted code runs in a Docker container with `--network none`. No internet access, no host filesystem access.
-
-**Privacy routing**: Intents classified as `vault`, `shell`, or `email` are routed to local Ollama only — never sent to cloud providers.
-
-**Input scope classification**: Every input is classified as `safe`, `action`, or `dangerous` before processing. Dangerous inputs are flagged before dispatch.
-
-**MCP admin token**: MCP mutation endpoints (`/api/mcp/call`, `/api/mcp/config/add`, etc.) require `X-Admin-Token` header matching `MCP_ADMIN_TOKEN` env var.
-
-**Rate limiting**: Per-IP rate limiting middleware on all API endpoints.
-
-**CORS**: Configurable allowed origins via `EDITH_ALLOWED_ORIGINS`. Defaults to localhost only.
+| Mechanism | Details |
+|-----------|---------|
+| 🔐 **Vault** | All API keys in `vault.enc` (Fernet encryption). Never plaintext in `.env` for production. Password required at startup. |
+| 🛡️ **HITL gates** | Shell commands, file deletion, agent execution require explicit `YES` before running. |
+| 🐳 **Sandbox** | Untrusted code runs in Docker with `--network none`. No internet, no host filesystem. |
+| 🔒 **Privacy routing** | `vault`, `shell`, `email` intents → local Ollama only. Never sent to cloud. |
+| 🎯 **Input scope** | Every input classified as `safe`, `action`, or `dangerous` before dispatch. |
+| 🔑 **MCP admin token** | Mutation endpoints require `X-Admin-Token` header. |
+| ⏱️ **Rate limiting** | Per-IP rate limiting middleware on all API endpoints. |
+| 🌐 **CORS** | Configurable via `EDITH_ALLOWED_ORIGINS`. Defaults to localhost only. |
 
 ---
 
-## Development
+## 🔧 Development
 
 ### Running tests
 
@@ -639,34 +678,38 @@ EDITH uses no linter config by default. The codebase is a solo project — consi
 
 ---
 
-## Roadmap
+## 🗺️ Roadmap
 
-**Near-term**
-- [ ] Proactive notifications — EDITH surfaces relevant memories without being asked
-- [ ] Better compound intent handling — parallel DAG execution for independent sub-tasks
-- [ ] Ollama integration for fully offline operation
-- [ ] Mobile app (React Native) replacing the PyQt6 widget
+### Near-term
+- [ ] 🔔 Proactive notifications — EDITH surfaces relevant memories without being asked
+- [ ] 🔀 Better compound intent handling — parallel DAG execution for independent sub-tasks
+- [ ] 🦙 Ollama integration for fully offline operation
+- [ ] 📱 Mobile app (React Native) replacing the PyQt6 widget
 
-**Memory**
-- [ ] Memory importance scoring — not all memories are equal
-- [ ] Cross-session entity resolution — "my project" means the same thing across sessions
-- [ ] Forgetting curve — graceful decay of low-importance memories
+### Memory
+- [ ] ⚖️ Memory importance scoring — not all memories are equal
+- [ ] 🔗 Cross-session entity resolution — "my project" means the same thing across sessions
+- [ ] 📉 Forgetting curve — graceful decay of low-importance memories
 
-**Voice**
-- [ ] Streaming STT — start processing before the user finishes speaking
-- [ ] Emotion detection from voice tone
-- [ ] Multi-speaker diarization for meeting transcription
+### Voice
+- [ ] ⚡ Streaming STT — start processing before the user finishes speaking
+- [ ] 😊 Emotion detection from voice tone
+- [ ] 👥 Multi-speaker diarization for meeting transcription
 
-**Intelligence**
-- [ ] Longer planning horizon in agent mode (currently single-session)
-- [ ] Self-evaluation — EDITH rates her own responses and learns from low scores
-- [ ] Skill marketplace — share and install community-built skill modules
+### Intelligence
+- [ ] 📅 Longer planning horizon in agent mode (currently single-session)
+- [ ] 🎯 Self-evaluation — EDITH rates her own responses and learns from low scores
+- [ ] 🛒 Skill marketplace — share and install community-built skill modules
 
-**Infrastructure**
-- [ ] Proper test coverage (currently ~35 tests, need ~200)
-- [ ] Docker Compose for one-command full deployment
-- [ ] Metrics dashboard (Prometheus + Grafana)
+### Infrastructure
+- [ ] 🧪 Proper test coverage (currently ~35 tests, need ~200)
+- [ ] 🐳 Docker Compose for one-command full deployment
+- [ ] 📈 Metrics dashboard (Prometheus + Grafana)
 
 ---
 
+<div align="center">
+
 *EDITH is a solo project. It's opinionated, occasionally rough around the edges, and built to solve real problems for one specific person. If it solves problems for you too, great.*
+
+</div>
