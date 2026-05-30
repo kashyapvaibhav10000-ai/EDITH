@@ -1,60 +1,62 @@
-from fastapi import FastAPI, Request
-from pydantic import BaseModel
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-import uvicorn
-import asyncio
-import sys
-import os
-import tempfile
-import re
-import datetime
-import threading
-import subprocess
-import shlex
-import gc
-import psutil
-import uuid
-import json
-import traceback
+"""
+EDITH chat_server.py — thin app factory.
 
-# Ensure EDITH directory is in path
+Route logic lives in routes/:
+  routes/chat.py      — /api/chat, /api/chat/stream
+  routes/dashboard.py — /dashboard, /api/status, /api/monitor_schedule, /api/stats, /api/costs
+  routes/memory.py    — /api/last-memory, /api/traces/recent, /api/recent_traces, /api/feedback
+  routes/logs.py      — /api/logs/stream
+  routes/health.py    — /api/health-check, /api/phone, /api/weather-status
+  routes/mcp.py       — /api/mcp/*
+  routes/sessions.py  — /api/sessions/*, /api/devpanel/*, /webhook/*, /tg_webhook
+  routes/repo.py      — /api/repo/*
+Voice routes registered via voice_routes.register_voice_routes(app).
+"""
+
+import gc
+import glob
+import os
+import sys
+import threading
+
+import psutil
+import uvicorn
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from api_auth import is_request_authenticated, create_unauthorized_response
-from orchestrator import detect_intent
 from config import get_logger
-from intent_dispatch import (
-    get_pending_action,
-)
-# Extracted voice routes
-from voice_routes import register_voice_routes, _get_voice_memory_context
+from intent_dispatch import get_pending_action  # noqa: F401 — re-exported for routes
 
 log = get_logger("chat_server")
 
+# ── App init ───────────────────────────────────
 app = FastAPI()
 
+# ── Shutdown ───────────────────────────────────
 @app.on_event("shutdown")
 async def shutdown_event():
-    import glob
     for f in glob.glob("/tmp/edith_*.lock") + glob.glob("/tmp/edith_*.pid"):
-        try: os.remove(f)
-        except: pass
+        try:
+            os.remove(f)
+        except Exception:
+            pass
     pid_file = "/tmp/edith_daemon.pid"
     if os.path.exists(pid_file):
         try:
-            with open(pid_file) as f: pid = int(f.read())
+            with open(pid_file) as f:
+                pid = int(f.read())
             os.kill(pid, 15)
-        except: pass
+        except Exception:
+            pass
     log.info("EDITH shutdown complete")
 
-# ────────────────────────────────────────────────────
-# Middleware
-# ────────────────────────────────────────────────────
+# ── Middleware ─────────────────────────────────
 from middleware.logging import logging_middleware
 from middleware.rate_limit import rate_limit_middleware
-from middleware.auth import api_key_middleware
 
 app.add_middleware(logging_middleware)
 app.add_middleware(rate_limit_middleware)
@@ -64,7 +66,6 @@ _ALLOWED_ORIGINS = [
     for o in os.getenv("EDITH_ALLOWED_ORIGINS", "http://localhost:8001,http://127.0.0.1:8001").split(",")
     if o.strip()
 ]
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_ALLOWED_ORIGINS,
@@ -73,80 +74,45 @@ app.add_middleware(
     allow_credentials=False,
 )
 
-# Mount static files for AudioWorklet and perception engine
+# ── Static files ───────────────────────────────
 _STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 if os.path.isdir(_STATIC_DIR):
     app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 
-_UI_HTML_PATH        = os.path.join(os.path.dirname(os.path.abspath(__file__)), "edith_ui_new.html")
-_DASHBOARD_HTML_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "edith_dashboard.html")
-
-# Register voice routes (extracted to voice_routes.py)
+# ── Voice routes (legacy registration) ────────
+from voice_routes import register_voice_routes
 register_voice_routes(app)
 
-def verify_mcp_admin_token(supplied_token: str, expected_token: str = None) -> bool:
-    """Return True when the supplied MCP admin token matches configured auth."""
-    expected = expected_token if expected_token is not None else os.getenv("MCP_ADMIN_TOKEN", "")
-    return bool(expected) and supplied_token == expected
+# ── Routers ────────────────────────────────────
+from routes.chat import router as chat_router
+from routes.dashboard import router as dashboard_router
+from routes.memory import router as memory_router
+from routes.logs import router as logs_router
+from routes.health import router as health_router
+from routes.mcp import router as mcp_router
+from routes.sessions import router as sessions_router
+from routes.repo import router as repo_router
 
-def _check_mcp_admin(req: Request):
-    """Require MCP_ADMIN_TOKEN for MCP mutation endpoints."""
-    expected = os.getenv("MCP_ADMIN_TOKEN", "")
-    if not expected:
-        log.error("MCP_ADMIN_TOKEN not set; rejecting MCP mutation request")
-        return JSONResponse(
-            status_code=401,
-            content={
-                "ok": False,
-                "error": "Unauthorized: MCP_ADMIN_TOKEN is not configured on the server.",
-            },
-        )
-    supplied = req.headers.get("X-Admin-Token", "")
-    if not verify_mcp_admin_token(supplied, expected):
-        return JSONResponse(
-            status_code=401,
-            content={
-                "ok": False,
-                "error": "Unauthorized: missing or invalid X-Admin-Token header.",
-            },
-        )
-    return None
+app.include_router(chat_router)
+app.include_router(dashboard_router)
+app.include_router(memory_router)
+app.include_router(logs_router)
+app.include_router(health_router)
+app.include_router(mcp_router)
+app.include_router(sessions_router)
+app.include_router(repo_router)
 
+# ── Root redirect ──────────────────────────────
 @app.get("/", response_class=HTMLResponse)
 def index():
-    from fastapi.responses import RedirectResponse
     return RedirectResponse(url="/dashboard")
 
-
-
-
-# ── Repo DNA — competitive intelligence engine ──
-try:
-    from repo_dna import (
-        analyze_repo as _analyze_repo,
-        get_cached_analyses as _get_cached_analyses,
-        clear_cache as _clear_repo_cache,
-        watch_repo as _watch_repo,
-        get_watched_repos as _get_watched_repos,
-        check_watched_repos as _check_watched_repos,
-        get_previous_snapshot as _get_prev_snapshot,
-        diff_analyses as _diff_analyses,
-        compare_multi_repos as _compare_multi_repos,
-        _build_edith_context_summary,
-        mark_adapted as _mark_adapted,
-        get_adapted_capabilities as _get_adapted_caps,
-        RepoFetchError,
-        RepoAnalysisError,
-    )
-    _REPO_DNA_OK = True
-except ImportError:
-    _REPO_DNA_OK = False
-
-# ── Adapt status tracking (event-driven, module-level) ──
-_adapt_results: dict = {}   # task_id → {status, summary/error}
-_adapt_meta: dict = {}      # task_id → {capability, repo_url, target_file}
+# ── Repo DNA event bus (module-level shared state for routes/repo.py) ─────────
+_adapt_results: dict = {}
+_adapt_meta: dict = {}
 
 try:
+    from repo_dna import mark_adapted as _mark_adapted
     from event_bus import bus as _bus, Topic as _Topic
 
     def _on_agent_done(payload: dict) -> None:
@@ -155,7 +121,7 @@ try:
         if len(_adapt_results) > 200:
             _adapt_results.pop(next(iter(_adapt_results)))
         meta = _adapt_meta.pop(tid, None)
-        if meta and _REPO_DNA_OK:
+        if meta:
             try:
                 _mark_adapted(meta["repo_url"], meta["capability"], meta["target_file"])
             except Exception as _me:
@@ -170,1572 +136,61 @@ try:
 
     _bus.subscribe_fn(_Topic.AGENT_DONE, _on_agent_done)
     _bus.subscribe_fn(_Topic.AGENT_ERROR, _on_agent_error)
-    _ADAPT_TRACKING_OK = True
 except Exception:
-    _ADAPT_TRACKING_OK = False
+    pass
 
-from routes.chat import router as chat_router
-app.include_router(chat_router)
-
-# ────────────────────────────────────────────────────
-# Memory Monitor
-# ────────────────────────────────────────────────────
+# ── Background helpers ─────────────────────────
 def _memory_monitor():
-    """Background thread to monitor and prevent memory leaks."""
     import time
     process = psutil.Process(os.getpid())
     while True:
         try:
             time.sleep(300)
-            memory_info = process.memory_info()
-            memory_mb = memory_info.rss / 1024 / 1024
+            memory_mb = process.memory_info().rss / 1024 / 1024
             log.info(f"Memory usage: {memory_mb:.2f} MB")
             if memory_mb > 500:
-                log.warning(f"High memory usage ({memory_mb:.2f} MB). Running GC.")
+                log.warning(f"High memory ({memory_mb:.2f} MB). Running GC.")
                 gc.collect()
-                memory_mb = process.memory_info().rss / 1024 / 1024
-                log.info(f"After GC: {memory_mb:.2f} MB")
+                log.info(f"After GC: {process.memory_info().rss / 1024 / 1024:.2f} MB")
         except Exception as e:
             log.error(f"Memory monitor error: {e}")
 
-# ────────────────────────────────────────────────────
-# Phase 6 API Endpoints
-# ────────────────────────────────────────────────────
-import asyncio
-import datetime as _dt
-
-# FIX 7: Request ID tracking to prevent stale TTS
-_current_voice_request_id = None
-_voice_request_lock = threading.Lock()
-
-# V8: Barge-in signal — set when user interrupts, cleared by /api/voice/barge-in-complete
-_barge_in_triggered = threading.Event()
-# V8: Relisten flag — set by _on_barge_in to tell SSE generator to emit 'relisten' event
-_restart_listen = threading.Event()
-
-# V12: Track TTS threads so new request can join/cancel previous
-_active_tts_threads: list = []
-
-@app.get("/api/health-check")
-async def api_health_check():
-    """Run full system validation and return health report as JSON."""
-    from validator import validate_all
-    results = validate_all(emit_events=False)
-    return results
-
-@app.get("/api/system-status")
-async def api_status_legacy():
-    """Legacy redirect to combined /api/status. Included for backwards compatibility."""
-    from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/api/status")
-
-@app.get("/api/recent_traces")
-async def api_recent_traces(limit: int = 20):
-    """Return last N routing traces from the archive DB."""
-    import sqlite3 as _sql
-    from config import MEMORY_ARCHIVE_PATH
-    def _fetch():
-        try:
-            conn = _sql.connect(MEMORY_ARCHIVE_PATH)
-            cur = conn.cursor()
-            cur.execute("""
-                SELECT * FROM (
-                    SELECT provider, date, call_count FROM api_usage
-                ) LIMIT ?
-            """, (limit,))
-            rows = [{"provider": r[0], "date": r[1], "call_count": r[2]} for r in cur.fetchall()]
-            conn.close()
-            return rows
-        except Exception:
-            return []
-    traces = await asyncio.to_thread(_fetch)
-    return {"traces": traces}
-
-@app.get("/api/monitor_schedule")
-async def api_monitor_schedule():
-    """Return last maintenance timestamps + static schedule."""
-    from monitor import _load_maintenance_state
-    state = await asyncio.to_thread(_load_maintenance_state)
-    return {
-        "last_maintenance": state.get("last_maintenance"),
-        "last_backup": state.get("last_backup"),
-        "static_schedule": [
-            {"time": "02:30", "job": "Idle Memory Consolidation", "freq": "daily"},
-            {"time": "03:00", "job": "Nightly Backup + Cleanup", "freq": "daily"},
-            {"time": "07:00", "job": "Weather Pre-fetch", "freq": "daily"},
-            {"time": "08:00", "job": "Daily Report Pre-fetch", "freq": "daily"},
-            {"time": "12:00", "job": "Graph Triple Extraction", "freq": "daily"},
-            {"freq": "every 5m", "job": "KDE Connect Heartbeat"},
-            {"freq": "every 10m", "job": "Proactive Checks"},
-            {"time": "21:00", "job": "Weekly Briefing Prep", "freq": "sunday"},
-        ],
-    }
-
-@app.post("/api/feedback")
-async def api_feedback(req: Request):
-    """Tag a trace with thumbs_up / thumbs_down feedback."""
-    data = await req.json()
-    trace_id = data.get("trace_id", "")
-    feedback = data.get("feedback", "")
-    if not trace_id or feedback not in ("thumbs_up", "thumbs_down"):
-        return {"ok": False, "error": "trace_id and valid feedback (thumbs_up|thumbs_down) required"}
-    import sqlite3 as _sql
-    from config import MEMORY_ARCHIVE_PATH
-    def _tag():
-        try:
-            conn = _sql.connect(MEMORY_ARCHIVE_PATH)
-            cur = conn.cursor()
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS feedback (
-                    trace_id TEXT PRIMARY KEY,
-                    feedback TEXT,
-                    reason TEXT,
-                    created_at TEXT
-                )
-            """)
-            cur.execute("""
-                INSERT OR REPLACE INTO feedback (trace_id, feedback, reason, created_at)
-                VALUES (?, ?, ?, ?)
-            """, (trace_id, feedback, data.get("reason", ""), _dt.datetime.now().isoformat()))
-            conn.commit()
-            conn.close()
-            # Also tag via feedback_tagger so tuner can read it
-            try:
-                from feedback_tagger import tag_feedback
-                tag_feedback(trace_id, feedback, data.get("reason", ""))
-            except Exception as e:
-                log.debug(f"feedback_tagger.tag_feedback failed (non-fatal): {e}")
-            return True
-        except Exception as e:
-            log.error(f"Feedback tag failed: {e}")
-            return False
-    ok = await asyncio.to_thread(_tag)
-    return {"ok": ok}
-
-# ────────────────────────────────────────────────────
-# Dashboard Route
-# ────────────────────────────────────────────────────
-@app.get("/dashboard", response_class=HTMLResponse)
-async def dashboard():
-    try:
-        with open(_DASHBOARD_HTML_PATH, 'r') as f:
-            return f.read()
-    except Exception as e:
-        return HTMLResponse(f"<h1>UI error: {e}</h1>", status_code=500)
-
-# ────────────────────────────────────────────────────
-# New Dashboard API Endpoints
-# ────────────────────────────────────────────────────
-
-@app.get("/api/costs")
-async def api_costs():
-    """J4 — return last 7 days of API call costs grouped by provider."""
-    try:
-        import time as _t, db_pool
-        from config import MEMORY_ARCHIVE_PATH
-        from smart_router import _daily_calls, DAILY_LIMITS
-        since = _t.time() - 7 * 86400
-        with db_pool.connection(MEMORY_ARCHIVE_PATH) as conn:
-            rows = conn.execute(
-                "SELECT provider, SUM(input_tokens_est), SUM(output_tokens_est), COUNT(*) FROM api_costs WHERE timestamp > ? GROUP BY provider",
-                (since,)
-            ).fetchall()
-        result = {}
-        for provider, tin, tout, calls in rows:
-            daily = _daily_calls.get(provider, 0)
-            limit = DAILY_LIMITS.get(provider, 9999)
-            result[provider] = {
-                "calls_7d": calls,
-                "input_tokens_est": tin or 0,
-                "output_tokens_est": tout or 0,
-                "cost_usd_est": 0.0,
-                "today_calls": daily,
-                "daily_limit": limit,
-                "near_limit": daily >= limit * 0.8,
-            }
-        return result
-    except Exception as e:
-        return {"error": str(e)}
-
-@app.get("/api/provider-latencies")
-async def api_provider_latencies():
-    """Return latest per-provider latency (seconds) from smart_router."""
-    try:
-        from smart_router import _provider_latencies
-        return _provider_latencies
-    except Exception as e:
-        return {"error": str(e)}
-
-@app.get("/api/stats")
-async def api_stats_proxy():
-    """Proxy to dashboard stats — serves dashboard.py data from port 8001."""
-    try:
-        import dashboard as _dash
-        return await asyncio.to_thread(lambda: {
-            "system": _dash.get_system_stats(),
-            "model": _dash.get_active_model(),
-            "logs": _dash.get_recent_logs(),
-            "modules": _dash.get_edith_modules(),
-            "mcp": _dash.get_mcp_status(),
-            "time": __import__("datetime").datetime.now().strftime("%H:%M:%S"),
-            "date": __import__("datetime").datetime.now().strftime("%A, %d %B %Y"),
-        })
-    except Exception as e:
-        log.error(f"api/stats proxy error: {e}")
-        return {"error": str(e)}
-
-@app.get("/api/status")
-async def api_status_combined():
-    """Combined system, active provider, and circuit breaker status."""
-    try:
-        from circuit_breaker import get_all_status
-        from smart_router import _daily_calls, DAILY_LIMITS, _has_key, _is_provider_cooled_down, _is_under_daily_limit
-        from monitor import check_ram, check_disk, check_cpu
-
-
-        
-        cb_states = get_all_status()
-
-        sys_data = await asyncio.to_thread(lambda: {
-            "ram": check_ram(),
-            "disk": check_disk(),
-            "cpu": check_cpu(),
-        })
-
-        providers = {}
-        for p in ["groq", "gemini", "nvidia", "openrouter"]:
-            providers[p] = {
-                "has_key": _has_key(p),
-                "cooled_down": _is_provider_cooled_down(p),
-                "under_limit": _is_under_daily_limit(p),
-                "daily_calls": _daily_calls.get(p, 0),
-                "daily_limit": DAILY_LIMITS.get(p, 999),
-                "circuit": cb_states.get(p, {}).get("state", "CLOSED"),
-            }
-
-        active_provider = "unknown"
-        for p in ["groq", "gemini", "nvidia", "openrouter"]:
-            if providers[p]["has_key"] and providers[p]["cooled_down"] and providers[p]["under_limit"] and providers[p]["circuit"] != "OPEN":
-                active_provider = p
-                break
-
-        from search import get_search_status
-        return {
-            "system": sys_data,
-            "active_provider": active_provider,
-            "circuit_breakers": cb_states,
-            "providers": providers,
-            "search_providers": get_search_status(),
-            "timestamp": _dt.datetime.now().isoformat(),
-        }
-    except Exception as e:
-        log.error(f"Status API failed: {e}")
-        return {"error": str(e)}
-
-@app.get("/api/last-memory")
-async def api_last_memory():
-    """Return last 3 memories from SmartMemoryManager."""
-    try:
-        from config import MEMORY_ARCHIVE_PATH
-        import sqlite3 as _sql
-
-        def _fetch():
-            conn = _sql.connect(MEMORY_ARCHIVE_PATH)
-            cur = conn.cursor()
-            cur.execute(
-                "SELECT key, value, timestamp FROM memories ORDER BY timestamp DESC LIMIT 3"
-            )
-            rows = [{"key": r[0], "value": r[1], "timestamp": r[2]} for r in cur.fetchall()]
-            conn.close()
-            return rows
-
-        memories = await asyncio.to_thread(_fetch)
-        return {"memories": memories}
-    except Exception as e:
-        return {"error": str(e), "memories": []}
-
-@app.get("/api/phone")
-async def api_phone():
-    """KDE Connect battery + last notification. Returns offline if unavailable."""
-    try:
-        from phone import get_battery, get_notifications, phone_status
-
-        def _fetch():
-            battery_raw = get_battery()
-            notifs_raw = get_notifications()
-            status = phone_status()
-            return battery_raw, notifs_raw, status
-
-        battery_raw, notifs_raw, status = await asyncio.to_thread(_fetch)
-
-        if "not connected" in status.lower() or "not installed" in status.lower() or "unavailable" in status.lower():
-            return {"battery": None, "status": "offline", "last_notification": None}
-
-        import re as _re
-        battery_match = _re.search(r"(\d+)", battery_raw or "")
-        battery = int(battery_match.group(1)) if battery_match else None
-
-        notif_lines = [l.strip() for l in (notifs_raw or "").splitlines() if l.strip()]
-        last_notif = notif_lines[0] if notif_lines else None
-
-        return {"battery": battery, "status": "online", "last_notification": last_notif}
-    except Exception as e:
-        return {"battery": None, "status": "offline", "last_notification": None, "error": str(e)}
-
-@app.get("/api/weather-status")
-async def api_weather_status():
-    """Return current weather from weather.py get_current_weather()."""
-    try:
-        from weather import get_current_weather
-        result = await asyncio.to_thread(get_current_weather)
-        if result is None:
-            return {"error": "Weather unavailable"}
-        return result
-    except Exception as e:
-        return {"error": str(e)}
-
-@app.get("/api/traces/recent")
-async def api_traces_recent(limit: int = 20):
-    """Return last 20 traces from trace_log.db."""
-    try:
-        from config import EDITH_PATH
-        import sqlite3 as _sql
-
-        _trace_db = os.path.join(EDITH_PATH, "trace_log.db")
-
-        def _fetch():
-            if not os.path.exists(_trace_db):
-                return []
-            conn = _sql.connect(_trace_db)
-            cur = conn.cursor()
-            cur.execute(
-                "SELECT trace_id, user_input, intent, created_at, final_status, total_layers "
-                "FROM trace_index ORDER BY created_at DESC LIMIT ?",
-                (limit,)
-            )
-            rows = [
-                {
-                    "trace_id": r[0],
-                    "user_input": r[1],
-                    "intent": r[2],
-                    "created_at": r[3],
-                    "final_status": r[4],
-                    "total_layers": r[5],
-                }
-                for r in cur.fetchall()
-            ]
-            conn.close()
-            return rows
-
-        traces = await asyncio.to_thread(_fetch)
-        return {"traces": traces}
-    except Exception as e:
-        return {"error": str(e), "traces": []}
-
-@app.get("/api/logs/stream")
-async def api_logs_stream():
-    """SSE endpoint tailing edith.log. Sends last 100 lines on connect then streams new ones."""
-    from config import EDITH_PATH as _EDITH_PATH
-    log_path = os.path.join(_EDITH_PATH, "logs", "edith.log")
-
-    async def _generate():
-        try:
-            if os.path.exists(log_path):
-                with open(log_path, "r") as f:
-                    lines = f.readlines()
-                    for line in lines[-100:]:
-                        yield f"data: {line.rstrip()}\n\n"
-
-            with open(log_path, "a+") as _:
-                pass
-
-            import time as _time
-            last_size = os.path.getsize(log_path) if os.path.exists(log_path) else 0
-            while True:
-                await asyncio.sleep(0.5)
-                if not os.path.exists(log_path):
-                    continue
-                cur_size = os.path.getsize(log_path)
-                if cur_size > last_size:
-                    with open(log_path, "r") as f:
-                        f.seek(last_size)
-                        new_lines = f.read()
-                    last_size = cur_size
-                    for line in new_lines.splitlines():
-                        if line.strip():
-                            yield f"data: {line}\n\n"
-        except Exception as e:
-            yield f"data: [LOG_ERROR] {e}\n\n"
-
-    return StreamingResponse(_generate(), media_type="text/event-stream")
-
-# ────────────────────────────────────────────────────
-# MCP API Endpoints
-# ────────────────────────────────────────────────────
-
-@app.get("/api/mcp/status")
-async def api_mcp_status():
-    """Return enabled/disabled status, tool count, and last_called for all MCP servers."""
-    try:
-        import mcp_bridge
-        status = await asyncio.to_thread(mcp_bridge.get_mcp_status)
-        return status
-    except Exception as e:
-        log.error(f"MCP status error: {e}")
-        return {"error": str(e)}
-
-@app.get("/api/mcp/tools/{server_name}")
-async def api_mcp_tools(server_name: str):
-    """Return list of available tools for a named MCP server."""
-    try:
-        import mcp_bridge
-        tools = await asyncio.to_thread(mcp_bridge.list_mcp_tools, server_name)
-        return {"server": server_name, "tools": tools}
-    except Exception as e:
-        log.error(f"MCP tools error [{server_name}]: {e}")
-        return {"server": server_name, "tools": [], "error": str(e)}
-
-@app.post("/api/mcp/call")
-async def api_mcp_call(req: Request):
-    """Call a tool on an MCP server. Body: {server, tool, arguments}."""
-    denied = _check_mcp_admin(req)
-    if denied:
-        return denied
-    data = await req.json()
-    server = data.get("server", "")
-    tool = data.get("tool", "")
-    arguments = data.get("arguments", {})
-    if not server or not tool:
-        return {"error": "server and tool fields required"}
-    try:
-        import mcp_bridge
-        result = await asyncio.to_thread(
-            mcp_bridge.call_mcp_server, server, tool, arguments
-        )
-        return {"result": result, "server": server, "tool": tool}
-    except Exception as e:
-        log.error(f"MCP call error [{server}/{tool}]: {e}")
-        return {"result": None, "server": server, "tool": tool, "error": str(e)}
-
-@app.get("/api/mcp/config")
-async def api_mcp_config_get():
-    """Return full mcp_config.json contents."""
-    try:
-        import mcp_bridge
-        cfg = await asyncio.to_thread(mcp_bridge._load_config)
-        return cfg
-    except Exception as e:
-        log.error(f"MCP config get error: {e}")
-        return {"error": str(e)}
-
-@app.post("/api/mcp/config/add")
-async def api_mcp_config_add(req: Request):
-    """Add or update an MCP server. Body: {name, command, args, env_vars, description, allowed_intents, enabled}."""
-    denied = _check_mcp_admin(req)
-    if denied:
-        return denied
-    data = await req.json()
-    name = data.get("name", "").strip()
-    command = data.get("command", "").strip()
-    if not name or not command:
-        return {"ok": False, "error": "name and command required"}
-    try:
-        import mcp_bridge
-        cfg = mcp_bridge._load_config()
-        cfg.setdefault("servers", {})[name] = {
-            "enabled": data.get("enabled", False),
-            "command": command,
-            "args": data.get("args", []),
-            "description": data.get("description", ""),
-            "allowed_intents": data.get("allowed_intents", ["mcp"]),
-            "env_vars": data.get("env_vars", {}),
-        }
-        await asyncio.to_thread(mcp_bridge.save_config, cfg)
-        return {"ok": True, "name": name}
-    except Exception as e:
-        log.error(f"MCP config add error: {e}")
-        return {"ok": False, "error": str(e)}
-
-@app.post("/api/mcp/config/toggle/{server_name}")
-async def api_mcp_config_toggle(server_name: str, req: Request):
-    """Toggle enabled/disabled for a named server."""
-    denied = _check_mcp_admin(req)
-    if denied:
-        return denied
-    try:
-        import mcp_bridge
-        cfg = mcp_bridge._load_config()
-        servers = cfg.get("servers", {})
-        if server_name not in servers:
-            return {"ok": False, "error": f"Server '{server_name}' not found"}
-        servers[server_name]["enabled"] = not servers[server_name].get("enabled", False)
-        new_state = servers[server_name]["enabled"]
-        await asyncio.to_thread(mcp_bridge.save_config, cfg)
-        return {"ok": True, "name": server_name, "enabled": new_state}
-    except Exception as e:
-        log.error(f"MCP toggle error [{server_name}]: {e}")
-        return {"ok": False, "error": str(e)}
-
-@app.delete("/api/mcp/config/remove/{server_name}")
-async def api_mcp_config_remove(server_name: str, req: Request):
-    """Remove an MCP server entry from config."""
-    denied = _check_mcp_admin(req)
-    if denied:
-        return denied
-    try:
-        import mcp_bridge
-        cfg = mcp_bridge._load_config()
-        servers = cfg.get("servers", {})
-        if server_name not in servers:
-            return {"ok": False, "error": f"Server '{server_name}' not found"}
-        del servers[server_name]
-        await asyncio.to_thread(mcp_bridge.save_config, cfg)
-        return {"ok": True, "removed": server_name}
-    except Exception as e:
-        log.error(f"MCP remove error [{server_name}]: {e}")
-        return {"ok": False, "error": str(e)}
-
-# ══════════════════════════════════════════════════════════════
-# O6: Webhook Triggers — receive push events from external services
-# ══════════════════════════════════════════════════════════════
-
-_WEBHOOK_TOKEN = os.getenv("EDITH_WEBHOOK_TOKEN", "")
-
-def _verify_webhook(req: Request) -> bool:
-    """Verify webhook via X-Webhook-Token header (skip if token not configured)."""
-    if not _WEBHOOK_TOKEN:
-        return True
-    return req.headers.get("X-Webhook-Token", "") == _WEBHOOK_TOKEN
-
-@app.post("/webhook/{source}")
-async def webhook_trigger(source: str, req: Request):
-    """
-    O6: Push-event webhook. source = github | telegram | calendar | generic.
-    Body: {"event": "push", "message": "...", "payload": {...}}
-    Routes through EDITH orchestrator as channel source='webhook'.
-    Set EDITH_WEBHOOK_TOKEN env var to require auth.
-    """
-    if not _verify_webhook(req):
-        return JSONResponse(status_code=401, content={"ok": False, "error": "Unauthorized"})
-
-    allowed_sources = {"github", "telegram", "calendar", "generic", "alert"}
-    if source not in allowed_sources:
-        return JSONResponse(status_code=400, content={"ok": False, "error": f"Unknown source '{source}'"})
-
-    try:
-        body = await req.json()
-    except Exception:
-        body = {}
-
-    event   = body.get("event", "push")
-    message = body.get("message", "")
-    payload = body.get("payload", {})
-
-    # Build a natural-language description EDITH can act on
-    if not message:
-        if source == "github":
-            repo   = payload.get("repository", {}).get("full_name", "unknown repo")
-            ref    = payload.get("ref", "")
-            pusher = payload.get("pusher", {}).get("name", "someone")
-            message = f"GitHub {event} on {repo} ({ref}) by {pusher}"
-        elif source == "calendar":
-            message = f"Calendar event: {payload.get('summary', event)}"
-        elif source == "alert":
-            message = f"Alert [{event}]: {payload.get('text', json.dumps(payload)[:200])}"
-        else:
-            message = f"Webhook event from {source}: {event}"
-
-    log.info(f"[webhook/{source}] {event}: {message[:100]}")
-
-    def _process():
-        from orchestrator import chat
-        return chat(message, intent="chat", source="webhook")
-
-    try:
-        reply = await asyncio.to_thread(_process)
-    except Exception as e:
-        log.error(f"Webhook processing error: {e}")
-        reply = f"[EDITH] Webhook received but processing failed: {e}"
-
-    # If Telegram is configured, push the reply back
-    try:
-        from telegram_bot import send_message as _tg_send
-        await asyncio.to_thread(_tg_send, f"[{source.upper()} webhook]\n{message}\n\n{reply}")
-    except Exception:
-        pass
-
-    return {"ok": True, "source": source, "event": event, "reply": reply}
-
-@app.post("/tg_webhook")
-async def tg_webhook(req: Request):
-    """
-    Telegram Bot API webhook endpoint.
-    nginx maps /<BOT_TOKEN> → http://127.0.0.1:8001/tg_webhook.
-    Only active on cloud node (EDITH_NODE_TYPE=cloud).
-    """
-    if os.getenv("EDITH_NODE_TYPE", "local") != "cloud":
-        return JSONResponse(status_code=403, content={"ok": False, "error": "Webhook only active on cloud node"})
-    try:
-        update = await req.json()
-    except Exception:
-        return JSONResponse(status_code=400, content={"ok": False})
-    try:
-        from telegram_bot import handle_telegram_update
-        await asyncio.to_thread(handle_telegram_update, update)
-    except Exception as e:
-        log.error(f"tg_webhook handler error: {e}")
-    return {"ok": True}
 
 def _graceful_shutdown():
-    """Flush memories on shutdown."""
     log.info("Graceful shutdown initiated — flushing data...")
     try:
-        import threading
         from devlog import _sync_to_simplenote
-        _t = threading.Thread(target=_sync_to_simplenote, daemon=True)
-        _t.start()
-        _t.join(timeout=3.0)
+        t = threading.Thread(target=_sync_to_simplenote, daemon=True)
+        t.start()
+        t.join(timeout=3.0)
     except Exception as e:
         log.error(f"DevLog flush failed: {e}")
-        
     try:
         from config import get_chroma_client
         client = get_chroma_client()
-        # Chroma V0.4+ doesn't require persist() but older clients might
-        if hasattr(client, 'persist'):
+        if hasattr(client, "persist"):
             client.persist()
     except Exception:
         pass
-        
     try:
         from session import _persist_session
         _persist_session()
     except Exception as e:
         log.error(f"Session save failed: {e}")
 
-# ══════════════════════════════════════════════════════════════
-# DEV PANEL API
-# ══════════════════════════════════════════════════════════════
-import glob as _glob
-import asyncio as _asyncio
-import urllib.request as _urlreq
-import json as _json2
-
-_EDITH_DIR          = os.path.expanduser("~/EDITH")
-_MAX_CHARS_PER_FILE = 4000
-_MAX_FILES          = 8
-
-_SYSTEM_QA = (
-    "You are EDITH's self-awareness module with full access to her source code. "
-    "Answer architecture and development questions accurately and concisely. "
-    "Reference specific function names, classes, and line details when relevant."
-)
-
-_SYSTEM_COUNCIL = """You are EDITH's Council of Minds. Four internal personas analyse the question and debate.
-
-STRATEGIST — long-term architecture, scalability, design principles
-CRITIC      — flaws, edge cases, tech debt, failure modes
-BUILDER     — concrete next steps, exact code actions needed
-FUTURIST    — ambitious possibilities, what EDITH could become
-
-Respond in this exact format (no preamble):
-STRATEGIST: <2-3 sentences>
-CRITIC: <2-3 sentences>
-BUILDER: <2-3 sentences>
-FUTURIST: <2-3 sentences>
-CONSENSUS: <1-2 sentences final verdict>"""
-
-_SYSTEM_NEXT = (
-    "You are EDITH's self-awareness module. Based on the provided codebase, "
-    "identify the single most impactful next thing to build. "
-    "Be specific: module name, key functions to write, why it matters most right now. "
-    "No generic advice — ground everything in the actual code provided."
-)
-
-@app.get("/api/devpanel/modules")
-async def devpanel_modules():
-    modules = []
-    for fp in sorted(_glob.glob(os.path.join(_EDITH_DIR, "*.py"))):
-        name = os.path.basename(fp)
-        try:
-            with open(fp) as fh:
-                lines = sum(1 for _ in fh)
-        except Exception:
-            lines = 0
-        modules.append({"name": name, "lines": lines})
-    return {"modules": modules}
-
-@app.post("/api/devpanel/query")
-async def devpanel_query(req: Request):
-    body  = await req.json()
-    query = body.get("query", "").strip()
-    mode  = body.get("mode", "qa")
-    files = body.get("files", [])[:_MAX_FILES]
-
-    if not query:
-        return {"error": "Empty query."}
-
-    ctx_parts = []
-    for fname in files:
-        fp = os.path.join(_EDITH_DIR, fname)
-        if not os.path.abspath(fp).startswith(_EDITH_DIR):
-            continue
-        try:
-            with open(fp) as fh:
-                raw = fh.read()[:_MAX_CHARS_PER_FILE]
-            ctx_parts.append(f"=== {fname} ===\n{raw}")
-        except Exception:
-            pass
-
-    context = "\n\n".join(ctx_parts) if ctx_parts else "(no files loaded)"
-    system  = {"qa": _SYSTEM_QA, "council": _SYSTEM_COUNCIL, "next": _SYSTEM_NEXT}.get(mode, _SYSTEM_QA)
-
-    full_msg = f"[SYSTEM ROLE]\n{system}\n\n[CODEBASE CONTEXT]\n{context}\n\n[QUESTION]\n{query}"
-
-    def _call():
-        payload = _json2.dumps({"message": full_msg}).encode()
-        rq = _urlreq.Request(
-            "http://localhost:8001/api/chat",
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST"
-        )
-        with _urlreq.urlopen(rq, timeout=90) as r:
-            return _json2.loads(r.read())
-
-    try:
-        data   = await _asyncio.get_event_loop().run_in_executor(None, _call)
-        answer = data.get("reply") or data.get("response") or data.get("message") or str(data)
-    except Exception as e:
-        answer = f"[ERROR — could not reach chat endpoint]\n{type(e).__name__}: {e}"
-
-    return {"response": answer}
-
-# ────────────────────────────────────────────────────
-# Session History Endpoints
-# ────────────────────────────────────────────────────
-
-@app.get("/api/sessions")
-async def get_sessions():
-    try:
-        import sqlite3 as _sq
-        from datetime import date, timedelta
-        _db = os.path.join(os.path.dirname(os.path.abspath(__file__)), "session_state.db")
-        conn = _sq.connect(_db)
-        rows = conn.execute(
-            "SELECT session_id, conversation_json, start_time FROM sessions "
-            "WHERE session_id IS NOT NULL "
-            "ORDER BY last_active DESC LIMIT 50"
-        ).fetchall()
-        conn.close()
-        today = date.today().isoformat()
-        yesterday = (date.today() - timedelta(days=1)).isoformat()
-        result = {"today": [], "yesterday": [], "older": []}
-        for sid, cjson, start_time in rows:
-            turns = json.loads(cjson or "[]")
-            first_user = next((t["content"] for t in turns if t.get("role") == "user"), None)
-            title = (first_user[:40] + ("..." if len(first_user) > 40 else "")) if first_user else f"New Chat ({sid})"
-            item = {
-                "session_id": sid,
-                "title": title,
-                "timestamp": start_time or "",
-                "message_count": len(turns) // 2,
-            }
-            day = (start_time or "")[:10]
-            if day == today:
-                result["today"].append(item)
-            elif day == yesterday:
-                result["yesterday"].append(item)
-            else:
-                result["older"].append(item)
-        return result
-    except Exception as e:
-        log.warning(f"get_sessions failed: {e}")
-        return {"today": [], "yesterday": [], "older": []}
-
-@app.post("/api/sessions/new")
-async def create_session_endpoint(request: Request):
-    try:
-        import sqlite3 as _sq
-        body = await request.json()
-        sid = body.get("session_id") or f"web_{int(__import__('time').time())}"
-        _db = os.path.join(os.path.dirname(os.path.abspath(__file__)), "session_state.db")
-        now = datetime.datetime.now().isoformat()
-        conn = _sq.connect(_db)
-        conn.execute(
-            "INSERT OR IGNORE INTO sessions (session_id, device, start_time, last_active, status, conversation_json) VALUES (?,?,?,?,?,?)",
-            (sid, "web", now, now, "active", "[]")
-        )
-        conn.commit()
-        conn.close()
-        return {"ok": True, "session_id": sid}
-    except Exception as e:
-        log.warning(f"create_session failed: {e}")
-        return {"ok": False, "error": str(e)}
-
-@app.get("/api/sessions/{session_id}/messages")
-async def get_session_messages(session_id: str):
-    try:
-        import sqlite3 as _sq
-        _db = os.path.join(os.path.dirname(os.path.abspath(__file__)), "session_state.db")
-        conn = _sq.connect(_db)
-        row = conn.execute(
-            "SELECT conversation_json FROM sessions WHERE session_id=?", (session_id,)
-        ).fetchone()
-        conn.close()
-        turns = json.loads(row[0]) if row and row[0] else []
-        return {"messages": turns}
-    except Exception as e:
-        log.warning(f"get_session_messages failed: {e}")
-        return {"messages": []}
-
-# ── REPO DNA ENDPOINTS ──────────────────────────────────────────────────────
-
-_REPO_URL_RE = re.compile(r"^https://github\.com/[\w\-]+/[\w\-]+$")
-
-@app.post("/api/repo/analyze")
-async def repo_analyze(request: Request):
-    if not _REPO_DNA_OK:
-        return JSONResponse({"error": "repo_dna module not available"}, status_code=503)
-    try:
-        body = await request.json()
-        repo_url = (body.get("repo_url") or "").strip().rstrip("/")
-        force_refresh = bool(body.get("force_refresh", False))
-        if not _REPO_URL_RE.match(repo_url):
-            return JSONResponse({"error": "Invalid URL", "detail": "Must match https://github.com/owner/repo"}, status_code=400)
-        log.info(f"[repo_dna] analyze requested: {repo_url} force={force_refresh}")
-        analysis = _analyze_repo(repo_url, force_refresh=force_refresh)
-        return JSONResponse(analysis)
-    except RepoFetchError as exc:
-        log.warning(f"[repo_dna] fetch error: {exc}")
-        return JSONResponse({"error": "Fetch failed", "detail": str(exc)}, status_code=400)
-    except RepoAnalysisError as exc:
-        log.warning(f"[repo_dna] analysis error: {exc}")
-        return JSONResponse({"error": "Analysis failed", "detail": str(exc)}, status_code=500)
-    except Exception as exc:
-        log.warning(f"[repo_dna] unexpected: {exc}")
-        return JSONResponse({"error": "Internal error", "detail": str(exc)}, status_code=500)
-
-@app.get("/api/repo/analyses")
-async def repo_analyses():
-    if not _REPO_DNA_OK:
-        return JSONResponse({"error": "repo_dna module not available"}, status_code=503)
-    try:
-        all_analyses = _get_cached_analyses()
-        items = [
-            {
-                "repo_name": a.get("repo_name", ""),
-                "repo_url": a.get("repo_url", ""),
-                "analyzed_at": a.get("analyzed_at", ""),
-                "steal_this_count": len(a.get("steal_this", [])),
-                "quick_wins_count": len(a.get("quick_wins", [])),
-            }
-            for a in all_analyses
-        ]
-        return JSONResponse(items)
-    except Exception as exc:
-        return JSONResponse({"error": str(exc)}, status_code=500)
-
-@app.post("/api/repo/watch")
-async def repo_watch(request: Request):
-    if not _REPO_DNA_OK:
-        return JSONResponse({"error": "repo_dna module not available"}, status_code=503)
-    try:
-        body = await request.json()
-        repo_url = (body.get("repo_url") or "").strip().rstrip("/")
-        if not _REPO_URL_RE.match(repo_url):
-            return JSONResponse({"error": "Invalid URL", "detail": "Must match https://github.com/owner/repo"}, status_code=400)
-        added = _watch_repo(repo_url)
-        return JSONResponse({"watching": True, "added": added, "repo_url": repo_url})
-    except Exception as exc:
-        return JSONResponse({"error": str(exc)}, status_code=500)
-
-@app.get("/api/repo/watched")
-async def repo_watched():
-    if not _REPO_DNA_OK:
-        return JSONResponse({"error": "repo_dna module not available"}, status_code=503)
-    try:
-        return JSONResponse(_get_watched_repos())
-    except Exception as exc:
-        return JSONResponse({"error": str(exc)}, status_code=500)
-
-_COMPARE_CATEGORIES = [
-    "Memory Systems", "LLM Routing", "Voice Pipeline", "Agent Capabilities",
-    "UI/Interface", "Integrations", "Security", "Reliability", "Code Quality", "Unique Features",
-]
-
-@app.post("/api/repo/compare")
-async def repo_compare(request: Request):
-    if not _REPO_DNA_OK:
-        return JSONResponse({"error": "repo_dna module not available"}, status_code=503)
-    try:
-        body = await request.json()
-        repo_url = (body.get("repo_url") or "").strip().rstrip("/")
-        if not _REPO_URL_RE.match(repo_url):
-            return JSONResponse({"error": "Invalid URL"}, status_code=400)
-
-        # Must have cached analysis
-        all_analyses = _get_cached_analyses()
-        cached = next((a for a in all_analyses if a.get("repo_url") == repo_url), None)
-        if not cached:
-            return JSONResponse({"error": "analyze first", "detail": "Run analyze before compare"}, status_code=404)
-
-        edith_summary = _build_edith_context_summary()
-        compare_prompt = f"""EDITH self-knowledge (live scan):
-{edith_summary}
-
-Target repo analysis:
-{json.dumps(cached, indent=2)}
-
-Produce a head-to-head comparison for these exact categories: {', '.join(_COMPARE_CATEGORIES)}
-
-Return ONLY valid JSON with no prose outside it:
-{{
-  "categories": [
-    {{
-      "name": "category name",
-      "edith_score": 1,
-      "repo_score": 1,
-      "edith_note": "what EDITH has",
-      "repo_note": "what repo has",
-      "winner": "edith|repo|tie"
-    }}
-  ],
-  "overall_winner": "edith|repo|tie",
-  "edith_advantages": ["..."],
-  "repo_advantages": ["..."],
-  "verdict": "2-3 sentence summary"
-}}
-
-Score 1-10. winner must be exactly edith, repo, or tie. Output exactly {len(_COMPARE_CATEGORIES)} categories."""
-
-        import smart_router as _sr
-        raw = _sr.smart_call(
-            prompt=compare_prompt,
-            intent="repo_analyze",
-            system="You are EDITH's competitive intelligence engine. Return ONLY valid JSON.",
-        )
-
-        try:
-            result = json.loads(raw)
-        except json.JSONDecodeError:
-            m = re.search(r"\{[\s\S]+\}", raw)
-            result = json.loads(m.group(0)) if m else {"error": "LLM returned non-JSON", "raw": raw}
-
-        result["repo_url"] = repo_url
-        result["repo_name"] = cached.get("repo_name", "")
-        return JSONResponse(result)
-    except json.JSONDecodeError as exc:
-        return JSONResponse({"error": "Parse failed", "detail": str(exc)}, status_code=500)
-    except Exception as exc:
-        log.warning(f"[repo_compare] {exc}")
-        return JSONResponse({"error": str(exc)}, status_code=500)
-
-@app.delete("/api/repo/cache")
-async def repo_clear_cache(repo_url: str = None):
-    if not _REPO_DNA_OK:
-        return JSONResponse({"error": "repo_dna module not available"}, status_code=503)
-    try:
-        url = (repo_url or "").strip() or None
-        _clear_repo_cache(url)
-        return JSONResponse({"cleared": True, "repo_url": url or "all"})
-    except Exception as exc:
-        return JSONResponse({"error": str(exc)}, status_code=500)
-
-# ── Repo DNA — Click-to-adapt endpoints ──────────────────────────────────────
-
-try:
-    from agent import start_agent_task as _start_agent_task, execute_agent_task as _execute_agent_task
-    _AGENT_OK = True
-except ImportError:
-    _AGENT_OK = False
-
-try:
-    from devlog import add_entry as _devlog_add_entry
-    _DEVLOG_OK = True
-except ImportError:
-    _DEVLOG_OK = False
-
-_ADAPT_PREVIEW_SYSTEM = (
-    "You are EDITH's code architect. Given a capability from a competitor repo "
-    "(may be JS, Rust, TypeScript, or any language), your job is to:\n"
-    "1. Understand the CONCEPT behind the capability — not the syntax.\n"
-    "2. Decide if EDITH actually needs this. EDITH is a Python backend AI daemon: "
-    "no browser, no UI state, no Node.js, no Redux, no DOM.\n"
-    "3. If applicable: implement in idiomatic Python using EDITH's existing patterns. "
-    "Translate concepts — never copy JS/Rust syntax, class names, or polyfills.\n"
-    "4. If not applicable: say so and explain why.\n\n"
-    "TARGET_FILE must be one of the EDITH Python files listed in the prompt. "
-    "If no existing file fits, use 'utils.py'.\n\n"
-    "Format your response EXACTLY as:\n"
-    "TARGET_FILE: <real_edith_file.py>\n"
-    "APPLICABLE: yes/no\n"
-    "REASON: <one line>\n"
-    "```python\n<Python implementation, or empty block if not applicable>\n```"
-)
-
-@app.post("/api/repo/adapt-preview")
-async def repo_adapt_preview(request: Request):
-    if not _REPO_DNA_OK:
-        return JSONResponse({"error": "repo_dna module not available"}, status_code=503)
-    try:
-        import glob as _glob
-        body = await request.json()
-        steal_item = body.get("steal_item") or {}
-        repo_url = (body.get("repo_url") or "").strip()
-
-        capability = steal_item.get("capability") or steal_item.get("title") or "unknown"
-        description = steal_item.get("description") or steal_item.get("what") or ""
-        steal_from = steal_item.get("steal_from") or steal_item.get("file_hint") or ""
-
-        _edith_dir = os.path.dirname(os.path.abspath(__file__))
-        edith_files = sorted(
-            os.path.basename(f) for f in _glob.glob(os.path.join(_edith_dir, "*.py"))
-        )
-        file_list_str = ", ".join(edith_files)
-
-        task_description = (
-            f"Implement '{capability}' in EDITH. "
-            f"Pattern source: {steal_from or 'see repo'}. "
-            f"Repo: {repo_url}. "
-            f"What it does: {description}"
-        )
-        prompt = (
-            f"Capability to steal: {capability}\n"
-            f"What it does: {description}\n"
-            f"Source file in their repo: {steal_from}\n"
-            f"Their repo: {repo_url}\n\n"
-            f"EDITH Python files (flat directory, no subdirs): {file_list_str}\n\n"
-            "Generate a Python implementation sketch for EDITH. "
-            "TARGET_FILE must be one of the files listed above."
-        )
-
-        import smart_router as _sr
-        raw = _sr.smart_call(
-            prompt=prompt,
-            intent="repo_analyze",
-            system=_ADAPT_PREVIEW_SYSTEM,
-        )
-
-        target_file = "utils.py"
-        applicable = True
-        reason = ""
-        for line in raw.splitlines():
-            if line.startswith("TARGET_FILE:"):
-                candidate = line.split(":", 1)[1].strip()
-                if candidate in edith_files:
-                    target_file = candidate
-            elif line.startswith("APPLICABLE:"):
-                applicable = line.split(":", 1)[1].strip().lower() == "yes"
-            elif line.startswith("REASON:"):
-                reason = line.split(":", 1)[1].strip()
-
-        import re as _re
-        _code_match = _re.search(r'```python\n([\s\S]+?)\n```', raw)
-        new_code = _code_match.group(1).strip() if _code_match else ""
-
-        return JSONResponse({
-            "diff_preview": raw,
-            "new_code": new_code,
-            "target_file": target_file,
-            "task_description": task_description,
-            "capability": capability,
-            "applicable": applicable,
-            "reason": reason,
-        })
-    except Exception as exc:
-        log.warning(f"[repo_adapt] preview error: {exc}")
-        return JSONResponse({"error": str(exc)}, status_code=500)
-
-@app.post("/api/repo/adapt-confirm")
-async def repo_adapt_confirm(request: Request):
-    if not _AGENT_OK:
-        return JSONResponse({"error": "agent module not available"}, status_code=503)
-    try:
-        body = await request.json()
-        confirmed = bool(body.get("confirmed", False))
-        task_description = (body.get("task_description") or "").strip()
-        target_file = (body.get("target_file") or "").strip()
-        capability = (body.get("capability") or "").strip()
-        repo_url = (body.get("repo_url") or "").strip()
-
-        if not confirmed:
-            return JSONResponse({"status": "rejected"})
-
-        if not task_description:
-            return JSONResponse({"error": "task_description required"}, status_code=400)
-
-        # Plan the task
-        plan_result = _start_agent_task(task_description)
-        if not plan_result.ok:
-            return JSONResponse({"error": f"Planning failed: {plan_result.error}"}, status_code=500)
-
-        task_id = plan_result.value["task_id"]
-
-        # Stash metadata for AGENT_DONE handler to call mark_adapted on success
-        _adapt_meta[task_id] = {
-            "capability": capability,
-            "repo_url": repo_url,
-            "target_file": target_file,
-        }
-
-        # Execute async in background thread
-        exec_result = _execute_agent_task(task_id)
-        if not exec_result.ok:
-            _adapt_meta.pop(task_id, None)
-            return JSONResponse({"error": f"Execution failed: {exec_result.error}"}, status_code=500)
-
-        # Devlog entry
-        if _DEVLOG_OK:
-            try:
-                _devlog_add_entry(
-                    change=f"repo_dna: Adapted '{capability}' from {repo_url} → {target_file}",
-                    reason="repo_dna click-to-adapt HITL confirm",
-                    status="applied",
-                    error="",
-                    next_plan=f"verify changes in {target_file or 'EDITH'}",
-                )
-            except Exception as dl_exc:
-                log.warning(f"[repo_adapt] devlog write failed: {dl_exc}")
-
-        return JSONResponse({
-            "status": "queued",
-            "task_id": task_id,
-            "message": f"Agent executing '{capability}' adaptation in background.",
-        })
-    except Exception as exc:
-        log.warning(f"[repo_adapt] confirm error: {exc}")
-        return JSONResponse({"error": str(exc)}, status_code=500)
-
-@app.get("/api/repo/adapt-status/{task_id}")
-async def repo_adapt_status(task_id: str):
-    result = _adapt_results.get(task_id, {"status": "pending"})
-    return JSONResponse(result)
-
-# ── Repo DNA — Gap plan (strategic gap → sub-task decomposition) ──────────────
-
-_sigs_cache: dict = {"data": None, "mtime": 0.0}
-
-def _get_edith_signatures() -> dict:
-    import glob as _g
-    edith_dir = os.path.dirname(os.path.abspath(__file__))
-    files = sorted(_g.glob(os.path.join(edith_dir, "*.py")))
-    max_mtime = max((os.path.getmtime(f) for f in files), default=0.0)
-    if _sigs_cache["mtime"] == max_mtime and _sigs_cache["data"] is not None:
-        return _sigs_cache["data"]
-    _BLOCKLIST = {"config.py", "vault.py", "voice.py"}
-    sigs: dict = {}
-    for fpath in files:
-        fname = os.path.basename(fpath)
-        if fname in _BLOCKLIST:
-            continue
-        try:
-            defs = [l.strip() for l in open(fpath) if l.strip().startswith("def ")]
-            if defs:
-                sigs[fname] = defs
-        except Exception:
-            pass
-    _sigs_cache.update({"data": sigs, "mtime": max_mtime})
-    return sigs
-
-def _get_all_fns_in_file(fname: str) -> set:
-    edith_dir = os.path.dirname(os.path.abspath(__file__))
-    fpath = os.path.join(edith_dir, fname)
-    fns: set = set()
-    if not os.path.exists(fpath):
-        return fns
-    try:
-        for line in open(fpath):
-            s = line.strip()
-            if s.startswith("def "):
-                fns.add(s.split("(")[0].replace("def ", "").strip())
-    except Exception:
-        pass
-    return fns
-
-def _read_file_skeleton(fname: str) -> str:
-    edith_dir = os.path.dirname(os.path.abspath(__file__))
-    fpath = os.path.join(edith_dir, fname)
-    if not os.path.exists(fpath):
-        return ""
-    try:
-        return "".join(open(fpath).readlines()[:200])
-    except Exception:
-        return ""
-
-_GAP_PLAN_SYSTEM = (
-    "You are EDITH's code architect. Decompose a capability gap into 3-5 sub-tasks. "
-    "Each sub-task adds ONE new Python function to the target file. "
-    "Rules: ADD ONLY. Never modify existing functions. Python only. Max 40 lines per function. "
-    "depends_on is a list of sub-task ids that MUST be implemented first (use [] if no dependency). "
-    "Return JSON only, no markdown fences:\n"
-    '{"target_file":"filename.py","reason":"one sentence",'
-    '"subtasks":[{"id":1,"title":"...","function_name":"...","description":"...","lines_estimate":20,"depends_on":[]}]}'
-)
-
-@app.post("/api/repo/gap-plan")
-async def repo_gap_plan(request: Request):
-    if not _REPO_DNA_OK:
-        return JSONResponse({"error": "repo_dna module not available"}, status_code=503)
-    try:
-        body = await request.json()
-        gap = body.get("gap") or {}
-        repo_url = (body.get("repo_url") or "").strip()
-
-        capability = gap.get("capability") or ""
-        what = gap.get("what") or ""
-        why = gap.get("why") or ""
-
-        all_sigs = _get_edith_signatures()
-        sigs_text = "\n".join(
-            f"{fname}:\n" + "\n".join(f"  {d}" for d in defs)
-            for fname, defs in all_sigs.items()
-        )
-        edith_files = sorted(all_sigs.keys())
-
-        prompt = (
-            f"Gap: {capability}\nWhat: {what}\nWhy: {why}\n\n"
-            f"EDITH files + their functions:\n{sigs_text}\n\n"
-            f"Pick the best existing file as target. Decompose into 3-5 sub-tasks. "
-            f"TARGET_FILE must be one of: {', '.join(edith_files)}\n"
-            "Return JSON only."
-        )
-
-        import smart_router as _sr
-        import json as _json, re as _re
-        raw = _sr.smart_call(prompt=prompt, intent="repo_analyze", system=_GAP_PLAN_SYSTEM)
-
-        result: dict = {}
-        for attempt in [
-            lambda: _json.loads(raw.strip()),
-            lambda: _json.loads(_re.sub(r'```[a-z]*\n?', '', raw).strip()),
-            lambda: _json.loads((_re.search(r'\[[\s\S]+\]', raw) or type('x', (), {'group': lambda *_: '[]'})()).group(0)),
-        ]:
-            try:
-                result = attempt()
-                break
-            except Exception:
-                pass
-
-        _BLOCKLIST = {"config.py", "vault.py", "voice.py"}
-        target_file = result.get("target_file", "utils.py")
-        if target_file in _BLOCKLIST or not target_file.endswith(".py") or target_file not in all_sigs:
-            target_file = "utils.py"
-
-        existing_fns = _get_all_fns_in_file(target_file)
-        file_skeleton = _read_file_skeleton(target_file)
-
-        subtasks = [
-            t for t in (result.get("subtasks") or [])
-            if isinstance(t, dict) and t.get("function_name") not in existing_fns
-        ]
-
-        return JSONResponse({
-            "target_file": target_file,
-            "pick_reason": result.get("reason", ""),
-            "file_skeleton": file_skeleton,
-            "subtasks": subtasks,
-            "capability": capability,
-            "repo_url": repo_url,
-        })
-    except Exception as exc:
-        log.warning(f"[repo_gap_plan] error: {exc}")
-        return JSONResponse({"error": str(exc)}, status_code=500)
-
-# ── Repo DNA — Subtask completion status ─────────────────────────────────────
-
-@app.get("/api/repo/subtask-status")
-async def repo_subtask_status(repo_url: str, capability: str):
-    """Return which sub-tasks (by subtask id suffix) are marked done in adapted_items."""
-    if not _REPO_DNA_OK:
-        return JSONResponse({"error": "repo_dna module not available"}, status_code=503)
-    try:
-        import repo_dna as _dna
-        db = _dna._get_db()
-        # Sub-tasks stored as "{parent_capability}::subtask::{id}"
-        prefix = f"{capability}::subtask::"
-        rows = db.execute(
-            "SELECT capability FROM adapted_items WHERE repo_url=? AND capability LIKE ?",
-            (repo_url.strip().rstrip("/"), prefix + "%"),
-        ).fetchall()
-        done_ids = set()
-        for row in rows:
-            cap = row[0]
-            suffix = cap[len(prefix):]
-            if suffix.isdigit():
-                done_ids.add(int(suffix))
-        return JSONResponse({"done_ids": sorted(done_ids)})
-    except Exception as exc:
-        return JSONResponse({"error": str(exc)}, status_code=500)
-
-# ── Repo DNA — Success rate tracking ─────────────────────────────────────────
-
-class _RateBody(BaseModel):
-    repo_url: str = ""
-    capability: str = ""
-    outcome: str = "success"
-    notes: str = ""
-
-@app.post("/api/repo/rate-adaptation")
-async def repo_rate_adaptation(body: _RateBody):
-    if not _REPO_DNA_OK:
-        return JSONResponse({"error": "repo_dna module not available"}, status_code=503)
-    try:
-        import repo_dna as _dna
-        _dna.rate_adaptation(
-            repo_url=body.repo_url.strip().rstrip("/"),
-            capability=body.capability.strip(),
-            outcome=body.outcome.strip(),
-            notes=body.notes.strip(),
-        )
-        return JSONResponse({"ok": True})
-    except Exception as exc:
-        log.warning(f"[rate_adaptation] {exc}")
-        return JSONResponse({"error": str(exc)}, status_code=500)
-
-@app.get("/api/repo/success-rate")
-async def repo_success_rate(repo_url: str = ""):
-    if not _REPO_DNA_OK:
-        return JSONResponse({"error": "repo_dna module not available"}, status_code=503)
-    try:
-        import repo_dna as _dna
-        data = _dna.get_steal_success_rate(repo_url.strip().rstrip("/") or None)
-        return JSONResponse(data)
-    except Exception as exc:
-        return JSONResponse({"error": str(exc)}, status_code=500)
-
-# ── Repo DNA — Proactive alert config ────────────────────────────────────────
-
-_alert_config: dict = {"enabled": True}
-
-class _AlertConfigBody(BaseModel):
-    enabled: bool = True
-
-@app.post("/api/repo/alert-config")
-async def repo_alert_config(body: _AlertConfigBody):
-    _alert_config["enabled"] = body.enabled
-    return JSONResponse({"enabled": _alert_config["enabled"]})
-
-@app.get("/api/repo/alert-config")
-async def repo_alert_config_get():
-    return JSONResponse({"enabled": _alert_config.get("enabled", True)})
-
-# ── Repo DNA — Trend tracking ────────────────────────────────────────────────
-
-@app.get("/api/repo/trend")
-async def repo_trend(repo_url: str):
-    if not _REPO_DNA_OK:
-        return JSONResponse({"error": "repo_dna module not available"}, status_code=503)
-    try:
-        repo_url = repo_url.strip().rstrip("/")
-        all_analyses = _get_cached_analyses()
-        current = next((a for a in all_analyses if a.get("repo_url") == repo_url), None)
-        if not current:
-            return JSONResponse({"error": "no analysis found for this repo"}, status_code=404)
-        previous = _get_prev_snapshot(repo_url)
-        if not previous:
-            return JSONResponse({"has_changes": False, "first_analysis": True})
-        return JSONResponse(_diff_analyses(current, previous))
-    except Exception as exc:
-        return JSONResponse({"error": str(exc)}, status_code=500)
-
-# ── Repo DNA — Multi-repo parallel compare ────────────────────────────────────
-
-class _MultiCompareBody(BaseModel):
-    repo_urls: list = []
-    force_refresh: bool = False
-
-@app.post("/api/repo/multi-compare")
-def repo_multi_compare(body: _MultiCompareBody):
-    """Sync def — FastAPI runs in threadpool, safe for blocking ThreadPoolExecutor."""
-    if not _REPO_DNA_OK:
-        return JSONResponse({"error": "repo_dna module not available"}, status_code=503)
-
-    repo_urls = [u.strip().rstrip("/") for u in (body.repo_urls or []) if u.strip()]
-
-    if len(repo_urls) < 2:
-        return JSONResponse({"error": "need at least 2 repo URLs"}, status_code=400)
-    if len(repo_urls) > 3:
-        return JSONResponse({"error": "max 3 repos at once"}, status_code=400)
-    for url in repo_urls:
-        if not _REPO_URL_RE.match(url):
-            return JSONResponse({"error": f"Invalid URL: {url}"}, status_code=400)
-    try:
-        result = _compare_multi_repos(repo_urls, body.force_refresh)
-        return JSONResponse(result)
-    except Exception as exc:
-        log.warning(f"[multi_compare] {exc}")
-        return JSONResponse({"error": str(exc)}, status_code=500)
-
-# ── Repo DNA — EDITH self-audit ──────────────────────────────────────────────
-
-_audit_cache: dict = {"result": None, "ts": 0.0}
-
-def _audit_edith_self() -> dict:
-    import time, re as _re, json as _json
-    import smart_router as _sr
-
-    edith_dir = os.path.dirname(os.path.abspath(__file__))
-
-    # Parse CLAUDE.md — extract all .py filenames mentioned
-    claude_md_path = os.path.join(edith_dir, "CLAUDE.md")
-    claude_md = open(claude_md_path, errors="ignore").read() if os.path.exists(claude_md_path) else ""
-    module_map_files = list(set(_re.findall(r'\b[\w_]+\.py\b', claude_md)))
-    actual_files = set(f for f in os.listdir(edith_dir) if f.endswith(".py"))
-    missing_files = [f for f in module_map_files if f not in actual_files]
-
-    # 4-Vision function checks — verify key functions exist in vision files
-    _VISION_EXPECTED = {
-        "cognitive_profile.py": ["update_profile", "detect_drift", "get_profile"],
-        "self_improve.py": ["run_scheduled_improvement", "monitor_arxiv"],
-        "life_os.py": ["weekly_briefing", "simulate_branches"],
-        "council.py": ["council_debate", "run_council"],
-    }
-    vision_gaps = [
-        f"{vf}: missing `{fn}`"
-        for vf, fns in _VISION_EXPECTED.items()
-        for fn in fns
-        if fn not in _get_all_fns_in_file(vf)
-    ]
-
-    # Function signatures for LLM context (capped to avoid token overflow)
-    all_sigs = _get_edith_signatures()
-    sigs_text = "\n".join(
-        f"{fname}: {', '.join(d.split('(')[0].replace('def ', '') for d in defs[:8])}"
-        for fname, defs in list(all_sigs.items())[:30]
-    )
-
-    prompt = (
-        f"EDITH CLAUDE.md lists these .py files:\n{', '.join(module_map_files[:60])}\n\n"
-        f"Files MISSING from disk: {', '.join(missing_files) or 'none'}\n\n"
-        f"4-Vision function checks: {'; '.join(vision_gaps) or 'all present'}\n\n"
-        f"Actual implemented functions (sample):\n{sigs_text}\n\n"
-        "Find up to 8 notable gaps between documented architecture and actual implementation. "
-        "Return JSON array only, no markdown:\n"
-        '[{"capability":"short name","claimed":"what docs say","reality":"what code has",'
-        '"severity":"critical|medium|low","target_file":"which .py to fix"}]'
-    )
-
-    raw = _sr.smart_call(
-        prompt=prompt, intent="repo_analyze",
-        system="EDITH code auditor. Analyze concrete evidence. Return JSON array only, no markdown.",
-    )
-
-    gaps: list = []
-    for attempt in [
-        lambda: _json.loads(raw.strip()),
-        lambda: _json.loads(_re.sub(r'```[a-z]*\n?', '', raw).strip()),
-        lambda: _json.loads((_re.search(r'\[[\s\S]+\]', raw) or type('x', (), {'group': lambda *_: '[]'})()).group(0)),
-    ]:
-        try:
-            result = attempt()
-            if isinstance(result, list):
-                gaps = result
-                break
-        except Exception:
-            pass
-
-    # Hard-inject confirmed missing files as critical items
-    for mf in missing_files[:3]:
-        if not any(mf in g.get("capability", "") for g in gaps):
-            gaps.insert(0, {
-                "capability": f"Missing module: {mf}",
-                "claimed": f"CLAUDE.md lists {mf} in module map",
-                "reality": "File does not exist on disk",
-                "severity": "critical",
-                "target_file": mf,
-            })
-
-    return {
-        "summary": f"Found {len(gaps)} gaps between CLAUDE.md and actual code.",
-        "audit_gaps": gaps,
-        "missing_files": missing_files,
-        "vision_gaps": vision_gaps,
-        "timestamp": __import__("datetime").datetime.utcnow().isoformat(),
-    }
-
-@app.post("/api/repo/self-audit")
-async def repo_self_audit():
-    if not _REPO_DNA_OK:
-        return JSONResponse({"error": "repo_dna module not available"}, status_code=503)
-    import time as _time
-    now = _time.time()
-    if _audit_cache["result"] is not None and now - _audit_cache["ts"] < 300:
-        return JSONResponse({**_audit_cache["result"], "cached": True})
-    try:
-        result = _audit_edith_self()
-        _audit_cache.update({"result": result, "ts": now})
-        return JSONResponse(result)
-    except Exception as exc:
-        log.warning(f"[self_audit] error: {exc}")
-        return JSONResponse({"error": str(exc)}, status_code=500)
-
-def _send_watch_alert(repo_url: str, items: list) -> None:
-    """Fire a Telegram alert when watched repo has new low-effort steal items."""
-    try:
-        from telegram_bot import send_telegram
-        lines = [f"🔔 *Repo Watch Alert*: {repo_url}\nNew low-effort steal items:"]
-        for item in items[:5]:
-            title = item.get("title") or item.get("capability") or "?"
-            lines.append(f"  • {title}")
-        if len(items) > 5:
-            lines.append(f"  …and {len(items) - 5} more")
-        send_telegram("\n".join(lines))
-    except Exception as exc:
-        log.warning(f"[watch_alert] failed to send Telegram: {exc}")
-
-@app.post("/api/repo/watch-check")
-async def repo_watch_check():
-    """Manual trigger for watched repo check — also fires proactive alerts."""
-    if not _REPO_DNA_OK:
-        return JSONResponse({"error": "repo_dna module not available"}, status_code=503)
-    try:
-        import repo_dna as _dna
-        updated = _check_watched_repos()
-        # Proactive alert: for each updated repo, diff and alert on new low-effort items
-        if _alert_config.get("enabled", True):
-            for entry in updated:
-                repo_url = entry["repo_url"] if isinstance(entry, dict) else entry
-                try:
-                    current = next(
-                        (a for a in _get_cached_analyses() if a.get("repo_url") == repo_url), None
-                    )
-                    if not current:
-                        continue
-                    previous = _get_prev_snapshot(repo_url)
-                    if not previous:
-                        continue
-                    diff = _diff_analyses(current, previous)
-                    quick_wins = [
-                        it for it in diff.get("new_steal_this", [])
-                        if (it.get("effort") or "").lower() == "low"
-                    ]
-                    if quick_wins:
-                        _send_watch_alert(repo_url, quick_wins)
-                except Exception as exc_inner:
-                    log.warning(f"[watch_check alert] {repo_url}: {exc_inner}")
-        return JSONResponse({"updated": updated, "count": len(updated)})
-    except Exception as exc:
-        return JSONResponse({"error": str(exc)}, status_code=500)
-
+# ── Entry point ────────────────────────────────
 if __name__ == "__main__":
     import atexit
     import signal
-    import subprocess
-    
-    # Register graceful shutdown
+
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     signal.signal(signal.SIGINT, lambda *_: sys.exit(0))
     atexit.register(_graceful_shutdown)
 
-    # Start DevLog background sync (30 min interval)
     from devlog import start_devlog
     start_devlog()
     log.info("DevLog sync thread started from chat_server.")
 
-    # Start memory monitor in background
-    monitor_thread = threading.Thread(target=_memory_monitor, daemon=True)
-    monitor_thread.start()
-
+    threading.Thread(target=_memory_monitor, daemon=True).start()
     log.info("Starting EDITH chat_server on http://127.0.0.1:8001")
     uvicorn.run(app, host="127.0.0.1", port=8001)
