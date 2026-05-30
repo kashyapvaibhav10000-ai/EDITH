@@ -216,7 +216,7 @@ def _handle_mcp_cmd(args: str) -> str:
     if lower.startswith("list ") or lower.startswith("ls "):
         path_m = _re.search(r"(/[^\s]+)", args)
         import os as _os
-        path = _os.path.expanduser(path_m.group(1)) if path_m else "/home/vaibhav"
+        path = _os.path.expanduser(path_m.group(1)) if path_m else os.path.expanduser("~")
         result = mcp_bridge.call_mcp_server("filesystem", "list_directory", {"path": path})
         return f"📂 *{path}*\n\n{result[:3000]}"
 

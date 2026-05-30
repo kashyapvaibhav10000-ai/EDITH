@@ -20,12 +20,12 @@ from datetime import datetime
 from collections import defaultdict
 
 # ── CONFIG ─────────────────────────────────────────────────────────────────
-EDITH_DIR     = "/home/vaibhav/EDITH"
-ENV_FILE      = "/home/vaibhav/EDITH/.env"
+EDITH_DIR     = os.path.expanduser("~/EDITH")
+ENV_FILE      = os.path.join(EDITH_DIR, ".env")
 JOPLIN_PORT   = 41184
 JOPLIN_BASE   = f"http://localhost:{JOPLIN_PORT}"
 NOTE_TITLE    = "EDITH — Architecture Doc (Auto)"
-STATE_FILE    = "/home/vaibhav/.edith_arch_note_id"
+STATE_FILE    = os.path.expanduser("~/.edith_arch_note_id")
 GROQ_MODEL    = "llama-3.3-70b-versatile"
 GROQ_URL      = "https://api.groq.com/openai/v1/chat/completions"
 MAX_CHUNK_TOKENS = 3500   # safe under 6k/min limit

@@ -231,7 +231,7 @@ def plan_task(task) -> str:
     style_prefix = _load_coding_style()
     prompt = f"""{style_prefix}You are EDITH, a Linux assistant on Manjaro.
 Break the task into max 3 steps. Use only plain text, no markdown, no backticks, no code blocks.
-Use absolute paths like /home/vaibhav/
+Use absolute paths like 
 Never include steps like "open terminal", "navigate to directory", or "cd" — just do the actual task directly.
 For bulk operations (create N files/folders, rename N items, etc.), use ONE step — do NOT list individual items.
 
@@ -248,7 +248,7 @@ def get_command(step) -> str:
     prompt = f"""You are EDITH on Linux Manjaro.
 Convert this step into a single bash command.
 Rules:
-- Absolute paths only, starting with /home/vaibhav/
+- Absolute paths only, starting with 
 - No cd commands alone
 - No markdown, no backticks, no code blocks
 - Reply with ONLY the raw bash command, nothing else
@@ -340,7 +340,7 @@ class AgentRunner:
                 *cmd_parts,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd="/home/vaibhav",
+                cwd=os.path.expanduser("~"),
             )
             try:
                 stdout_chunks, stderr_chunks, total = [], [], 0

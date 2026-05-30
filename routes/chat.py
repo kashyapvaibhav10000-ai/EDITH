@@ -38,7 +38,7 @@ router = APIRouter()
 
 _DISPATCH_LOCK = asyncio.Lock()
 _SIDE_EFFECT_INTENTS = {"email", "sms", "call", "calendar_create", "shell", "agent", "create_file", "delete_file"}
-_MAX_WIDGET_HISTORY = 10
+_MAX_WIDGET_HISTORY = 50
 _MAX_WIDGET_HISTORY_BYTES = 512 * 1024  # 512KB total cap
 
 def _trim_history_if_needed():

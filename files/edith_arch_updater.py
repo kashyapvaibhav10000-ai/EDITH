@@ -12,14 +12,14 @@ from datetime import datetime
 from pathlib import Path
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
-EDITH_DIR        = "/home/vaibhav/EDITH"
+EDITH_DIR        = os.path.expanduser("~/EDITH")
 JOPLIN_TOKEN     = os.environ.get("JOPLIN_TOKEN", "")
 JOPLIN_PORT      = 41184
 JOPLIN_BASE      = f"http://localhost:{JOPLIN_PORT}"
 NOTE_TITLE       = "EDITH Architecture — Auto Generated"
 OLLAMA_MODEL     = "qwen2.5:1.5b"   # fast + light; change to gemma3:1b if needed
 OLLAMA_URL       = "http://localhost:11434/api/generate"
-STATE_FILE       = "/home/vaibhav/.edith_arch_note_id"   # persists Joplin note ID
+STATE_FILE       = os.path.expanduser("~/.edith_arch_note_id")   # persists Joplin note ID
 # ──────────────────────────────────────────────────────────────────────────────
 
 

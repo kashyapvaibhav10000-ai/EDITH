@@ -1,31 +1,66 @@
-# EDITH TODOs
+## Refactor plan: chat_server.py → modular routers (FastAPI APIRouter)
 
-## Skill Management Commands
+### Step 1 — Create router modules (new files)
+- `routes/system.py`: endpoints
+  - `/api/health-check`
+  - `/api/system-status`
+  - `/api/recent_traces`
+  - `/api/monitor_schedule`
+  - `/dashboard`
+  - `/api/costs`
+  - `/api/provider-latencies`
+  - `/api/stats`
+  - `/api/status`
+  - `/api/last-memory`
+  - `/api/phone`
+  - `/api/weather-status`
+  - `/api/traces/recent`
+  - `/api/logs/stream`
+- `routes/mcp.py`: endpoints
+  - `/api/mcp/status`
+  - `/api/mcp/tools/{server_name}`
+  - `/api/mcp/call`
+  - `/api/mcp/config`
+  - `/api/mcp/config/add`
+  - `/api/mcp/config/toggle/{server_name}`
+  - `/api/mcp/config/remove/{server_name}`
+- `routes/webhooks.py`: endpoints
+  - `/webhook/{source}`
+  - `/tg_webhook`
+- `routes/devpanel.py`: endpoints
+  - `/api/devpanel/modules`
+  - `/api/devpanel/query`
+- `routes/sessions.py`: endpoints
+  - `/api/sessions`
+  - `/api/sessions/new`
+  - `/api/sessions/{session_id}/messages`
+- `routes/repo.py`: endpoints
+  - `/api/feedback`
+  - all `/api/repo/*` including adapt-preview/confirm/status, gap-plan, subtask-status, rate-adaptation, success-rate, alert-config, trend, multi-compare, self-audit, watch-check
+  - includes required repo_dna imports and shared `_REPO_DNA_OK` checks
+- Keep module-level shared state for repo_dna adaptation tracking:
+  - `_adapt_results`, `_adapt_meta`
+  - event_bus subscription to mark_adapted on AGENT_DONE
 
-**What:** Add `/skills list` and `/skills delete <name>` Telegram commands to `telegram_bot.py`.
+### Step 2 — Include routers from chat_server.py
+- Replace extracted endpoint definitions with:
+  - `app.include_router(system_router, prefix="")` etc. (no prefix, endpoints keep absolute paths)
+- Keep in `chat_server.py`:
+  - FastAPI init
+  - shutdown event handler
+  - middleware registration
+  - `_ALLOWED_ORIGINS` and CORS
+  - static mount
+  - index `/` handler
+  - memory monitor thread function + background startup behavior (inside __main__)
+  - MCP token verification helper and bus subscriptions (if not moved)
 
-**Why:** `_maybe_create_skill` auto-generates skills on agent task completion. No visibility or deletion mechanism exists — only way to manage is direct filesystem access to `skills/`. A runaway LLM could accumulate low-quality skills with no way to review from Telegram.
+### Step 3 — Widget history cap refactor
+- Update `_MAX_WIDGET_HISTORY` from `10` → `50` in:
+  - `routes/chat.py`
+  - `voice_routes.py`
+- Ensure trimming happens after every append (already does in both places; keep behavior consistent)
 
-**How to apply:**
-- `/skills list` → call `list_skills()` from `skills_loader.py`, format as Telegram message
-- `/skills delete <name>` → remove `skills/<name>/` dir, call `reload_skills()`
-- Wire in `telegram_bot.py` intent dispatch
-
-**Context:** `skills_loader.SKILLS_DIR = EDITH_PATH/skills/`. `list_skills()` and `reload_skills()` already exist. Only the Telegram command handlers need adding.
-
-**Depends on:** Nothing — `_maybe_create_skill` already shipped (Item 16).
-
-## Cloud Dead Code: Diagnostic shell=True Calls
-
-**What:** Remove cloud-irrelevant diagnostic functions from `intent_dispatch.py` — `_handle_network_status`, `_handle_who_am_i`, and similar functions that use `shell=True` for local system introspection.
-
-**Why:** After post-migration Fix 2 adds `EDITH_NODE_TYPE` guards, these functions become dead code on cloud. They're guarded (won't execute) but still compiled and present. Clean removal reduces attack surface and removes confusion.
-
-**How to apply:**
-- Identify all diagnostic handlers that make no sense on a headless cloud server
-- Remove the functions entirely (not guard — they're local-only by design)
-- Remove corresponding entries from `INTENT_HANDLERS` dict if applicable
-
-**Context:** 13 `shell=True` calls exist in `intent_dispatch.py`. Post-migration the env guard disables them on cloud. This TODO is cleanup after the guard is stable. Verify `edith.service` (local) still works before removing.
-
-**Depends on:** Fix 2 (EDITH_NODE_TYPE guard) must be stable first.
+### Step 4 — Smoke tests
+- Run existing smoke tests script(s) after refactor:
+  - `./smoke_test_standalone.sh` (and/or any `SMOKE_TESTS.md` instructions)

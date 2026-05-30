@@ -49,7 +49,7 @@ _active_tts_threads: list = []
 _current_voice_request_id = None
 _voice_request_lock = threading.Lock()
 
-_MAX_WIDGET_HISTORY = 10
+_MAX_WIDGET_HISTORY = 50
 
 
 # ────────────────────────────────────────────────────
