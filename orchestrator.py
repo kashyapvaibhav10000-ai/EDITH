@@ -319,6 +319,16 @@ def recall(query, n=3):
     """Recall from smart memory with fallback to ChromaDB"""
     # Try smart memory first
     results = smart_memory.recall(query, n=n)
+
+    # Add graph memory results
+    try:
+        from memory.graph_memory import query_graph
+        graph_facts = query_graph(query, depth=1)
+        if graph_facts and "No knowledge about" not in graph_facts:
+            results.append({"value": f"[Graph facts]: {graph_facts}", "source": "graph"})
+    except Exception as e:
+        log.warning(f"Graph recall failed: {e}")
+
     if results:
         return results
 
