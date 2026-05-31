@@ -565,9 +565,9 @@ def chat(user_input, intent="chat", device="unknown", source="widget"):
 
     # --- Phase 2.7: Pre-Intent Danger Scan ---
     danger = _danger_scan(user_input)
-    if danger["is_dangerous"] and danger["scope"] == "action":
+    if danger["is_dangerous"]:
         log.warning(f"BLOCKED dangerous input: {danger['matched_keywords']}")
-        return "⛔ That command is blocked for safety reasons, Boss."
+        return "🚫 That command is blocked for safety reasons, Boss."
 
     # --- Phase 2.8: Classify input scope ---
     scope = danger["scope"]

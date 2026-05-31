@@ -123,7 +123,7 @@ DATA_PATTERNS = [
 ]
 
 CALENDAR_CREATE_PATTERNS = [
-    r"(add|create|schedule|set|make|book).*(event|meeting|appointment|reminder|task)",
+    r"(add|create|schedule|set|make|book).*(event|meeting|appointment|task)",
     r"(remind me|add to calendar|put on calendar)",
 ]
 
