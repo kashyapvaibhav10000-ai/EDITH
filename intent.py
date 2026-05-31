@@ -25,11 +25,15 @@ SEARCH_PATTERNS = [
 ]
 
 SHELL_PATTERNS = [
-    r"(run|execute|terminal|command|shell|bash)\s+.{3,}",
+    r"\brun\s+(echo|ls|cat|grep|find|chmod|chown|ps|kill|df|du|top|htop|curl|wget|git|python|python3|node|npm|pip|apt|pacman|yay|systemctl|journalctl|dmesg|neofetch|uname|whoami|pwd|mkdir|rm|cp|mv|touch|nano|vim|ssh|scp|rsync|docker|kubectl)\b",
+    r"\b(execute|exec)\s+.{0,60}\.(?:sh|py|js|rb|bash)\b",
+    r"\b(?:sudo|bash|sh|zsh|fish)\s+\S+",
     r"\b(install|uninstall|apt|pip|npm|pacman|yay)\s+\w+",
     r"(start|stop|restart|kill)\s+(service|process|server|daemon)",
     r"\b(htop|neofetch|systemctl|journalctl|dmesg)\b",
     r"\brun\s+the\s+(bash|shell|python|script)\b",
+    r"\brun\s+command\b",
+    r"\bterminal\s+command\b",
 ]
 
 OPEN_APP_PATTERNS = [
@@ -62,6 +66,11 @@ CALENDAR_TODAY_PATTERNS = [
     r"(what's|what is|show|tell).*(today|schedule|plan|day)",
     r"(today's|my).*(schedule|plan|events|calendar)",
     r"what do i have today",
+    r"what.?s on my calendar",
+    r"(check|show|view|see)\s+my\s+calendar",
+    r"my\s+(schedule|agenda|appointments?)\s+(today|tomorrow|this week)",
+    r"(any|what)\s+(meetings?|events?|appointments?)\s+(today|tomorrow)",
+    r"calendar\s+(today|for today)",
 ]
 
 CALL_PATTERNS = [
@@ -87,7 +96,7 @@ PHONE_PATTERNS = [
 
 VISION_PATTERNS = [
     r"(what|which|describe|look at|analyze|read|see|show).*(screen|window|image|photo|picture)",
-    r"(what is on|what do you see|what.s on my screen|screenshot|which application.s? running)",
+    r"(what is on|what do you see|what.s on my screen|screenshot|which application.s? running)(?!.*calendar)",
     r"(ocr|read text|extract text).*(image|photo|screen)",
 ]
 
@@ -239,6 +248,34 @@ LIST_SKILLS_PATTERNS = [
     r"\bskills?\b",
 ]
 
+VAULT_PATTERNS = [
+    r"\b(show|get|list|view|open|check|display)\s+(my\s+)?(vault|secrets?|passwords?|credentials?|api.?keys?)\b",
+    r"\bvault\s+(secrets?|contents?|passwords?|keys?)\b",
+    r"\bwhat.?s?\s+in\s+(my\s+)?vault\b",
+    r"\b(unlock|access)\s+(my\s+)?vault\b",
+]
+
+DEVLOG_PATTERNS = [
+    r"\b(add|write|log|save|record|append|note)\s+(to\s+|in\s+|into\s+)?(dev.?log|development.?log|journal|changelog)\b",
+    r"\bdevlog\s*[:\-]",
+    r"\b(log|record)\s+(this|that|it)\s*[:\-]",
+    r"\badd\s+to\s+devlog\b",
+]
+
+MEMORY_STORE_PATTERNS = [
+    r"\b(remember|note|save|store|keep track of|don.?t forget)\s+(that\s+)?i\s+(like|love|hate|prefer|use|want|need|am|have|do)\b",
+    r"\b(remember|note|save|store)\s+(that\s+)?.{5,}",
+    r"\bdon.?t\s+forget\s+(that\s+)?.{3,}",
+    r"\bkeep\s+in\s+mind\s+(that\s+)?.{3,}",
+]
+
+MEMORY_RECALL_PATTERNS = [
+    r"\bwhat\s+do\s+you\s+(know|remember|recall)\s+about\s+me\b",
+    r"\b(show|tell\s+me|list)\s+what\s+you\s+(know|remember)\s+about\s+me\b",
+    r"\bwhat\s+have\s+you\s+(saved|stored|remembered)\s+about\s+me\b",
+    r"\bmy\s+(preferences?|profile|history|memory)\b",
+]
+
 def is_coding_request(text):
     text = text.lower()
     return any(re.search(p, text) for p in CODING_PATTERNS)
@@ -321,6 +358,22 @@ def detect_intent(text):
     if any(re.search(p, text_lower) for p in _IDENTITY_PATTERNS):
         return "identity"
 
+    # Vault — before chat (contains "secrets"/"passwords" which fall to chat)
+    if any(re.search(p, text_lower) for p in VAULT_PATTERNS):
+        return "vault"
+
+    # Devlog — before code ("add to devlog" matches CODING_PATTERNS "create")
+    if any(re.search(p, text_lower) for p in DEVLOG_PATTERNS):
+        return "devlog"
+
+    # Memory store — before chat ("remember that I like X" falls to chat)
+    if any(re.search(p, text_lower) for p in MEMORY_STORE_PATTERNS):
+        return "memory"
+
+    # Memory recall — before rag (more specific)
+    if any(re.search(p, text_lower) for p in MEMORY_RECALL_PATTERNS):
+        return "memory"
+
     # Weather
     if any(re.search(p, text_lower) for p in WEATHER_PATTERNS):
         return "weather"
@@ -384,6 +437,11 @@ def detect_intent(text):
         return "sms"
     if any(re.search(p, text_lower) for p in PHONE_PATTERNS):
         return "phone"
+    # Calendar — before vision ("what is on my calendar" matches vision "what is on")
+    if any(re.search(p, text_lower) for p in CALENDAR_TODAY_PATTERNS):
+        return "calendar_today"
+    if any(re.search(p, text_lower) for p in CALENDAR_WEEK_PATTERNS):
+        return "calendar_week"
     if any(re.search(p, text_lower) for p in VISION_PATTERNS):
         return "vision"
     if any(re.search(p, text_lower) for p in RAG_PATTERNS):
