@@ -58,7 +58,7 @@ PRIVATE_INTENTS = {"vault", "shell", "email"}
 # ──────────────────────────────────────────────
 # Base Paths — Configurable for portability
 # ──────────────────────────────────────────────
-EDITH_PATH = os.path.dirname(os.path.abspath(__file__))
+EDITH_PATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 USER_HOME = os.path.expanduser("~")
 SERVICE_VENV = os.getenv("SERVICE_VENV", os.path.join(USER_HOME, "edith-env"))
 VENV_PATH = os.getenv("VENV_PATH", SERVICE_VENV)
