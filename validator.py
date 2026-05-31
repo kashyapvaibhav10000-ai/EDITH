@@ -130,13 +130,11 @@ def validate_vision_model() -> Result:
 
 _VALIDATORS = [
     ("network",     validate_network),
-    ("ollama",      validate_ollama),
     ("phone",       validate_phone),
     ("calendar",    validate_calendar),
     ("disk",        validate_disk),
     ("memory",      validate_memory),
     ("vision",      validate_vision_model),
-    ("chatterbox",  validate_chatterbox),
 ]
 
 
@@ -145,10 +143,12 @@ def validate_all(emit_events: bool = False) -> dict:
 
     If emit_events=True, publishes HEALTH_CRITICAL to event_bus for each failed check.
     """
-    rephone",       validate_phone),
-    ("calendar",    validate_calendar),
-    ("disk",        validate_disk),
-    ("memory",      validate_memoryxception(e)
+    results = {}
+    for name, fn in _VALIDATORS:
+        try:
+            results[name] = fn()
+        except Exception as e:
+            results[name] = Result.from_exception(e)
 
     if emit_events:
         try:

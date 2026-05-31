@@ -31,8 +31,12 @@ cleanup() {
         kill "$DAEMON_PID" 2>/dev/null
         rm /tmp/edith_daemon.pid
     fi
-    # Kill the main uvicorn process
-    if [ -n "$UVICORN_PID" ]; then
+    if [ -f /tmp/edith_uvicorn.pid ]; then
+        UVICORN_PID=$(cat /tmp/edith_uvicorn.pid)
+        echo "Killing chat server (PID: $UVICORN_PID)..."
+        kill "$UVICORN_PID" 2>/dev/null
+        rm /tmp/edith_uvicorn.pid
+    elif [ -n "$UVICORN_PID" ]; then
         kill "$UVICORN_PID" 2>/dev/null
     fi
     echo "EDITH stopped."
@@ -86,6 +90,16 @@ echo "Step 4: Waiting for daemon to initialize..."
 echo "──────────────────────────────────"
 sleep 2
 echo "Wait complete."
+
+# 5. Wait for chat server to come up (background_daemon.py starts it internally)
+echo -e "\n──────────────────────────────────"
+echo "Step 5: Waiting for chat server on port 8001..."
+echo "──────────────────────────────────"
+if wait_for_url "http://127.0.0.1:8001/api/status" 45 "EDITH chat server"; then
+    echo "EDITH is running at http://127.0.0.1:8001"
+else
+    echo "Warning: Chat server did not respond within 30 seconds. Check logs."
+fi
 
 # Keep script running to handle cleanup
 wait $DAEMON_PID
