@@ -235,7 +235,23 @@ async def chat_stream_endpoint(req: Request):
                         log.info(f"Stream search enriched (async): {_sq[:80]}")
             except Exception as _e:
                 log.warning(f"stream search enrichment failed: {_e}")
-            for token in chat_stream(_enriched_input, intent=intent):
+            # Bridge sync generator → async: run in thread, pipe via queue
+            import queue as _queue
+            _tok_q = _queue.Queue()
+            _SENTINEL = object()
+            def _run_stream():
+                try:
+                    for _tok in chat_stream(_enriched_input, intent=intent):
+                        _tok_q.put(_tok)
+                except Exception as _se:
+                    log.error(f"chat_stream thread error: {_se}")
+                finally:
+                    _tok_q.put(_SENTINEL)
+            threading.Thread(target=_run_stream, daemon=True).start()
+            while True:
+                token = await asyncio.to_thread(_tok_q.get)
+                if token is _SENTINEL:
+                    break
                 full_reply += token
                 current_sentence += token
                 yield f"data: {json.dumps({'type': 'token', 'id': msg_id, 'token': token})}\n\n"
