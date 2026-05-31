@@ -802,6 +802,95 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-p
 .cmd-row:hover { border-color: rgba(0,212,255,0.35); }
 .cmd-slash { font-family: var(--font-display); font-size: 12px; color: var(--orb-color); flex-shrink: 0; width: 110px; }
 .cmd-desc { font-size: 10px; color: var(--text-dim); line-height: 1.5; }
+
+/* ── DEV PANEL v2 — JARVIS DIAGNOSTIC TERMINAL ── */
+#dp-overlay { display:none; position:fixed; top:0; left:210px; right:0; bottom:0; background:var(--bg-primary); z-index:50; overflow:hidden; flex-direction:column; }
+#dp-overlay.dp2-open { display:flex; }
+.dp2-shell { display:flex; flex-direction:column; height:100%; font-family:var(--font-mono); }
+
+/* scanline texture */
+.dp2-scanlines { background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,212,255,0.015) 2px, rgba(0,212,255,0.015) 4px); pointer-events:none; position:absolute; inset:0; z-index:0; }
+
+/* header */
+.dp2-header { display:flex; align-items:center; gap:0; height:48px; border-bottom:1px solid var(--border-glow); background:rgba(0,212,255,0.03); flex-shrink:0; position:relative; z-index:1; }
+.dp2-header-left { display:flex; align-items:center; gap:10px; padding:0 20px; flex:1; }
+.dp2-header-icon { color:var(--orb-color); font-size:16px; }
+.dp2-header-title { font-family:var(--font-display); font-size:11px; letter-spacing:3px; color:var(--orb-color); text-transform:uppercase; }
+.dp2-header-right { display:flex; align-items:center; gap:16px; padding:0 20px; }
+.dp2-header-sub { font-family:var(--font-display); font-size:8px; letter-spacing:2px; color:var(--text-dim); }
+.dp2-close-btn { font-family:var(--font-display); font-size:10px; letter-spacing:1px; padding:6px 14px; border:1px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.04); color:var(--text-dim); cursor:pointer; border-radius:2px; transition:all 0.15s; }
+.dp2-close-btn:hover { border-color:var(--orb-color); color:var(--orb-color); box-shadow:0 0 8px rgba(0,212,255,0.3); }
+
+/* mode tabs */
+.dp2-tabs { display:flex; align-items:center; gap:0; padding:0 20px; height:38px; border-bottom:1px solid var(--border-glow); background:rgba(0,0,0,0.2); flex-shrink:0; position:relative; z-index:1; }
+.dp2-tab { font-family:var(--font-display); font-size:8px; letter-spacing:2px; padding:6px 18px; border:1px solid rgba(0,212,255,0.15); background:none; color:var(--text-dim); cursor:pointer; transition:all 0.15s; border-right:none; }
+.dp2-tab:first-child { border-radius:2px 0 0 2px; }
+.dp2-tab:last-child { border-right:1px solid rgba(0,212,255,0.15); border-radius:0 2px 2px 0; }
+.dp2-tab.active { background:rgba(0,212,255,0.12); color:var(--orb-color); border-color:var(--orb-color); box-shadow:inset 0 0 12px rgba(0,212,255,0.08); }
+.dp2-tab:hover:not(.active) { color:rgba(0,212,255,0.6); border-color:rgba(0,212,255,0.3); }
+.dp2-tab-status { margin-left:auto; font-family:var(--font-display); font-size:8px; letter-spacing:1px; color:var(--text-dim); }
+
+/* body layout */
+.dp2-body { display:flex; flex:1; overflow:hidden; position:relative; z-index:1; }
+
+/* left sidebar */
+.dp2-sidebar { width:240px; flex-shrink:0; border-right:1px solid var(--border-glow); display:flex; flex-direction:column; overflow:hidden; }
+.dp2-sidebar-hdr { display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--border-glow); font-family:var(--font-display); font-size:8px; letter-spacing:2px; color:var(--orb-color); flex-shrink:0; }
+.dp2-file-badge { font-family:var(--font-display); font-size:7px; padding:1px 6px; border-radius:8px; background:rgba(0,212,255,0.12); color:var(--orb-color); margin-left:auto; }
+.dp2-cat-chips { padding:10px 10px 6px; display:flex; flex-direction:column; gap:4px; flex-shrink:0; border-bottom:1px solid var(--border-glow); }
+.dp2-cat-chip { display:flex; align-items:center; gap:8px; padding:6px 10px; border:1px solid rgba(0,212,255,0.12); border-radius:3px; cursor:pointer; transition:all 0.15s; background:rgba(0,0,0,0.2); }
+.dp2-cat-chip:hover { border-color:rgba(0,212,255,0.3); background:rgba(0,212,255,0.04); }
+.dp2-cat-chip.selected { border-color:var(--orb-color); background:rgba(0,212,255,0.08); box-shadow:0 0 6px rgba(0,212,255,0.15); }
+.dp2-cat-icon { font-size:11px; width:16px; text-align:center; }
+.dp2-cat-name { font-family:var(--font-display); font-size:8px; letter-spacing:1.5px; color:var(--text-dim); flex:1; }
+.dp2-cat-chip.selected .dp2-cat-name { color:var(--orb-color); }
+.dp2-cat-count { font-family:var(--font-display); font-size:7px; color:var(--text-dim); }
+.dp2-module-list { flex:1; overflow-y:auto; padding:6px 8px; }
+.dp2-module-list::-webkit-scrollbar { width:2px; }
+.dp2-module-list::-webkit-scrollbar-thumb { background:var(--border-glow); }
+.dp2-mod-chip { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; margin:2px; border:1px solid rgba(0,212,255,0.1); border-radius:2px; cursor:pointer; font-family:var(--font-mono); font-size:9px; color:var(--text-dim); transition:all 0.12s; background:rgba(0,0,0,0.15); }
+.dp2-mod-chip:hover { border-color:rgba(0,212,255,0.3); color:rgba(0,212,255,0.7); }
+.dp2-mod-chip.selected { border-color:var(--orb-color); color:var(--orb-color); background:rgba(0,212,255,0.06); }
+.dp2-scope-bar { padding:8px 12px; border-top:1px solid var(--border-glow); flex-shrink:0; }
+.dp2-scope-label { font-family:var(--font-display); font-size:8px; letter-spacing:1px; color:var(--text-dim); }
+.dp2-scope-val { color:var(--orb-color); }
+.dp2-scope-actions { display:flex; gap:6px; margin-top:6px; }
+.dp2-scope-btn { font-family:var(--font-display); font-size:7px; letter-spacing:1px; padding:3px 10px; border:1px solid rgba(0,212,255,0.2); background:none; color:var(--text-dim); cursor:pointer; border-radius:2px; transition:all 0.12s; }
+.dp2-scope-btn:hover { border-color:var(--orb-color); color:var(--orb-color); }
+
+/* main area */
+.dp2-main { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+.dp2-query-section { padding:16px 20px; border-bottom:1px solid var(--border-glow); flex-shrink:0; }
+.dp2-section-label { font-family:var(--font-display); font-size:8px; letter-spacing:2px; color:var(--text-dim); margin-bottom:10px; display:flex; align-items:center; gap:8px; }
+.dp2-section-label::after { content:''; flex:1; height:1px; background:var(--border-glow); }
+.dp2-example-row { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
+.dp2-ex-chip { font-family:var(--font-display); font-size:7px; letter-spacing:1px; padding:4px 10px; border:1px solid rgba(0,212,255,0.25); border-radius:10px; background:rgba(0,212,255,0.04); color:rgba(0,212,255,0.6); cursor:pointer; transition:all 0.15s; }
+.dp2-ex-chip:hover { border-color:var(--orb-color); color:var(--orb-color); background:rgba(0,212,255,0.1); box-shadow:0 0 8px rgba(0,212,255,0.2); }
+.dp2-textarea { width:100%; background:rgba(0,0,0,0.4); border:none; border-left:3px solid var(--orb-color); color:var(--text-primary); padding:12px 14px; font-family:var(--font-mono); font-size:12px; resize:vertical; outline:none; box-sizing:border-box; line-height:1.6; caret-color:var(--orb-color); min-height:80px; }
+.dp2-textarea::placeholder { color:rgba(74,85,104,0.7); }
+.dp2-textarea:focus { border-left-color:#00f0ff; box-shadow:inset 2px 0 8px rgba(0,212,255,0.08); }
+.dp2-submit-row { display:flex; align-items:center; justify-content:flex-end; gap:12px; margin-top:10px; }
+.dp2-hint { font-family:var(--font-display); font-size:7px; letter-spacing:1px; color:var(--text-dim); }
+.dp2-submit-btn { font-family:var(--font-display); font-size:9px; letter-spacing:2px; padding:8px 22px; background:var(--orb-color); color:#000; border:none; cursor:pointer; border-radius:2px; font-weight:700; transition:all 0.15s; }
+.dp2-submit-btn:hover { background:#00f0ff; box-shadow:0 0 16px rgba(0,212,255,0.5); }
+.dp2-submit-btn:disabled { background:rgba(0,212,255,0.2); color:rgba(0,0,0,0.4); cursor:not-allowed; box-shadow:none; }
+
+/* response section */
+.dp2-response-section { flex:1; display:flex; flex-direction:column; overflow:hidden; padding:16px 20px; }
+.dp2-resp-hdr { display:flex; align-items:center; gap:8px; margin-bottom:10px; flex-shrink:0; }
+.dp2-resp-dot { width:7px; height:7px; border-radius:50%; background:var(--text-dim); flex-shrink:0; transition:background 0.3s; }
+.dp2-resp-dot.processing { background:#f59e0b; animation:dp2-pulse 0.8s ease-in-out infinite; }
+.dp2-resp-dot.done { background:#00ff88; }
+@keyframes dp2-pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+.dp2-resp-meta { font-family:var(--font-display); font-size:7px; letter-spacing:1px; color:var(--text-dim); margin-left:auto; }
+.dp2-copy-btn { font-family:var(--font-display); font-size:7px; letter-spacing:1px; padding:3px 10px; border:1px solid rgba(0,212,255,0.25); background:rgba(0,212,255,0.06); color:rgba(0,212,255,0.6); cursor:pointer; border-radius:2px; transition:all 0.15s; flex-shrink:0; }
+.dp2-copy-btn:hover { border-color:var(--orb-color); color:var(--orb-color); }
+.dp2-response-box { flex:1; overflow-y:auto; background:rgba(0,0,0,0.35); border-left:2px solid var(--orb-color); padding:14px 16px; font-family:var(--font-mono); font-size:12px; line-height:1.8; color:var(--text-primary); white-space:pre-wrap; word-break:break-word; position:relative; background-image:repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,212,255,0.015) 2px, rgba(0,212,255,0.015) 4px); }
+.dp2-response-box::-webkit-scrollbar { width:3px; }
+.dp2-response-box::-webkit-scrollbar-thumb { background:var(--border-glow); }
+.dp2-empty-state { color:var(--text-dim); font-family:var(--font-mono); font-size:11px; line-height:2; }
+.dp2-empty-state .dp2-blink { animation:dp2-blink 1.1s step-end infinite; }
+@keyframes dp2-blink { 0%,100%{opacity:1} 50%{opacity:0} }
 </style>
 </head>
 <body>
@@ -3616,8 +3705,18 @@ let dpModules = [];
 let dpSelected = new Set();
 let dpInited = false;
 
+// Category → filename keyword mapping
+const DP2_CATS = {
+  memory:   ['memory', 'rag', 'episodic', 'consolidation', 'graph'],
+  routing:  ['router', 'intent', 'dispatch', 'circuit', 'provider', 'smart_router'],
+  voice:    ['voice', 'wake', 'whisper', 'tts', 'chatterbox', 'piper'],
+  agent:    ['agent', 'compound', 'dag', 'sandbox', 'tools'],
+  security: ['vault', 'auth', 'security', 'api_auth'],
+};
+
 function openDevPanel() {
-  document.getElementById('dp-overlay').style.display = 'block';
+  const el = document.getElementById('dp-overlay');
+  el.style.display = 'flex';
   document.querySelectorAll('.sb-item').forEach(n => n.classList.remove('active'));
   document.getElementById('nav-devpanel').classList.add('active');
   closeSidebar && closeSidebar();
@@ -3626,6 +3725,46 @@ function openDevPanel() {
 
 function closeDevPanel() {
   document.getElementById('dp-overlay').style.display = 'none';
+}
+
+function dp2SetMode(btn, mode) {
+  dpMode = mode;
+  document.querySelectorAll('.dp2-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  // keep old dpSetMode logic for compat
+  document.querySelectorAll('.dp-mode-btn').forEach(b => {
+    b.style.borderColor = ''; b.style.background = ''; b.style.color = '';
+  });
+}
+
+function dp2ToggleCat(chip) {
+  const cat = chip.dataset.cat;
+  const keywords = DP2_CATS[cat] || [];
+  chip.classList.toggle('selected');
+  const isSelected = chip.classList.contains('selected');
+  // Select/deselect all modules matching this category
+  document.querySelectorAll('#dp-chips .dp2-mod-chip').forEach((modChip, i) => {
+    const name = (dpModules[i] || {}).name || '';
+    const matches = keywords.some(kw => name.toLowerCase().includes(kw));
+    if (!matches) return;
+    if (isSelected) {
+      dpSelected.add(name);
+      modChip.classList.add('selected');
+    } else {
+      dpSelected.delete(name);
+      modChip.classList.remove('selected');
+    }
+  });
+  dpUpdateCtx();
+}
+
+function dp2CopyResponse() {
+  const resp = document.getElementById('dp-response');
+  const text = resp.textContent || '';
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('dp2-copy-btn');
+    if (btn) { btn.textContent = '✓ COPIED'; setTimeout(() => btn.textContent = '⧉ COPY', 1500); }
+  });
 }
 
 async function dpInit() {
@@ -3638,34 +3777,39 @@ async function dpInit() {
     dpModules = data.modules;
     const container = document.getElementById('dp-chips');
     container.innerHTML = '';
-    dpModules.forEach(m => {
+    // Update category counts
+    Object.entries(DP2_CATS).forEach(([cat, keywords]) => {
+      const count = dpModules.filter(m => keywords.some(kw => m.name.toLowerCase().includes(kw))).length;
+      const el = document.getElementById('dp2-cat-count-' + cat);
+      if (el) el.textContent = count + ' files';
+    });
+    // Render individual module chips
+    dpModules.forEach((m, i) => {
       const chip = document.createElement('div');
+      chip.className = 'dp2-mod-chip';
       chip.textContent = m.name;
       chip.title = m.lines + ' lines';
-      chip.style.cssText = 'padding:3px 10px;font-size:10px;border:1px solid #1a1a2e;cursor:pointer;border-radius:10px;color:#444;user-select:none;font-family:monospace';
       chip.dataset.name = m.name;
       chip.addEventListener('click', () => {
         if (dpSelected.has(m.name)) {
           dpSelected.delete(m.name);
-          chip.style.borderColor = '#1a1a2e';
-          chip.style.color = '#444';
-          chip.style.background = '';
+          chip.classList.remove('selected');
         } else {
           dpSelected.add(m.name);
-          chip.style.borderColor = '#00d4ff';
-          chip.style.color = '#00d4ff';
-          chip.style.background = 'rgba(0,212,255,0.05)';
+          chip.classList.add('selected');
         }
         dpUpdateCtx();
       });
       container.appendChild(chip);
     });
+    const badge = document.getElementById('dp2-file-badge');
+    if (badge) badge.textContent = dpModules.length;
     document.getElementById('dp-status').textContent = dpModules.length + ' MODULES READY';
     dpUpdateCtx();
   } catch(e) {
     dpInited = false;
     document.getElementById('dp-status').textContent = 'ERROR — click to retry';
-    document.getElementById('dp-chips').innerHTML = '<span style="color:red;font-size:11px">Failed — is chat_server running?</span>';
+    document.getElementById('dp-chips').innerHTML = '<span style="color:#ff5555;font-size:10px">Failed — is chat_server running?</span>';
   }
 }
 
@@ -3673,27 +3817,24 @@ function dpUpdateCtx() {
   const total = dpModules.filter(m => dpSelected.has(m.name)).reduce((s,m) => s + m.lines, 0);
   const el = document.getElementById('dp-ctx-info');
   if (el) el.textContent = dpSelected.size + ' files · ~' + total + ' lines';
+  const badge = document.getElementById('dp2-file-badge');
+  if (badge) badge.textContent = dpSelected.size || dpModules.length;
 }
 
 function dpSelectAll() {
   dpSelected.clear();
-  document.querySelectorAll('#dp-chips div').forEach((chip, i) => {
+  document.querySelectorAll('#dp-chips .dp2-mod-chip').forEach((chip, i) => {
     if (!dpModules[i]) return;
     dpSelected.add(dpModules[i].name);
-    chip.style.borderColor = '#00d4ff';
-    chip.style.color = '#00d4ff';
-    chip.style.background = 'rgba(0,212,255,0.05)';
+    chip.classList.add('selected');
   });
   dpUpdateCtx();
 }
 
 function dpClearAll() {
   dpSelected.clear();
-  document.querySelectorAll('#dp-chips div').forEach(chip => {
-    chip.style.borderColor = '#1a1a2e';
-    chip.style.color = '#444';
-    chip.style.background = '';
-  });
+  document.querySelectorAll('#dp-chips .dp2-mod-chip').forEach(chip => chip.classList.remove('selected'));
+  document.querySelectorAll('.dp2-cat-chip').forEach(chip => chip.classList.remove('selected'));
   dpUpdateCtx();
 }
 
@@ -3713,15 +3854,19 @@ async function dpSubmit() {
   const query = document.getElementById('dp-input').value.trim();
   if (!query) return;
   if (dpSelected.size === 0) {
-    document.getElementById('dp-response').innerHTML = '<span style="color:#ffaa00">⚠ Select at least one module first.</span>';
+    document.getElementById('dp-response').innerHTML = '<span style="color:#f59e0b;font-family:var(--font-display);font-size:9px;letter-spacing:1px">⚠ SELECT AT LEAST ONE MODULE FIRST</span>';
     return;
   }
   const btn = document.getElementById('dp-btn');
   const resp = document.getElementById('dp-response');
   const meta = document.getElementById('dp-resp-meta');
+  const dot  = document.getElementById('dp2-resp-dot');
+  const tabStatus = document.getElementById('dp2-tab-status');
   btn.disabled = true;
-  btn.textContent = '...';
-  resp.innerHTML = '<span style="color:#444;font-family:var(--font-display);font-size:9px;letter-spacing:1px">THINKING...</span>';
+  btn.textContent = 'PROCESSING...';
+  if (dot) { dot.className = 'dp2-resp-dot processing'; }
+  if (tabStatus) tabStatus.textContent = 'QUERYING...';
+  resp.innerHTML = '<span style="color:var(--text-dim);font-family:var(--font-display);font-size:9px;letter-spacing:1px;animation:dp2-pulse 0.8s ease-in-out infinite;display:inline-block">NEURAL PROCESSING...</span>';
   meta.textContent = '';
   const t0 = Date.now();
   try {
@@ -3734,17 +3879,11 @@ async function dpSubmit() {
     const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
     const text = data.response || data.error || JSON.stringify(data);
     meta.textContent = 'mode:' + dpMode + ' · ' + dpSelected.size + ' files · ' + elapsed + 's';
+    if (dot) dot.className = 'dp2-resp-dot done';
+    if (tabStatus) tabStatus.textContent = 'RESPONSE READY';
     // Typewriter effect
     resp.innerHTML = '';
     resp.style.position = 'relative';
-    // Copy button
-    const copyBtn = document.createElement('button');
-    copyBtn.textContent = 'COPY';
-    copyBtn.style.cssText = 'position:absolute;top:0;right:0;background:rgba(0,212,255,0.1);border:1px solid var(--border-glow);color:var(--text-dim);font-size:8px;padding:2px 8px;cursor:pointer;font-family:var(--font-display);letter-spacing:1px;border-radius:2px;opacity:0;transition:opacity 0.15s';
-    copyBtn.addEventListener('click', () => { navigator.clipboard.writeText(text).then(()=>{ copyBtn.textContent='COPIED'; setTimeout(()=>copyBtn.textContent='COPY',1500); }); });
-    resp.appendChild(copyBtn);
-    resp.addEventListener('mouseenter', () => copyBtn.style.opacity='0.7');
-    resp.addEventListener('mouseleave', () => copyBtn.style.opacity='0');
     const textNode = document.createElement('span');
     resp.appendChild(textNode);
     let i = 0;
@@ -3756,10 +3895,12 @@ async function dpSubmit() {
     }
     typeNext();
   } catch(e) {
-    resp.innerHTML = '<span style="color:red">✗ ' + e.message + '</span>';
+    if (dot) dot.className = 'dp2-resp-dot';
+    if (tabStatus) tabStatus.textContent = 'ERROR';
+    resp.innerHTML = '<span style="color:#ff5555">✗ ' + escHtml(e.message) + '</span>';
   }
   btn.disabled = false;
-  btn.textContent = 'QUERY';
+  btn.textContent = 'EXECUTE QUERY ▶';
 }
 
 // ══════════════════════════════════════════════
@@ -3909,48 +4050,132 @@ setInterval(fetchSessions, 30000);
 
 </script>
 
-<!-- DEV PANEL OVERLAY -->
-<div id="dp-overlay" style="display:none;position:fixed;top:0;left:210px;right:0;bottom:0;background:var(--bg-primary,#0a0a0f);overflow-y:auto;z-index:50;padding:28px 32px">
-  <div style="font-family:monospace;font-size:15px;color:#00d4ff;margin-bottom:24px;letter-spacing:3px;display:flex;align-items:center;gap:12px">
-    🧠 DEV PANEL — SELF-AWARENESS MODULE
-    <span id="dp-status" style="font-size:9px;color:#666;margin-left:auto"></span>
-  </div>
-  <div style="background:#0d0d1a;border:1px solid #1a1a2e;padding:16px;margin-bottom:16px">
-    <div style="font-size:10px;color:#666;letter-spacing:2px;margin-bottom:10px">CONTEXT SCOPE — SELECT MODULES TO LOAD</div>
-    <div id="dp-chips" style="display:flex;flex-wrap:wrap;gap:6px;min-height:32px"><span style="color:#444;font-size:11px">Loading modules...</span></div>
-    <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
-      <button onclick="dpSelectAll()" style="font-size:10px;padding:3px 12px;background:#0f0f18;border:1px solid #1a1a2e;color:#ccc;cursor:pointer;font-family:monospace">ALL</button>
-      <button onclick="dpClearAll()" style="font-size:10px;padding:3px 12px;background:#0f0f18;border:1px solid #1a1a2e;color:#ccc;cursor:pointer;font-family:monospace">CLEAR</button>
-      <span id="dp-ctx-info" style="font-size:10px;color:#444;font-family:monospace"></span>
+<!-- DEV PANEL OVERLAY — JARVIS DIAGNOSTIC TERMINAL -->
+<div id="dp-overlay" class="dp2-open" style="display:none">
+  <div class="dp2-scanlines"></div>
+  <div class="dp2-shell">
+
+    <!-- HEADER -->
+    <div class="dp2-header">
+      <div class="dp2-header-left">
+        <span class="dp2-header-icon">⬡</span>
+        <span class="dp2-header-title">SELF-AWARENESS MODULE</span>
+        <span id="dp-status" style="font-family:var(--font-display);font-size:7px;letter-spacing:1px;color:var(--text-dim);margin-left:12px"></span>
+      </div>
+      <div class="dp2-header-right">
+        <span class="dp2-header-sub">EDITH v2.0 // INTROSPECTION MODE</span>
+        <button class="dp2-close-btn" onclick="closeDevPanel()">✕ CLOSE</button>
+      </div>
     </div>
-  </div>
-  <div style="display:flex;gap:8px;margin-bottom:16px">
-    <button class="dp-mode-btn" data-mode="qa" id="dpbtn-qa" onclick="dpSetMode(this)" style="padding:5px 16px;font-size:10px;border:1px solid #00d4ff;background:#001a1f;color:#00d4ff;cursor:pointer;font-family:monospace">Q &amp; A</button>
-    <button class="dp-mode-btn" data-mode="council" id="dpbtn-council" onclick="dpSetMode(this)" style="padding:5px 16px;font-size:10px;border:1px solid #1a1a2e;background:#0a0a0f;color:#444;cursor:pointer;font-family:monospace">⚔ COUNCIL</button>
-    <button class="dp-mode-btn" data-mode="next" id="dpbtn-next" onclick="dpSetMode(this)" style="padding:5px 16px;font-size:10px;border:1px solid #1a1a2e;background:#0a0a0f;color:#444;cursor:pointer;font-family:monospace">🔮 WHAT NEXT</button>
-  </div>
-  <div style="background:#0d0d1a;border:1px solid #1a1a2e;padding:16px;margin-bottom:16px">
-    <div style="font-size:10px;color:#666;letter-spacing:2px;margin-bottom:8px">QUERY</div>
-    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px" id="dp-example-chips">
-      <span style="font-size:8px;color:#444;font-family:var(--font-display);letter-spacing:1px;align-self:center">EXAMPLES:</span>
-      <button onclick="document.getElementById('dp-input').value=this.dataset.q" data-q="How does smart_router decide which LLM provider to use?" style="font-size:9px;padding:3px 10px;background:rgba(0,212,255,0.05);border:1px solid rgba(0,212,255,0.2);color:rgba(0,212,255,0.6);cursor:pointer;border-radius:10px;font-family:monospace">routing logic?</button>
-      <button onclick="document.getElementById('dp-input').value=this.dataset.q" data-q="What are the biggest architectural gaps in EDITH right now?" style="font-size:9px;padding:3px 10px;background:rgba(0,212,255,0.05);border:1px solid rgba(0,212,255,0.2);color:rgba(0,212,255,0.6);cursor:pointer;border-radius:10px;font-family:monospace">architecture gaps?</button>
-      <button onclick="document.getElementById('dp-input').value=this.dataset.q" data-q="What should I build next to make EDITH more capable?" style="font-size:9px;padding:3px 10px;background:rgba(0,212,255,0.05);border:1px solid rgba(0,212,255,0.2);color:rgba(0,212,255,0.6);cursor:pointer;border-radius:10px;font-family:monospace">what to build next?</button>
+
+    <!-- MODE TABS -->
+    <div class="dp2-tabs">
+      <button class="dp2-tab active dp-mode-btn" data-mode="qa" id="dpbtn-qa" onclick="dp2SetMode(this,'qa')">Q &amp; A</button>
+      <button class="dp2-tab dp-mode-btn" data-mode="council" id="dpbtn-council" onclick="dp2SetMode(this,'council')">⚔ COUNCIL</button>
+      <button class="dp2-tab dp-mode-btn" data-mode="next" id="dpbtn-next" onclick="dp2SetMode(this,'next')">🔮 WHAT NEXT</button>
+      <span class="dp2-tab-status" id="dp2-tab-status">SYSTEM READY</span>
     </div>
-    <textarea id="dp-input" rows="4" placeholder="Ask EDITH about her own architecture... (Ctrl+Enter to submit)" onkeydown="if(event.ctrlKey&&event.key==='Enter')dpSubmit()" style="width:100%;background:#050507;border:1px solid #1a1a2e;color:#ccc;padding:10px;font-family:monospace;font-size:12px;resize:vertical;outline:none;box-sizing:border-box"></textarea>
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
-      <span style="font-size:10px;color:#444">Ctrl+Enter to submit</span>
-      <button id="dp-btn" onclick="dpSubmit()" style="padding:6px 24px;background:#00d4ff;color:#000;font-weight:700;border:none;cursor:pointer;font-family:monospace;font-size:11px">QUERY</button>
-    </div>
-  </div>
-  <div style="background:#0d0d1a;border:1px solid #1a1a2e;padding:16px">
-    <div style="font-size:10px;color:#666;letter-spacing:2px;display:flex;justify-content:space-between">
-      RESPONSE <span id="dp-resp-meta" style="color:#444;font-weight:400"></span>
-    </div>
-    <div id="dp-response" style="min-height:140px;font-size:12px;line-height:1.8;white-space:pre-wrap;margin-top:8px;color:#ccc"><span style="color:#444">Awaiting query...</span></div>
-  </div>
-  <button onclick="closeDevPanel()" style="position:fixed;top:20px;right:20px;background:#1a1a2e;border:1px solid #333;color:#666;padding:6px 14px;cursor:pointer;font-family:monospace;font-size:11px">✕ CLOSE</button>
-</div>
+
+    <!-- BODY -->
+    <div class="dp2-body">
+
+      <!-- LEFT SIDEBAR — MODULE TREE -->
+      <div class="dp2-sidebar">
+        <div class="dp2-sidebar-hdr">
+          // CONTEXT SCOPE
+          <span class="dp2-file-badge" id="dp2-file-badge">0</span>
+        </div>
+
+        <!-- Category chips -->
+        <div class="dp2-cat-chips" id="dp2-cat-chips">
+          <div class="dp2-cat-chip" data-cat="memory" onclick="dp2ToggleCat(this)">
+            <span class="dp2-cat-icon">🧠</span>
+            <span class="dp2-cat-name">MEMORY</span>
+            <span class="dp2-cat-count" id="dp2-cat-count-memory">—</span>
+          </div>
+          <div class="dp2-cat-chip" data-cat="routing" onclick="dp2ToggleCat(this)">
+            <span class="dp2-cat-icon">⚡</span>
+            <span class="dp2-cat-name">ROUTING</span>
+            <span class="dp2-cat-count" id="dp2-cat-count-routing">—</span>
+          </div>
+          <div class="dp2-cat-chip" data-cat="voice" onclick="dp2ToggleCat(this)">
+            <span class="dp2-cat-icon">🎙</span>
+            <span class="dp2-cat-name">VOICE</span>
+            <span class="dp2-cat-count" id="dp2-cat-count-voice">—</span>
+          </div>
+          <div class="dp2-cat-chip" data-cat="agent" onclick="dp2ToggleCat(this)">
+            <span class="dp2-cat-icon">🤖</span>
+            <span class="dp2-cat-name">AGENT</span>
+            <span class="dp2-cat-count" id="dp2-cat-count-agent">—</span>
+          </div>
+          <div class="dp2-cat-chip" data-cat="security" onclick="dp2ToggleCat(this)">
+            <span class="dp2-cat-icon">🔒</span>
+            <span class="dp2-cat-name">SECURITY</span>
+            <span class="dp2-cat-count" id="dp2-cat-count-security">—</span>
+          </div>
+        </div>
+
+        <!-- Individual module chips -->
+        <div class="dp2-module-list" id="dp-chips">
+          <span style="color:var(--text-dim);font-size:10px">Loading modules...</span>
+        </div>
+
+        <!-- Scope counter + actions -->
+        <div class="dp2-scope-bar">
+          <div class="dp2-scope-label">SCOPE: <span class="dp2-scope-val" id="dp-ctx-info">0 files · ~0 lines</span></div>
+          <div class="dp2-scope-actions">
+            <button class="dp2-scope-btn" onclick="dpSelectAll()">SELECT ALL</button>
+            <button class="dp2-scope-btn" onclick="dpClearAll()">CLEAR</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- MAIN AREA -->
+      <div class="dp2-main">
+
+        <!-- QUERY SECTION -->
+        <div class="dp2-query-section">
+          <div class="dp2-section-label">// QUERY INPUT</div>
+
+          <!-- Example chips -->
+          <div class="dp2-example-row" id="dp-example-chips">
+            <button class="dp2-ex-chip" onclick="document.getElementById('dp-input').value=this.dataset.q" data-q="How does smart_router decide which LLM provider to use?">routing logic?</button>
+            <button class="dp2-ex-chip" onclick="document.getElementById('dp-input').value=this.dataset.q" data-q="What are the biggest architectural gaps in EDITH right now?">architecture gaps?</button>
+            <button class="dp2-ex-chip" onclick="document.getElementById('dp-input').value=this.dataset.q" data-q="What should I build next to make EDITH more capable?">what to build next?</button>
+            <button class="dp2-ex-chip" onclick="document.getElementById('dp-input').value=this.dataset.q" data-q="How healthy is EDITH's memory system? Any leaks or bottlenecks?">memory health?</button>
+          </div>
+
+          <textarea id="dp-input" class="dp2-textarea" rows="4"
+            placeholder="Interrogate EDITH's architecture... (Ctrl+Enter to execute)"
+            onkeydown="if(event.ctrlKey&&event.key==='Enter'){event.preventDefault();dpSubmit();}"></textarea>
+
+          <div class="dp2-submit-row">
+            <span class="dp2-hint">⌃↵ to execute</span>
+            <button id="dp-btn" class="dp2-submit-btn" onclick="dpSubmit()">EXECUTE QUERY ▶</button>
+          </div>
+        </div>
+
+        <!-- RESPONSE SECTION -->
+        <div class="dp2-response-section">
+          <div class="dp2-resp-hdr">
+            <div class="dp2-resp-dot" id="dp2-resp-dot"></div>
+            <span class="dp2-section-label" style="margin-bottom:0">// NEURAL RESPONSE</span>
+            <span class="dp2-resp-meta" id="dp-resp-meta"></span>
+            <button class="dp2-copy-btn" id="dp2-copy-btn" onclick="dp2CopyResponse()">⧉ COPY</button>
+          </div>
+          <div class="dp2-response-box" id="dp-response">
+            <div class="dp2-empty-state">
+              SYSTEM READY<br>
+              INTROSPECTION ENGINE ONLINE<br>
+              AWAITING QUERY INPUT<span class="dp2-blink">_</span>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /.dp2-main -->
+    </div><!-- /.dp2-body -->
+  </div><!-- /.dp2-shell -->
+</div><!-- /#dp-overlay -->
 <div id="multi-modal-overlay" onclick="if(event.target===this)multiModalClose()">
   <div id="multi-modal">
     <div class="multi-modal-head">
