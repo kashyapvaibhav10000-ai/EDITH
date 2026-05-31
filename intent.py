@@ -308,6 +308,19 @@ def detect_intent(text):
     if any(re.search(p, text_lower) for p in WAKE_PATTERNS):
         return "wake"
 
+    # Identity questions — must fire before CODING_PATTERNS matches "create"
+    _IDENTITY_PATTERNS = [
+        r"\bwho\s+(made|created|built|designed|programmed|wrote|developed)\s+you\b",
+        r"\bwho\s+are\s+you\b",
+        r"\bwhat\s+are\s+you\b",
+        r"\btell\s+me\s+about\s+yourself\b",
+        r"\bintroduce\s+yourself\b",
+        r"\byour\s+(name|creator|maker|origin|purpose)\b",
+        r"\bwho\s+is\s+your\s+(creator|maker|developer|owner)\b",
+    ]
+    if any(re.search(p, text_lower) for p in _IDENTITY_PATTERNS):
+        return "identity"
+
     # Weather
     if any(re.search(p, text_lower) for p in WEATHER_PATTERNS):
         return "weather"
