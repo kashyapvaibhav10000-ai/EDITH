@@ -621,20 +621,43 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-p
 .status-dot-sm { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
 .status-success { background: #00ff88; } .status-error { background: #ff3333; } .status-pending { background: #ffaa00; }
 #center-col { display: flex; flex-direction: column; border-right: 1px solid var(--border-glow); }
-#provider-battle { height: 240px; flex-shrink: 0; border-bottom: 1px solid var(--border-glow); overflow-y: auto; padding: 8px; }
-.battle-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 4px; margin-bottom: 4px; font-size: 10px; background: rgba(255,255,255,0.02); }
+#provider-battle { height: 260px; flex-shrink: 0; border-bottom: 1px solid var(--border-glow); overflow-y: auto; padding: 6px 8px; }
+.battle-col-labels { display: flex; align-items: center; gap: 8px; padding: 2px 8px 6px; font-family: var(--font-display); font-size: 7px; letter-spacing: 1.5px; color: var(--text-dim); border-bottom: 1px solid rgba(0,212,255,0.08); margin-bottom: 4px; }
+.battle-col-labels .bcl-name { width: 76px; }
+.battle-col-labels .bcl-status { width: 14px; }
+.battle-col-labels .bcl-bar { flex: 1; }
+.battle-col-labels .bcl-calls { min-width: 44px; text-align: right; }
+.battle-col-labels .bcl-circuit { min-width: 52px; text-align: right; }
+.battle-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 4px; margin-bottom: 4px; font-size: 10px; background: rgba(255,255,255,0.02); border-left: 2px solid transparent; transition: border-color 0.3s; }
+.battle-row.active-provider { border-left-color: var(--orb-color); box-shadow: -2px 0 8px rgba(0,212,255,0.25); }
+.battle-row.offline-node { opacity: 0.4; }
 .battle-name { width: 76px; font-family: var(--font-display); font-size: 8px; letter-spacing: 1px; }
-.battle-bar-wrap { flex: 1; height: 4px; background: rgba(255,255,255,0.07); border-radius: 2px; }
-.battle-bar { height: 100%; border-radius: 2px; background: var(--orb-color); transition: width 0.5s; }
+.battle-status-ring { width: 10px; height: 10px; border-radius: 50%; border: 2px solid currentColor; flex-shrink: 0; }
+.battle-status-ring.ring-active { color: #00ff88; animation: ring-pulse 1.4s ease-in-out infinite; }
+.battle-status-ring.ring-open   { color: #ff3333; }
+.battle-status-ring.ring-half   { color: #ffaa00; }
+.battle-status-ring.ring-dim    { color: var(--text-dim); }
+@keyframes ring-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(0,255,136,0.5)} 50%{box-shadow:0 0 0 4px rgba(0,255,136,0)} }
+.battle-bar-wrap { flex: 1; height: 6px; background: rgba(255,255,255,0.07); border-radius: 3px; }
+.battle-bar { height: 100%; border-radius: 3px; background: var(--orb-color); transition: width 0.5s; }
+.battle-calls { min-width: 44px; text-align: right; font-family: var(--font-display); font-size: 8px; color: var(--text-dim); }
+.battle-latency { font-family: var(--font-display); font-size: 7px; color: #ffaa00; min-width: 28px; text-align: right; }
 .circuit-pill { font-family: var(--font-display); font-size: 7px; letter-spacing: 1px; padding: 2px 5px; border-radius: 2px; white-space: nowrap; }
 .pill-closed { background: rgba(0,255,136,0.15); color: #00ff88; }
 .pill-open   { background: rgba(255,51,51,0.15); color: #ff3333; }
 .pill-half   { background: rgba(255,170,0,0.15); color: #ffaa00; }
+.battle-offline-badge { font-family: var(--font-display); font-size: 7px; letter-spacing: 1px; padding: 2px 6px; border-radius: 2px; background: rgba(100,100,100,0.1); color: var(--text-dim); border: 1px solid rgba(100,100,100,0.2); }
 #anomaly-section { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
 #anomaly-feed { flex: 1; overflow-y: auto; padding: 8px; }
 .anomaly-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 4px; margin-bottom: 4px; background: rgba(255,51,51,0.05); border-left: 2px solid rgba(255,51,51,0.4); font-size: 10px; }
 .anomaly-warn { border-left-color: rgba(255,170,0,0.5); background: rgba(255,170,0,0.04); }
 .anomaly-time { color: var(--text-dim); font-size: 9px; white-space: nowrap; }
+.anomaly-dismiss { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 11px; padding: 0 2px; line-height: 1; flex-shrink: 0; opacity: 0.5; transition: opacity 0.15s; }
+.anomaly-dismiss:hover { opacity: 1; color: #ff5555; }
+.anomaly-sev-9 { border-left-color: #ff3333; animation: anomaly-pulse 1.2s ease-in-out infinite; }
+.anomaly-sev-7 { border-left-color: #ffaa00; }
+@keyframes anomaly-pulse { 0%,100%{background:rgba(255,51,51,0.05)} 50%{background:rgba(255,51,51,0.12)} }
+.anomaly-count-badge { font-family: var(--font-display); font-size: 8px; padding: 1px 5px; border-radius: 8px; background: rgba(255,51,51,0.2); color: #ff5555; margin-left: 6px; }
 #log-stream { font-family: var(--font-mono); font-size: 10px; padding: 8px; overflow-y: auto; flex: 1; line-height: 1.6; white-space: pre-wrap; word-break: break-all; }
 #log-stream::-webkit-scrollbar { width: 3px; }
 #log-stream::-webkit-scrollbar-thumb { background: var(--border-glow); }
@@ -643,6 +666,25 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-p
 .log-warning { color: #ffaa00; }
 .log-info    { color: rgba(232,234,240,0.35); }
 .log-edith   { color: var(--orb-color); }
+.log-filter-bar { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--border-glow); flex-shrink: 0; }
+.log-filter-pill { font-family: var(--font-display); font-size: 7px; letter-spacing: 1px; padding: 3px 8px; border-radius: 10px; cursor: pointer; border: 1px solid rgba(0,212,255,0.2); background: none; color: var(--text-dim); transition: all 0.15s; }
+.log-filter-pill.active { background: rgba(0,212,255,0.12); color: var(--orb-color); border-color: var(--orb-color); }
+.log-pause-btn { margin-left: auto; font-family: var(--font-display); font-size: 8px; letter-spacing: 1px; padding: 3px 8px; border-radius: 3px; cursor: pointer; border: 1px solid rgba(0,212,255,0.2); background: none; color: var(--text-dim); transition: all 0.15s; }
+.log-pause-btn.paused { color: #ffaa00; border-color: rgba(255,170,0,0.4); }
+.log-buffer-badge { font-family: var(--font-display); font-size: 7px; padding: 1px 5px; border-radius: 8px; background: rgba(255,170,0,0.2); color: #ffaa00; display: none; }
+.log-resume-btn { display: none; position: sticky; bottom: 4px; left: 50%; transform: translateX(-50%); font-family: var(--font-display); font-size: 8px; letter-spacing: 1px; padding: 4px 12px; border-radius: 10px; cursor: pointer; border: 1px solid var(--orb-color); background: rgba(0,212,255,0.1); color: var(--orb-color); }
+.log-module-badge { font-family: var(--font-display); font-size: 7px; letter-spacing: 0.5px; padding: 1px 5px; border-radius: 2px; background: rgba(0,212,255,0.08); color: rgba(0,212,255,0.5); margin-right: 4px; flex-shrink: 0; }
+.log-kv-pill { font-family: var(--font-display); font-size: 7px; padding: 1px 5px; border-radius: 2px; background: rgba(255,170,0,0.08); color: rgba(255,170,0,0.6); margin-left: 3px; }
+.intent-trail-card { display: flex; align-items: center; gap: 6px; padding: 5px 8px; margin: 3px 0; border-radius: 4px; background: rgba(0,212,255,0.04); border-left: 2px solid rgba(0,212,255,0.3); font-size: 9px; }
+.itc-intent { font-family: var(--font-display); font-size: 7px; letter-spacing: 1px; padding: 2px 6px; border-radius: 2px; background: rgba(0,212,255,0.15); color: var(--orb-color); }
+.itc-provider { font-family: var(--font-display); font-size: 7px; color: #ffaa00; }
+.itc-latency { font-family: var(--font-display); font-size: 7px; color: var(--text-dim); }
+.itc-dot { width: 6px; height: 6px; border-radius: 50%; background: #00ff88; flex-shrink: 0; }
+.dna-loop-card, .dna-failover-card, .dna-boot-card { margin: 4px 0; padding: 6px 10px; border-radius: 4px; border: 1px solid rgba(255,170,0,0.35); background: rgba(255,170,0,0.04); font-family: var(--font-display); font-size: 8px; letter-spacing: 0.5px; color: #ffaa00; cursor: pointer; }
+.dna-failover-card { border-color: rgba(0,212,255,0.35); background: rgba(0,212,255,0.04); color: var(--orb-color); }
+.dna-boot-card { border-color: rgba(0,255,136,0.25); background: rgba(0,255,136,0.03); color: #00ff88; }
+.dna-card-body { display: none; margin-top: 6px; font-family: var(--font-mono); font-size: 9px; color: var(--text-dim); white-space: pre-wrap; }
+.dna-card-body.open { display: block; }
 
 /* TOAST */
 #toast { display: none; position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(10,15,25,0.95); border: 1px solid var(--border-glow); padding: 8px 20px; border-radius: 4px; font-family: var(--font-display); font-size: 10px; letter-spacing: 1px; color: var(--orb-color); z-index: 5000; }
@@ -1063,16 +1105,24 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-p
     <div class="log-col-body" id="timeline"></div>
   </div>
   <div id="center-col">
-    <div class="log-col-header">// PROVIDER BATTLE</div>
+    <div class="log-col-header">// NEURAL ROUTING MATRIX</div>
     <div id="provider-battle"></div>
     <div id="anomaly-section">
-      <div class="log-col-header" style="border-top:1px solid var(--border-glow)">// ANOMALY ALERTS</div>
+      <div class="log-col-header" id="anomaly-header" style="border-top:1px solid var(--border-glow)">// ALERT MATRIX <span id="anomaly-count-badge" class="anomaly-count-badge" style="display:none">0</span></div>
       <div id="anomaly-feed"></div>
     </div>
   </div>
   <div class="log-col">
-    <div class="log-col-header">// LIVE LOG STREAM</div>
-    <div id="log-stream" class="log-col-body"></div>
+    <div class="log-col-header">// CORTEX FEED</div>
+    <div class="log-filter-bar">
+      <button class="log-filter-pill active" data-filter="all" onclick="setLogFilter(this,'all')">ALL</button>
+      <button class="log-filter-pill" data-filter="log-error" onclick="setLogFilter(this,'log-error')">ERROR</button>
+      <button class="log-filter-pill" data-filter="log-warning" onclick="setLogFilter(this,'log-warning')">WARN</button>
+      <button class="log-filter-pill" data-filter="log-edith" onclick="setLogFilter(this,'log-edith')">EDITH</button>
+      <button class="log-pause-btn" id="log-pause-btn" onclick="toggleLogPause()">⏸</button>
+      <span class="log-buffer-badge" id="log-buffer-badge">0</span>
+    </div>
+    <div id="log-stream" class="log-col-body"><button class="log-resume-btn" id="log-resume-btn" onclick="_logAutoScroll=true;this.style.display='none';document.getElementById('log-stream').scrollTop=document.getElementById('log-stream').scrollHeight">↓ RESUME</button></div>
   </div>
 </div>
 
@@ -2211,50 +2261,279 @@ async function fetchTimeline() {
 
 const anomalySet=new Set();
 function addAnomaly(msg, sev='error') {
-  if(anomalySet.has(msg)) return; anomalySet.add(msg);
-  const feed=document.getElementById('anomaly-feed');
-  const item=document.createElement('div'); item.className=`anomaly-item${sev==='warn'?' anomaly-warn':''}`;
-  const now=new Date().toLocaleTimeString('en-GB',{hour12:false});
-  item.innerHTML=`<div class="dot-sm ${sev==='warn'?'dot-amber':'dot-red'}"></div><span class="anomaly-time">${now}</span><span style="flex:1">${escHtml(msg)}</span>`;
-  feed.insertBefore(item,feed.firstChild);
-  setTimeout(()=>{ item.remove(); anomalySet.delete(msg); }, 300000);
+  // Severity scoring — score=0 means suppress entirely
+  const SEVERITY_SCORES = {
+    'Local fallback offline': 0,   // suppress — expected on cloud
+  };
+  const score = (msg in SEVERITY_SCORES) ? SEVERITY_SCORES[msg]
+    : (sev==='error' && /OPEN/i.test(msg)) ? 9
+    : (sev==='warn' || /memory/i.test(msg)) ? 7
+    : 5;
+  if (score === 0) return;  // suppressed
+  if (anomalySet.has(msg)) return; anomalySet.add(msg);
+  const feed = document.getElementById('anomaly-feed');
+  const item = document.createElement('div');
+  item.className = 'anomaly-item' + (sev==='warn' ? ' anomaly-warn' : '') + (score>=9 ? ' anomaly-sev-9' : score>=7 ? ' anomaly-sev-7' : '');
+  const now = new Date().toLocaleTimeString('en-GB',{hour12:false});
+  const dismissId = 'adismiss-' + Date.now();
+  item.innerHTML = `<div class="dot-sm ${sev==='warn'?'dot-amber':'dot-red'}"></div><span class="anomaly-time">${now}</span><span style="flex:1">${escHtml(msg)}</span><button class="anomaly-dismiss" id="${dismissId}" title="Dismiss">✕</button>`;
+  item.querySelector('.anomaly-dismiss').addEventListener('click', () => {
+    item.remove(); anomalySet.delete(msg); _updateAnomalyCount();
+  });
+  feed.insertBefore(item, feed.firstChild);
+  _updateAnomalyCount();
+  setTimeout(() => { item.remove(); anomalySet.delete(msg); _updateAnomalyCount(); }, 300000);
+}
+
+function _updateAnomalyCount() {
+  const feed = document.getElementById('anomaly-feed');
+  const badge = document.getElementById('anomaly-count-badge');
+  if (!feed || !badge) return;
+  const n = feed.querySelectorAll('.anomaly-item').length;
+  badge.textContent = n;
+  badge.style.display = n > 0 ? 'inline' : 'none';
 }
 
 async function fetchProviderBattle() {
   try {
-    const r=await fetch(`${API}/api/status`); const d=await r.json(); if(d.error) return;
-    const c=document.getElementById('provider-battle'); const prov=d.providers||{};
-    const maxC=Math.max(1,...Object.values(prov).map(p=>p.daily_calls||0));
-    c.innerHTML=['groq','gemini','nvidia','openrouter','ollama'].map(name=>{
-      const p=prov[name]||{}; const pct=Math.round((p.daily_calls||0)/maxC*100);
-      const state=p.circuit||'CLOSED';
-      const pc=state==='CLOSED'?'pill-closed':(state==='OPEN'?'pill-open':'pill-half');
-      const dc=state==='OPEN'?'dot-red':(!p.cooled_down?'dot-amber':'dot-green');
-      return `<div class="battle-row"><span class="battle-name">${name.toUpperCase()}</span><div class="dot-sm ${dc}"></div><div class="battle-bar-wrap"><div class="battle-bar" style="width:${pct}%"></div></div><span class="hud-dim" style="min-width:24px;text-align:right">${p.daily_calls||0}</span><span class="circuit-pill ${pc}">${state}</span></div>`;
+    const [statusR, latR] = await Promise.all([
+      fetch(`${API}/api/status`),
+      fetch(`${API}/api/provider-latencies`).catch(()=>({json:()=>({})}))
+    ]);
+    const d = await statusR.json(); if (d.error) return;
+    const latencies = await latR.json().catch(()=>({}));
+    const c = document.getElementById('provider-battle');
+    const prov = d.providers || {};
+    const active = d.active_provider || '';
+    const maxC = Math.max(1, ...Object.values(prov).map(p=>p.daily_calls||0));
+    const colLabels = `<div class="battle-col-labels"><span class="bcl-name">PROVIDER</span><span class="bcl-status"></span><span class="bcl-bar"></span><span class="bcl-calls">CALLS</span><span class="bcl-circuit">CIRCUIT</span></div>`;
+    const rows = ['groq','gemini','nvidia','openrouter','ollama'].map(name => {
+      const p = prov[name] || {};
+      const isOllama = name === 'ollama';
+      const noKey = !p.has_key;
+      if (isOllama || noKey) {
+        return `<div class="battle-row offline-node"><span class="battle-name">${name.toUpperCase()}</span><span class="battle-offline-badge">LOCAL NODE — OFFLINE (CLOUD)</span></div>`;
+      }
+      const pct = Math.round((p.daily_calls||0) / maxC * 100);
+      const state = p.circuit || 'CLOSED';
+      const isActive = name === active;
+      const pc = state==='CLOSED' ? 'pill-closed' : (state==='OPEN' ? 'pill-open' : 'pill-half');
+      const ringCls = isActive ? 'ring-active' : (state==='OPEN' ? 'ring-open' : (state==='HALF_OPEN' ? 'ring-half' : 'ring-dim'));
+      const lat = latencies[name] ? (latencies[name].toFixed(1)+'s') : '';
+      const callsText = `${p.daily_calls||0}/${p.daily_limit||'?'}`;
+      return `<div class="battle-row${isActive?' active-provider':''}">
+        <span class="battle-name">${name.toUpperCase()}</span>
+        <div class="battle-status-ring ${ringCls}"></div>
+        <div class="battle-bar-wrap"><div class="battle-bar" style="width:${pct}%"></div></div>
+        <span class="battle-calls">${callsText}</span>
+        ${lat ? `<span class="battle-latency">${lat}</span>` : ''}
+        <span class="circuit-pill ${pc}">${state}</span>
+      </div>`;
     }).join('');
-    if(!d.ollama_running) addAnomaly('Local fallback offline','error');
-    Object.entries(prov).forEach(([n,p])=>{ if(p.circuit==='OPEN') addAnomaly(`Provider ${n.toUpperCase()} circuit tripped`,'error'); });
+    c.innerHTML = colLabels + rows;
+    // Anomaly checks — skip ollama/no-key providers
+    Object.entries(prov).forEach(([n,p]) => {
+      if (!p.has_key) return;
+      if (p.circuit==='OPEN') addAnomaly(`Provider ${n.toUpperCase()} circuit tripped`, 'error');
+    });
   } catch(e){}
 }
 
-let logES=null;
+// ── LOG STREAM STATE ──────────────────────────────────────────
+let _logFilter = 'all';
+let _logPaused = false;
+let _logBuffer = [];
+let _logAutoScroll = true;
+let _logCircBuf = [];   // last 50 lines for DNA analysis
+let _logBootPhase = true;
+let _logBootLines = [];
+let _logBootTimer = null;
+const _LOG_CIRC_MAX = 50;
+
+function setLogFilter(btn, filter) {
+  _logFilter = filter;
+  document.querySelectorAll('.log-filter-pill').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  const c = document.getElementById('log-stream');
+  c.querySelectorAll('.log-line, .intent-trail-card').forEach(el => {
+    if (filter === 'all') { el.style.display = ''; return; }
+    el.style.display = el.classList.contains(filter) ? '' : 'none';
+  });
+}
+
+function toggleLogPause() {
+  _logPaused = !_logPaused;
+  const btn = document.getElementById('log-pause-btn');
+  const badge = document.getElementById('log-buffer-badge');
+  if (_logPaused) {
+    btn.textContent = '▶'; btn.classList.add('paused');
+  } else {
+    btn.textContent = '⏸'; btn.classList.remove('paused');
+    // flush buffer
+    _logBuffer.forEach(line => _appendLogLine(line));
+    _logBuffer = [];
+    badge.style.display = 'none'; badge.textContent = '0';
+  }
+}
+
+function _parseLogLine(line) {
+  // Extract [module] badge
+  const modMatch = line.match(/\[([a-zA-Z0-9_\.]+)\]/);
+  const mod = modMatch ? modMatch[1] : null;
+  // Extract key=value pairs
+  const kvPairs = [];
+  const kvRe = /\b(provider|intent|latency|tokens|model|source)=([^\s,]+)/gi;
+  let m;
+  while ((m = kvRe.exec(line)) !== null) kvPairs.push([m[1], m[2]]);
+  return { mod, kvPairs };
+}
+
+function _isIntentTrail(line) {
+  return (/intent_dispatch|smart_router/i.test(line)) &&
+         (/intent=|provider=|→|routing/i.test(line));
+}
+
+function _buildIntentTrailCard(line) {
+  const card = document.createElement('div');
+  card.className = 'intent-trail-card';
+  const intentM = line.match(/intent[=:]\s*([a-z_]+)/i);
+  const provM   = line.match(/provider[=:]\s*([a-z]+)/i);
+  const latM    = line.match(/latency[=:]\s*([\d.]+s?)/i);
+  const intent  = intentM ? intentM[1] : 'dispatch';
+  const prov    = provM ? provM[1] : '';
+  const lat     = latM ? latM[1] : '';
+  card.innerHTML = `<span class="itc-intent">${escHtml(intent.toUpperCase())}</span>${prov?`<span class="itc-provider">${escHtml(prov)}</span>`:''}${lat?`<span class="itc-latency">${escHtml(lat)}</span>`:''}<div class="itc-dot"></div>`;
+  return card;
+}
+
+function _appendLogLine(line) {
+  const c = document.getElementById('log-stream');
+  if (!c) return;
+
+  // DNA circular buffer
+  _logCircBuf.push(line);
+  if (_logCircBuf.length > _LOG_CIRC_MAX) _logCircBuf.shift();
+
+  // Boot phase grouping (first 10s)
+  if (_logBootPhase) {
+    _logBootLines.push(line);
+    return;
+  }
+
+  // Intent trail card
+  if (_isIntentTrail(line)) {
+    const card = _buildIntentTrailCard(line);
+    if (_logFilter !== 'all' && !card.classList.contains(_logFilter)) card.style.display = 'none';
+    c.appendChild(card);
+  } else {
+    const { mod, kvPairs } = _parseLogLine(line);
+    const span = document.createElement('span');
+    span.className = 'log-line';
+    if (/ERROR/i.test(line))      span.classList.add('log-error');
+    else if (/WARN/i.test(line))  span.classList.add('log-warning');
+    else if (/edith/i.test(line)) span.classList.add('log-edith');
+    else                          span.classList.add('log-info');
+
+    if (_logFilter !== 'all' && !span.classList.contains(_logFilter)) span.style.display = 'none';
+
+    // Build rich content
+    let html = '';
+    if (mod) html += `<span class="log-module-badge">${escHtml(mod)}</span>`;
+    // Strip module tag from line text
+    const cleanLine = line.replace(/\[EDITH [^\]]+\]\s*/,'').replace(/\[[^\]]+\]\s*/,'');
+    html += escHtml(cleanLine);
+    kvPairs.forEach(([k,v]) => { html += ` <span class="log-kv-pill">${escHtml(k)}=${escHtml(v)}</span>`; });
+    span.innerHTML = html;
+    c.appendChild(span);
+    c.appendChild(document.createTextNode('\n'));
+  }
+
+  // Trim to 200 entries
+  const lines = c.querySelectorAll('.log-line, .intent-trail-card, .dna-loop-card, .dna-failover-card');
+  if (lines.length > 200) lines[0].remove();
+
+  // Auto-scroll
+  if (_logAutoScroll) c.scrollTop = c.scrollHeight;
+}
+
+function _flushBootCard() {
+  _logBootPhase = false;
+  const c = document.getElementById('log-stream');
+  if (!c || _logBootLines.length === 0) { _logBootLines.forEach(l => _appendLogLine(l)); _logBootLines = []; return; }
+  const card = document.createElement('div');
+  card.className = 'dna-boot-card';
+  const body = document.createElement('div');
+  body.className = 'dna-card-body';
+  body.textContent = _logBootLines.join('\n');
+  card.innerHTML = `▶ BOOT SEQUENCE (${_logBootLines.length} lines)`;
+  card.appendChild(body);
+  card.addEventListener('click', () => body.classList.toggle('open'));
+  c.appendChild(card);
+  _logBootLines = [];
+}
+
+function _dnaAnalyze() {
+  const c = document.getElementById('log-stream');
+  if (!c) return;
+  // Loop detection
+  const modCounts = {};
+  _logCircBuf.forEach(line => {
+    if (!/ERROR/i.test(line)) return;
+    const m = line.match(/\[([a-zA-Z0-9_\.]+)\]/);
+    if (m) { modCounts[m[1]] = (modCounts[m[1]]||0) + 1; }
+  });
+  Object.entries(modCounts).forEach(([mod, count]) => {
+    if (count >= 3) {
+      const card = document.createElement('div');
+      card.className = 'dna-loop-card';
+      card.textContent = `⚠ LOOP: [${mod}] fired ${count}x in last 50 lines`;
+      c.appendChild(card);
+      if (_logAutoScroll) c.scrollTop = c.scrollHeight;
+    }
+  });
+  // Failover chain detection
+  const joined = _logCircBuf.join(' ');
+  if (/groq.*gemini|gemini.*nvidia/i.test(joined)) {
+    const card = document.createElement('div');
+    card.className = 'dna-failover-card';
+    card.textContent = '⚡ FAILOVER CHAIN DETECTED: GROQ→GEMINI';
+    c.appendChild(card);
+    if (_logAutoScroll) c.scrollTop = c.scrollHeight;
+  }
+}
+
+let logES = null;
 function connectLogStream() {
-  if(logES){logES.close();logES=null;}
-  const c=document.getElementById('log-stream');
-  logES=new EventSource(`${API}/api/logs/stream`);
-  logES.onmessage=e=>{
-    const line=e.data; if(!line||line==='[LOG_ERROR] '+line.slice(13)) return;
-    const span=document.createElement('span'); span.className='log-line';
-    if(/ERROR/i.test(line)) span.classList.add('log-error');
-    else if(/WARN/i.test(line)) span.classList.add('log-warning');
-    else if(/edith/i.test(line)) span.classList.add('log-edith');
-    else span.classList.add('log-info');
-    span.textContent=line; c.appendChild(span); c.appendChild(document.createTextNode('\n'));
-    const lines=c.querySelectorAll('.log-line');
-    if(lines.length>200) lines[0].remove();
-    c.scrollTop=c.scrollHeight;
+  if (logES) { logES.close(); logES = null; }
+  _logBootPhase = true;
+  _logBootLines = [];
+  _logBootTimer = setTimeout(_flushBootCard, 10000);
+  setInterval(_dnaAnalyze, 10000);
+
+  // Auto-scroll lock: detect manual scroll up
+  const c = document.getElementById('log-stream');
+  if (c) {
+    c.addEventListener('scroll', () => {
+      const atBottom = c.scrollHeight - c.scrollTop - c.clientHeight < 40;
+      _logAutoScroll = atBottom;
+      const resumeBtn = document.getElementById('log-resume-btn');
+      if (resumeBtn) resumeBtn.style.display = atBottom ? 'none' : 'block';
+    }, { passive: true });
+  }
+
+  logES = new EventSource(`${API}/api/logs/stream`);
+  logES.onmessage = e => {
+    const line = e.data;
+    if (!line) return;
+    if (_logPaused) {
+      _logBuffer.push(line);
+      const badge = document.getElementById('log-buffer-badge');
+      if (badge) { badge.style.display = 'inline'; badge.textContent = _logBuffer.length; }
+      return;
+    }
+    _appendLogLine(line);
   };
-  logES.onerror=()=>{ logES.close(); setTimeout(connectLogStream,5000); };
+  logES.onerror = () => { logES.close(); setTimeout(connectLogStream, 5000); };
 }
 
 // ══════════════════════════════════════════════
@@ -3442,7 +3721,7 @@ async function dpSubmit() {
   const meta = document.getElementById('dp-resp-meta');
   btn.disabled = true;
   btn.textContent = '...';
-  resp.innerHTML = '<span style="color:#444">Thinking...</span>';
+  resp.innerHTML = '<span style="color:#444;font-family:var(--font-display);font-size:9px;letter-spacing:1px">THINKING...</span>';
   meta.textContent = '';
   const t0 = Date.now();
   try {
@@ -3453,8 +3732,29 @@ async function dpSubmit() {
     });
     const data = await r.json();
     const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
-    resp.textContent = data.response || data.error || JSON.stringify(data);
+    const text = data.response || data.error || JSON.stringify(data);
     meta.textContent = 'mode:' + dpMode + ' · ' + dpSelected.size + ' files · ' + elapsed + 's';
+    // Typewriter effect
+    resp.innerHTML = '';
+    resp.style.position = 'relative';
+    // Copy button
+    const copyBtn = document.createElement('button');
+    copyBtn.textContent = 'COPY';
+    copyBtn.style.cssText = 'position:absolute;top:0;right:0;background:rgba(0,212,255,0.1);border:1px solid var(--border-glow);color:var(--text-dim);font-size:8px;padding:2px 8px;cursor:pointer;font-family:var(--font-display);letter-spacing:1px;border-radius:2px;opacity:0;transition:opacity 0.15s';
+    copyBtn.addEventListener('click', () => { navigator.clipboard.writeText(text).then(()=>{ copyBtn.textContent='COPIED'; setTimeout(()=>copyBtn.textContent='COPY',1500); }); });
+    resp.appendChild(copyBtn);
+    resp.addEventListener('mouseenter', () => copyBtn.style.opacity='0.7');
+    resp.addEventListener('mouseleave', () => copyBtn.style.opacity='0');
+    const textNode = document.createElement('span');
+    resp.appendChild(textNode);
+    let i = 0;
+    function typeNext() {
+      if (i < text.length) {
+        textNode.textContent += text[i++];
+        setTimeout(typeNext, 8);
+      }
+    }
+    typeNext();
   } catch(e) {
     resp.innerHTML = '<span style="color:red">✗ ' + e.message + '</span>';
   }
@@ -3631,6 +3931,12 @@ setInterval(fetchSessions, 30000);
   </div>
   <div style="background:#0d0d1a;border:1px solid #1a1a2e;padding:16px;margin-bottom:16px">
     <div style="font-size:10px;color:#666;letter-spacing:2px;margin-bottom:8px">QUERY</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px" id="dp-example-chips">
+      <span style="font-size:8px;color:#444;font-family:var(--font-display);letter-spacing:1px;align-self:center">EXAMPLES:</span>
+      <button onclick="document.getElementById('dp-input').value=this.dataset.q" data-q="How does smart_router decide which LLM provider to use?" style="font-size:9px;padding:3px 10px;background:rgba(0,212,255,0.05);border:1px solid rgba(0,212,255,0.2);color:rgba(0,212,255,0.6);cursor:pointer;border-radius:10px;font-family:monospace">routing logic?</button>
+      <button onclick="document.getElementById('dp-input').value=this.dataset.q" data-q="What are the biggest architectural gaps in EDITH right now?" style="font-size:9px;padding:3px 10px;background:rgba(0,212,255,0.05);border:1px solid rgba(0,212,255,0.2);color:rgba(0,212,255,0.6);cursor:pointer;border-radius:10px;font-family:monospace">architecture gaps?</button>
+      <button onclick="document.getElementById('dp-input').value=this.dataset.q" data-q="What should I build next to make EDITH more capable?" style="font-size:9px;padding:3px 10px;background:rgba(0,212,255,0.05);border:1px solid rgba(0,212,255,0.2);color:rgba(0,212,255,0.6);cursor:pointer;border-radius:10px;font-family:monospace">what to build next?</button>
+    </div>
     <textarea id="dp-input" rows="4" placeholder="Ask EDITH about her own architecture... (Ctrl+Enter to submit)" onkeydown="if(event.ctrlKey&&event.key==='Enter')dpSubmit()" style="width:100%;background:#050507;border:1px solid #1a1a2e;color:#ccc;padding:10px;font-family:monospace;font-size:12px;resize:vertical;outline:none;box-sizing:border-box"></textarea>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
       <span style="font-size:10px;color:#444">Ctrl+Enter to submit</span>
