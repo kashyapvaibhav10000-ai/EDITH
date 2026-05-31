@@ -422,6 +422,14 @@ def detect_intent(text):
     if any(re.search(p, text_lower) for p in _EARLY_SHELL) and word_count >= MIN_WORDS_FOR_ACTION:
         return "shell"
 
+    # Calendar create — before code scoring ("create an event" matches CODING_PATTERNS "create")
+    _EARLY_CALENDAR_CREATE = [
+        r"\b(add|create|schedule|set|make|book)\b.{0,40}\b(event|meeting|appointment)\b",
+        r"\b(remind me|add to calendar|put on calendar)\b",
+    ]
+    if any(re.search(p, text_lower) for p in _EARLY_CALENDAR_CREATE):
+        return "calendar_create"
+
     # Original intents — multi-pattern for code (needs good confidence)
     code_score = _count_matches(text_lower, CODING_PATTERNS)
     agent_score = _count_matches(text_lower, AGENT_PATTERNS)
