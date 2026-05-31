@@ -144,7 +144,13 @@ class _MCPProcess:
             self._proc.stdin.flush()
             log.info(f"[{self.server_name}] MCP handshake complete")
         except Exception as e:
-            log.warning(f"[{self.server_name}] MCP initialize handshake failed: {e}")
+            # Servers that need credentials (cloudflare, gdrive) fail here when
+            # tokens aren't configured — log at debug to avoid startup spam.
+            _CREDENTIAL_SERVERS = {"cloudflare", "gdrive", "brave-search"}
+            if self.server_name in _CREDENTIAL_SERVERS:
+                log.debug(f"[{self.server_name}] MCP handshake skipped (credentials not configured): {e}")
+            else:
+                log.warning(f"[{self.server_name}] MCP initialize handshake failed: {e}")
 
     def stop(self) -> None:
         """Terminate the subprocess."""
@@ -468,7 +474,11 @@ def list_mcp_tools(server_name: str) -> list[dict]:
         log.info(f"MCP tools listed for {server_name}: {len(_tool_cache[server_name])} tools")
         return _tool_cache[server_name]
     except Exception as e:
-        log.error(f"list_mcp_tools failed [{server_name}]: {e}")
+        _CREDENTIAL_SERVERS = {"cloudflare", "gdrive", "brave-search"}
+        if server_name in _CREDENTIAL_SERVERS:
+            log.debug(f"list_mcp_tools skipped [{server_name}]: credentials not configured")
+        else:
+            log.warning(f"list_mcp_tools failed [{server_name}]: {e}")
         return []
 
 
