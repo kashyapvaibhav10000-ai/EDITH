@@ -9,6 +9,14 @@ from core.smart_router import (
     _provider_latencies,
     DAILY_LIMITS,
     smart_call,
+    smart_stream,
     get_last_call_stats,
     router_status,
 )
+
+# Sync generator alias — orchestrator.py calls `for token in smart_call_stream(...)`
+# Must be a sync generator (def + yield), NOT async def.
+# DO NOT replace with async def — that breaks the sync for-loop in chat_stream().
+def smart_call_stream(prompt: str, intent: str = "chat", system: str = ""):
+    """Sync generator streaming wrapper. Delegates to smart_stream (core/smart_router.py)."""
+    yield from smart_stream(prompt, intent=intent, system=system)
