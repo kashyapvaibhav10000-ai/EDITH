@@ -206,6 +206,36 @@ async def chat_stream_endpoint(req: Request):
                 yield f"data: {json.dumps({'type': 'token', 'id': msg_id, 'token': full_reply})}\n\n"
                 yield f"data: {json.dumps({'type': 'done', 'id': msg_id, 'provider': provider, 'intent': intent, 'tts_engine': 'piper'})}\n\n"
                 return
+            # Fast path for chat/lookup/reason — call smart_call directly, skip queue bridge
+            # Queue bridge hangs when chat_stream does heavy pre-work (memory, context assembly)
+            if intent in {"chat", "lookup", "reason"}:
+                from smart_router import smart_call as _smart_call
+                _system = (
+                    "You are EDITH — Vaibhav's personal AI OS, built by him for him. "
+                    "Sharp, warm, direct. Talk like a brilliant friend, not a corporate bot. "
+                    "Never say 'Great question' or 'Certainly'. Just answer."
+                )
+                full_reply = await asyncio.to_thread(_smart_call, user_input, intent, _system)
+                if not full_reply:
+                    full_reply = "[EDITH] No response generated."
+                try:
+                    provider_data = get_last_call_stats().get("provider", "unknown")
+                    if provider_data and provider_data != "unknown":
+                        provider = provider_data
+                except Exception:
+                    pass
+                tts_engine = "piper"
+                try:
+                    if USE_CHATTERBOX:
+                        tts_engine = "chatterbox"
+                    elif USE_GROQ_TTS:
+                        tts_engine = "groq"
+                except Exception:
+                    pass
+                used_sid = _persist_exchange(user_input, full_reply, req_session_id)
+                yield f"data: {json.dumps({'type': 'token', 'id': msg_id, 'token': full_reply})}\n\n"
+                yield f"data: {json.dumps({'type': 'done', 'id': msg_id, 'provider': provider, 'intent': intent, 'tts_engine': tts_engine, 'session_id': used_sid})}\n\n"
+                return
             if intent == "shell":
                 try:
                     _local_reply = await asyncio.to_thread(_run_local_exec, user_input)
