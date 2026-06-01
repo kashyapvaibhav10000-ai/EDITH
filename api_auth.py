@@ -17,6 +17,12 @@ from fastapi.responses import JSONResponse
 _keys_raw = os.getenv("EDITH_API_KEYS", "") + "," + os.getenv("EDITH_API_KEY", "")
 VALID_API_KEYS = set(filter(None, _keys_raw.split(",")))
 
+import logging as _logging
+if not VALID_API_KEYS:
+    _logging.getLogger("edith").warning(
+        "EDITH_API_KEYS and EDITH_API_KEY are both unset — all protected endpoints will return 401"
+    )
+
 # Fail-closed: define PUBLIC paths explicitly. Everything else requires auth.
 PUBLIC_PATHS = {
     "/",

@@ -5,6 +5,7 @@ Shared by shell and search handlers.
 
 import os
 import re
+import shlex
 
 from config import get_logger, get_user_dir, USER_HOME
 from command_runner import run_piped_command, run_command
@@ -106,11 +107,12 @@ def run_local_exec(user_input: str):
         abs_m = re.search(r"(/[^\s]+)", user_input)
         if abs_m:
             search_dir = abs_m.group(1)
-        r = run_piped_command(f"fdupes -r '{search_dir}' 2>/dev/null | head -50", timeout=30)
+        _safe_search_dir = shlex.quote(search_dir)
+        r = run_piped_command(f"fdupes -r {_safe_search_dir} 2>/dev/null | head -50", timeout=30)
         out = (r.output or "").strip()
         if not out:
             r2 = run_piped_command(
-                f"find '{search_dir}' -type f -not -empty 2>/dev/null | xargs md5sum 2>/dev/null "
+                f"find {_safe_search_dir} -type f -not -empty 2>/dev/null | xargs md5sum 2>/dev/null "
                 f"| sort | awk '{{if(prev==$1)print $0; prev=$1}}' | head -20",
                 timeout=30
             )

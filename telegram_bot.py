@@ -7,6 +7,7 @@ import os
 import vault
 import time
 import threading
+from collections import defaultdict
 from dotenv import load_dotenv
 from config import get_logger
 from smart_router import smart_call
@@ -48,6 +49,21 @@ except Exception as _eb_err:
 
 TOKEN = vault.get_secret("TELEGRAM_TOKEN", "") or os.getenv("TELEGRAM_TOKEN", "")
 CHAT_ID = vault.get_secret("TELEGRAM_CHAT_ID", "") or os.getenv("TELEGRAM_CHAT_ID", "")
+
+# Per-sender rate limit: max 10 messages per 60 seconds
+_TG_RATE_LIMIT = 10
+_TG_RATE_WINDOW = 60
+_tg_rate_cache: dict = defaultdict(list)  # chat_id → [timestamps]
+
+def _tg_is_rate_limited(chat_id: str) -> bool:
+    now = time.time()
+    timestamps = _tg_rate_cache[chat_id]
+    # Drop old entries outside window
+    _tg_rate_cache[chat_id] = [t for t in timestamps if now - t < _TG_RATE_WINDOW]
+    if len(_tg_rate_cache[chat_id]) >= _TG_RATE_LIMIT:
+        return True
+    _tg_rate_cache[chat_id].append(now)
+    return False
 
 
 def send_telegram_placeholder(text: str = "⏳ Thinking...") -> int | None:
@@ -271,6 +287,10 @@ def poll_telegram():
                 if chat_id != str(CHAT_ID) or not text:
                     continue
 
+                if _tg_is_rate_limited(chat_id):
+                    log.warning(f"Telegram rate limit hit for chat_id={chat_id}")
+                    continue
+
                 log.info(f"Telegram received: {text[:80]}")
                 track_query(text)
 
@@ -325,6 +345,10 @@ def handle_telegram_update(update: dict) -> None:
     chat_id = str(msg.get("chat", {}).get("id", ""))
 
     if not text or chat_id != str(CHAT_ID):
+        return
+
+    if _tg_is_rate_limited(chat_id):
+        log.warning(f"Telegram webhook rate limit hit for chat_id={chat_id}")
         return
 
     log.info(f"Telegram webhook received: {text[:80]}")
