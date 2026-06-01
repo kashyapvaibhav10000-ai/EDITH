@@ -55,6 +55,15 @@ def get_weights() -> dict:
     return _load_state()["weights"]
 
 
+def _apply_tuner_weights(weights: dict):
+    """Push updated weights into smart_router's live state."""
+    try:
+        from core.smart_router import _provider_weights as _pw
+        _pw.update(weights)
+    except Exception:
+        pass  # smart_router may not expose _provider_weights — non-fatal
+
+
 def run_weekly_tune() -> str:
     """Run weekly tuning based on feedback data.
 
@@ -69,6 +78,30 @@ def run_weekly_tune() -> str:
 
     stats = get_feedback_stats()
     traces = get_recent_traces(100)
+
+    # Read feedback_signals: (intent, provider) pairs with >3 negatives in last 30 days
+    try:
+        import sqlite3 as _sql, time as _time
+        from config import MEMORY_ARCHIVE_PATH
+        _cutoff = _time.time() - 30 * 86400
+        _conn = _sql.connect(MEMORY_ARCHIVE_PATH)
+        _rows = _conn.execute("""
+            SELECT intent, provider, COUNT(*) as neg_count
+            FROM feedback_signals
+            WHERE was_negative=1 AND timestamp > ?
+            GROUP BY intent, provider
+            HAVING neg_count > 3
+        """, (_cutoff,)).fetchall()
+        _conn.close()
+        for _intent, _provider, _neg_count in _rows:
+            if _provider in state["weights"]:
+                old_w = state["weights"][_provider]
+                state["weights"][_provider] = max(0.1, round(old_w - 0.1, 2))
+                log.info(f"Tuner: reduced {_provider} weight for intent={_intent} ({old_w}→{state['weights'][_provider]}, {_neg_count} negatives)")
+        if _rows:
+            _apply_tuner_weights(state["weights"])
+    except Exception as _e:
+        log.debug(f"feedback_signals read failed (non-fatal): {_e}")
 
     # Analyze which providers had good/bad feedback
     provider_scores = {}

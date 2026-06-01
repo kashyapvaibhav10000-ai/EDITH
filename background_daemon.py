@@ -225,6 +225,19 @@ def _run_nightly_maintenance():
     """3am scheduled job: ChromaDB backup, consolidation, cleanup."""
     log.info("🌙 Starting nightly maintenance...")
 
+    # Update project_state.json last_updated date
+    try:
+        import json as _json
+        _ps_path = os.path.join(EDITH_PATH, "notes", "project_state.json")
+        if os.path.exists(_ps_path):
+            with open(_ps_path) as _f:
+                _ps = _json.load(_f)
+            _ps["last_updated"] = datetime.now().strftime("%Y-%m-%d")
+            with open(_ps_path, "w") as _f:
+                _json.dump(_ps, _f, indent=2)
+    except Exception as _e:
+        log.warning(f"project_state update failed: {_e}")
+
     results = []
 
     # 1. ChromaDB Backup

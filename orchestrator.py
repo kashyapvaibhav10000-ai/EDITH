@@ -714,6 +714,16 @@ do it differently." That's what makes you useful. That's what makes you real.
 
 {memory_context}"""
 
+    # Inject project state context
+    try:
+        import json as _json
+        _ps_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "notes", "project_state.json")
+        with open(_ps_path) as _psf:
+            _ps = _json.load(_psf)
+        system_prompt += f"\n\n## PROJECT STATE\n{_json.dumps(_ps, indent=2)}"
+    except Exception:
+        pass
+
     # T6: Channel-specific persona suffix
     try:
         import config as _cfg
@@ -908,7 +918,17 @@ do it differently." That's what makes you useful. That's what makes you real.
 {style_inst}
 
 {memory_context}"""
-    
+
+    # Inject project state context
+    try:
+        import json as _json
+        _ps_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "notes", "project_state.json")
+        with open(_ps_path) as _psf:
+            _ps = _json.load(_psf)
+        system_prompt += f"\n\n## PROJECT STATE\n{_json.dumps(_ps, indent=2)}"
+    except Exception:
+        pass
+
     # Note: Council doesn't support streaming yet, so we fall back to smart_call_stream
     full_response = ""
     log.info(f"🌐 Starting stream for [{intent or 'chat'}]")

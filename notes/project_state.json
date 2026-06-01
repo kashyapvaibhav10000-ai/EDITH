@@ -1,0 +1,10 @@
+{
+  "active_project": "EDITH",
+  "current_phase": "Phase 21 — Proactive Monitor",
+  "recent_completions": ["security hardening", "memory fixes", "repo_dna context cap raised"],
+  "open_decisions": [],
+  "recent_blockers": [],
+  "ayurstock_status": "paused — focusing on EDITH",
+  "machine": "Manjaro PC i5-12400 8GB, Debian laptop always-on server",
+  "last_updated": "2026-06-02"
+}

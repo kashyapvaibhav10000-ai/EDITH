@@ -22,6 +22,35 @@ def tag_feedback(trace_id: str, feedback_type: str, reason: str = ""):
     """
     set_feedback(trace_id, feedback_type)
 
+    # Store feedback signal for tuner (thumbs_down only — negative signals drive weight adjustment)
+    if feedback_type == "thumbs_down":
+        try:
+            import sqlite3 as _sql, time as _time
+            from config import MEMORY_ARCHIVE_PATH
+            from trace_logger import get_trace
+            _trace = get_trace(trace_id) or {}
+            _intent = _trace.get("intent", "unknown")
+            _provider = _trace.get("provider", "unknown")
+            _conn = _sql.connect(MEMORY_ARCHIVE_PATH)
+            _conn.execute("""
+                CREATE TABLE IF NOT EXISTS feedback_signals (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    trace_id TEXT,
+                    intent TEXT,
+                    provider TEXT,
+                    timestamp REAL,
+                    was_negative INTEGER DEFAULT 1
+                )
+            """)
+            _conn.execute(
+                "INSERT INTO feedback_signals (trace_id, intent, provider, timestamp, was_negative) VALUES (?,?,?,?,1)",
+                (trace_id, _intent, _provider, _time.time())
+            )
+            _conn.commit()
+            _conn.close()
+        except Exception as _e:
+            log.debug(f"feedback_signals write failed (non-fatal): {_e}")
+
     # Log the feedback as a layer in the trace
     log_layer(
         trace_id, "feedback",

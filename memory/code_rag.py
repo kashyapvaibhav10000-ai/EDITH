@@ -4,10 +4,13 @@ from pathlib import Path
 from config import CODE_DIRS, SUPPORTED_CODE_EXTENSIONS, SKIPPED_DIRS, get_chroma_client, get_logger
 from smart_router import smart_call
 
-def _llm(prompt, intent="chat"):
-    return smart_call(prompt, intent=intent)
+try:
+    from llama_index.core import VectorStoreIndex, SimpleDirectoryReader
+    LLAMA_AVAILABLE = True
+except ImportError:
+    LLAMA_AVAILABLE = False
 
-def _llm_gen(prompt, intent="chat"):
+def _llm(prompt, intent="chat"):
     return smart_call(prompt, intent=intent)
 
 log = get_logger("code_rag")
@@ -15,6 +18,7 @@ log = get_logger("code_rag")
 
 def _get_codebase_collection():
     return get_chroma_client().get_or_create_collection("edith_codebase")
+
 
 def extract_python_chunks(filepath):
     chunks = []
@@ -49,6 +53,7 @@ def extract_python_chunks(filepath):
             pass
     return chunks
 
+
 def extract_js_chunks(filepath):
     chunks = []
     try:
@@ -65,15 +70,18 @@ def extract_js_chunks(filepath):
         pass
     return chunks
 
+
 def index_codebase():
-    print("[EDITH RAG-C] Starting codebase indexing...")
+    """Index EDITH codebase into ChromaDB for semantic code search."""
+    if not LLAMA_AVAILABLE:
+        log.warning("code_rag: llama_index not available, using ChromaDB direct indexing")
+    log.info("[EDITH RAG-C] Starting codebase indexing...")
     total = 0
     for code_dir in CODE_DIRS:
         if not os.path.exists(code_dir):
-    raise NotImplementedError("Code RAG is disabled because Ollama has been removed. A cloud-based embedding model is needed.")
-            print(f"  Skipping {code_dir} — not found")
+            log.info(f"  Skipping {code_dir} — not found")
             continue
-        print(f"\n  Scanning: {code_dir}")
+        log.info(f"  Scanning: {code_dir}")
         for root, dirs, files in os.walk(code_dir):
             dirs[:] = [d for d in dirs if d not in SKIPPED_DIRS]
             for fname in files:
@@ -91,27 +99,34 @@ def index_codebase():
                     doc_id = f"{filepath}::{chunk['name']}::{chunk['lines']}"
                     _get_codebase_collection().upsert(
                         documents=[chunk["text"]],
-                        metadatas=[{"file": chunk["file"], "type": chunk["type"], "name": chunk["name"], "lines": chunk["lines"]}],
+                        metadatas=[{
+                            "file": chunk["file"],
+                            "type": chunk["type"],
+                            "name": chunk["name"],
+                            "lines": chunk["lines"]
+                        }],
                         ids=[doc_id],
                     )
                     total += 1
-    print(f"\n[EDITH RAG-C] Indexed {total} code chunks!")
-    log.info(f"Indexed {total} code chunks")
+    log.info(f"[EDITH RAG-C] Indexed {total} code chunks")
     return total
 
+
 def query_code(question, n=4):
+    """Query the codebase index for relevant code chunks."""
     results = _get_codebase_collection().query(query_texts=[question], n_results=n)
     docs = results["documents"][0]
     metas = results["metadatas"][0]
-    caise NotImplementedError("Code RAG is disabled because Ollama has been removed. A cloud-based embedding model is needed.")
-    rontext = ""
+    context = ""
     for doc, meta in zip(docs, metas):
         context += f"\n# File: {meta['file']} | {meta['type']}: {meta['name']} | Lines: {meta['lines']}\n"
         context += doc + "\n---\n"
     return context
 
+
 def ask_code(question):
-    print(f"\n[EDITH] Searching codebase for: {question}")
+    """Ask a question about the codebase using RAG."""
+    log.info(f"[EDITH] Searching codebase for: {question}")
     context = query_code(question)
     prompt = f"""You are EDITH, a coding assistant. Answer the question using ONLY the code context below.
 Be specific — mention file names and function names.
@@ -122,11 +137,12 @@ Code Context:
 Question: {question}
 
 Answer:"""
-    return _llm_gen(MODELS["chat"], prompt)
+    return _llm(prompt)
+
 
 if __name__ == "__main__":
     import sys
-    if len(sys.argv)v[1] == "--index":
+    if len(sys.argv) > 1 and sys.argv[1] == "--index":
         index_codebase()
     else:
         print("[EDITH Code RAG] Ready!")
