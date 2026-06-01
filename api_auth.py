@@ -17,9 +17,46 @@ from fastapi.responses import JSONResponse
 _keys_raw = os.getenv("EDITH_API_KEYS", "") + "," + os.getenv("EDITH_API_KEY", "")
 VALID_API_KEYS = set(filter(None, _keys_raw.split(",")))
 
-# Paths that require an API key (fail-open logic)
-PROTECTED_EXACT_PATHS = {"/api/chat", "/api/feedback", "/tg_webhook"}
-PROTECTED_PREFIXES = ("/webhook/",)
+# Fail-closed: define PUBLIC paths explicitly. Everything else requires auth.
+PUBLIC_PATHS = {
+    "/",
+    "/health",
+    "/docs",
+    "/openapi.json",
+    "/redoc",
+    "/dashboard",
+    "/api/health-check",
+    "/api/status",
+    "/api/system-status",
+    "/api/stats",
+    "/api/provider-latencies",
+    "/api/costs",
+    "/api/monitor_schedule",
+    "/api/phone",
+    "/api/weather-status",
+    "/api/last-memory",
+    "/api/traces/recent",
+    "/api/recent_traces",
+    "/api/logs/stream",
+    "/api/mcp/status",
+    "/api/sessions",
+    "/api/devpanel/modules",
+    "/api/devpanel/query",
+    "/api/repo/analyses",
+    "/api/repo/watched",
+    "/api/repo/alert-config",
+    "/api/repo/trend",
+    "/api/repo/success-rate",
+    "/api/repo/subtask-status",
+    "/api/repo/adapt-status",
+}
+
+PUBLIC_PREFIXES = (
+    "/static/",
+    "/api/mcp/tools/",
+    "/api/sessions/",
+    "/api/repo/adapt-status/",
+)
 
 
 # ──────────────────────────────────────────────────
@@ -28,14 +65,14 @@ PROTECTED_PREFIXES = ("/webhook/",)
 
 def is_path_public(path: str) -> bool:
     """
-    Check if a path is public. With fail-open, we define what's *protected*.
-    Everything else is considered public by default.
+    Fail-closed: only explicitly listed paths are public.
+    Everything else requires authentication.
     """
-    is_protected_exact = path in PROTECTED_EXACT_PATHS
-    is_protected_prefix = any(path.startswith(p) for p in PROTECTED_PREFIXES)
-    
-    # If it's a protected path, it's NOT public.
-    return not (is_protected_exact or is_protected_prefix)
+    if path in PUBLIC_PATHS:
+        return True
+    if any(path.startswith(p) for p in PUBLIC_PREFIXES):
+        return True
+    return False
 
 
 def extract_api_key(request: Request) -> Optional[str]:

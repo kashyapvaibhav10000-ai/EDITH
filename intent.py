@@ -123,7 +123,7 @@ DATA_PATTERNS = [
 ]
 
 CALENDAR_CREATE_PATTERNS = [
-    r"(add|create|schedule|set|make|book).*(event|appointment|task)",
+    r"(add|create|schedule|set|make|book).*(event|meeting|appointment|task)",
     r"(remind me|add to calendar|put on calendar)",
 ]
 
@@ -296,7 +296,7 @@ def classify_intent_via_llm(user_input: str) -> str:
     # EDITH FIX v1.0 — LLM Semantic Fallback
     try:
         from smart_router import smart_call
-        prompt = f"Categorize the following input into EXACTLY ONE word from this exact list: [search, weather, email, agent, council, memory, chat, code, reminder, system]. Return ONLY the single word. Do not add punctuation. Input: '{user_input}'"
+        prompt = f"Categorize the following input into EXACTLY ONE word from this exact list: [search, weather, email, agent, council, memory, chat, code, system]. Return ONLY the single word. Do not add punctuation. Input: '{user_input}'"
         result = smart_call(prompt, intent="reason").strip().lower()
         import string
         valid = ["search", "weather", "email", "agent", "council", "memory", "chat", "code", "system", "identity", "greeting"]

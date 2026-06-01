@@ -27,8 +27,8 @@ def _handle_compact(ctx: DispatchContext) -> Result:
             _ss._widget_history.update(keep)
         mem_count = 0
         try:
-            from smart_memory import SmartMemory
-            mem_count = len(SmartMemory()._hot)
+            from smart_memory import SmartMemoryManager
+            mem_count = len(SmartMemoryManager()._hot)
         except Exception:
             pass
         try:

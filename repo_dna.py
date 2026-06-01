@@ -68,8 +68,8 @@ class RepoAnalysisError(Exception):
 
 # ── EDITH self-context (dynamic, never hardcoded) ─────────────────────────────
 
-_EDITH_CONTEXT_MAX_CHARS = 8_000   # ~2k tokens — Groq TPM=12k, needs headroom for files
-_EDITH_CONTEXT_MAX_FILE_CHARS = 1_000  # cap per file in context
+_EDITH_CONTEXT_MAX_CHARS = 32_000   # ~8k tokens — enough for meaningful module context
+_EDITH_CONTEXT_MAX_FILE_CHARS = 4_000  # cap per file in context
 _EDITH_CONTEXT_SKIP_IF_LARGER = 3_000  # skip generated/config files
 # Exclude self + analysis scaffold files that confuse LLM with schema JSON
 _EDITH_CONTEXT_EXCLUDE = {
