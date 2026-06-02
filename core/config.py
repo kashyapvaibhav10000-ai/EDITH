@@ -312,11 +312,11 @@ GROQ_STT_URL   = "https://api.groq.com/openai/v1/audio/transcriptions"
 # ──────────────────────────────────────────────
 # TTS — Groq Orpheus + Chatterbox flags
 # ──────────────────────────────────────────────
-GROQ_TTS_MODEL  = "playai-tts"
-GROQ_TTS_VOICE  = "Fritz-PlayAI"
-USE_GROQ_TTS    = False  # playai-tts removed from Groq API — disabled until new model confirmed
+GROQ_TTS_MODEL  = "canopylabs/orpheus-v1-english"
+GROQ_TTS_VOICE  = "diana"
+USE_GROQ_TTS    = True   # Orpheus TTS restored — replaces removed playai-tts
 USE_CHATTERBOX  = False  # CPU load >120s → always times out; re-enable if GPU available
-PREFER_FAST_TTS = False  # False = Chatterbox first → Piper fallback
+PREFER_FAST_TTS = True   # True = Groq Orpheus first (fast cloud), Piper as fallback
 CHATTERBOX_VENV = os.getenv("CHATTERBOX_VENV", os.path.join(USER_HOME, "chatterbox-env"))
 CHATTERBOX_VENV_PYTHON = os.getenv("CHATTERBOX_VENV_PYTHON", os.path.join(CHATTERBOX_VENV, "bin/python3"))
 

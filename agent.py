@@ -256,10 +256,6 @@ Rules:
 - Never loop with individual commands when brace expansion works
 
 Step: {step}"""
-    try:
-        cmd = _llm(MODELS["chat"], prompt)
-    except OllamaError as e:
-        log.error(f"Agent get_command failed: {e}")
     cmd = _llm(prompt, intent="reason")
 # ──────────────────────────────────────────────
 # AgentRunner — state machine
@@ -432,7 +428,7 @@ class AgentRunner:
                         f"Step goal: {step.description}\n"
                         f"Provide an alternative single bash command to achieve the same goal."
                     )
-                    new_cmd = _llm(MODELS["chat"], prompt)
+                    new_cmd = _llm(prompt, intent="reason")
                     new_cmd = new_cmd.replace("```", "").strip().split("\n")[0]
                     step.command = _sanitize_command(new_cmd)
                     step.confidence = compute_confidence(step.command, step.description)

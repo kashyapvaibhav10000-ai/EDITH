@@ -1,10 +1,34 @@
 {
-  "active_project": "EDITH",
-  "current_phase": "Phase 21 — Proactive Monitor",
-  "recent_completions": ["security hardening", "memory fixes", "repo_dna context cap raised"],
-  "open_decisions": [],
-  "recent_blockers": [],
-  "ayurstock_status": "paused — focusing on EDITH",
-  "machine": "Manjaro PC i5-12400 8GB, Debian laptop always-on server",
-  "last_updated": "2026-06-02"
+  "last_updated": "2026-06-02",
+  "edith": {
+    "status": "production v1.0 - active development",
+    "current_focus": "fixing broken systems and improving personalization",
+    "recent_fixes": [
+      "restored Groq Orpheus TTS (canopylabs/orpheus-v1-english)",
+      "fixed validate_vision_model NameError in validator.py",
+      "fixed dead MODELS reference in agent.py",
+      "wired HistoryManager auto-compaction into chat()",
+      "expanded ML training data from 61 to 280+ samples",
+      "fixed feedback_signals table creation and wiring",
+      "improved email and open_app intent patterns",
+      "upgraded drift_score to use semantic embeddings",
+      "expanded about_me.txt with rich personal context"
+    ],
+    "known_issues": [
+      "Chatterbox TTS disabled on CPU (70s+ cold start)",
+      "Ollama required for private intent routing (vault/shell/email)"
+    ],
+    "open_decisions": [
+      "whether to integrate mem0 for smarter memory management",
+      "whether to add screenpipe for passive screen context",
+      "whether to replace regex intent system with fine-tuned classifier"
+    ]
+  },
+  "ayurstock_pro": {
+    "status": "in development - pre-launch",
+    "tech_stack": ["Next.js", "Supabase", "PostgreSQL", "India-specific"],
+    "current_focus": "getting to first paying customers in India",
+    "domain": "Ayurvedic pharmacy and medicine distribution SaaS",
+    "target_market": "Indian Ayurvedic pharmacies and distributors"
+  }
 }

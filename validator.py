@@ -109,21 +109,25 @@ def validate_memory() -> Result:
 
 
 def validate_vision_model() -> Result:
-    """Check vision model is available in Ollama."""
+    """Check if Ollama is reachable and has any vision-capable model installed."""
+    _OLLAMA_URL = "http://localhost:11434"
+    _VISION_MODEL_NAMES = ["llava", "llava-phi3", "bakllava", "moondream"]
     try:
-        r = requests.get(f"{OLLAMA_URL}/api/tags", timeout=5)
+        r = requests.get(f"{_OLLAMA_URL}/api/tags", timeout=5)
         r.raise_for_status()
         models = r.json().get("models", [])
         names = [m.get("name", "") for m in models]
-        target = MODELS["vision"]
-        if any(target.split(":")[0] in n for n in names):
-            return Result.success(f"Vision model '{target}' available")
+        found = [n for n in names if any(v in n.lower() for v in _VISION_MODEL_NAMES)]
+        if found:
+            return Result.success(f"Vision model available: {found[0]}")
         return Result.failure(
-            f"Vision model '{target}' not installed. Run: ollama pull {target}",
+            f"No vision model installed. Run: ollama pull llava-phi3",
             error_type="not_found"
         )
+    except requests.exceptions.ConnectionError:
+        return Result.failure("Ollama not running (vision unavailable). Start with: ollama serve", error_type="connection")
     except Exception as e:
-        return Result.failure(f"Ollama not reachable for vision check: {e}", error_type="connection")
+        return Result.failure(f"Vision model check failed: {e}", error_type="connection")
 
 # Full System Snapshot
 # ──────────────────────────────────────────────

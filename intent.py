@@ -3,7 +3,7 @@ import threading
 
 CODING_PATTERNS = [
     r"(write|create|fix|debug|code|program|script|function|class|implement)",
-    r"(python|javascript|bash|html|css|sql|java|rust|go|typescript)",
+    r"\b(python|javascript|bash|html|css|sql|java|rust|typescript)\b",
     r"(error|bug|exception|traceback|syntax error)",
 ]
 
@@ -37,8 +37,9 @@ SHELL_PATTERNS = [
 ]
 
 OPEN_APP_PATTERNS = [
-    r"^(open|launch|start)\s+(chrome|chromium|firefox|brave|opera|browser|terminal|konsole|spotify|vlc|code|vscode|files|dolphin|nautilus|calculator|kcalc|steam|discord|slack|telegram|notion|obsidian|gimp|inkscape|blender|thunderbird|libreoffice|okular|mpv|celluloid|audacity|kdenlive|handbrake|virtualbox|postman|insomnia|dbeaver)\b",
+    r"(open|launch|start)\s+(chrome|chromium|firefox|brave|opera|browser|terminal|konsole|spotify|vlc|code|vscode|files|dolphin|nautilus|calculator|kcalc|steam|discord|slack|telegram|notion|obsidian|gimp|inkscape|blender|thunderbird|libreoffice|okular|mpv|celluloid|audacity|kdenlive|handbrake|virtualbox|postman|insomnia|dbeaver|file.?manager|file.?browser|file.?explorer|thunar|nemo|pcmanfm)\b",
     r"^(open|launch|start)\s+\w+\s*$",
+    r"\b(open|launch|start)\s+(up\s+)?(my\s+)?(file\s*(manager|browser|explorer)|the\s+files?|folder\s*browser)\b",
 ]
 
 FILE_QUERY_PATTERNS = [
@@ -53,8 +54,13 @@ FILE_PATTERNS = [
 ]
 
 EMAIL_PATTERNS = [
-    r"(check|read|show).*(email|mail|inbox)",
-    r"what.*(email|mail)",
+    r"(check|read|show|look at|pull up).*(email|mail|inbox|mailbox)",
+    r"what.*(email|mail|inbox)",
+    r"\b(inbox|mailbox)\b",
+    r"(any|got|have).*(email|mail|message).*(today|waiting|for me|yet)?",
+    r"(cooking|waiting|sitting|in).*(inbox|mail|mailbox)",
+    r"\bmy\s+(email|mail|inbox|gmail)\b",
+    r"(emails?|mails?)\s+(waiting|for me|today|yet|new)",
 ]
 
 UNREAD_EMAIL_PATTERNS = [
@@ -69,8 +75,13 @@ CALENDAR_TODAY_PATTERNS = [
     r"what.?s on my calendar",
     r"(check|show|view|see)\s+my\s+calendar",
     r"my\s+(schedule|agenda|appointments?)\s+(today|tomorrow|this week)",
-    r"(any|what)\s+(meetings?|events?|appointments?)\s+(today|tomorrow)",
+    r"(any|what)\s+(meetings?|events?|appointments?)\s+(today|tomorrow|on my calendar)",
     r"calendar\s+(today|for today)",
+    r"how does my day look",
+    r"how.?s my day",
+    r"what.?s on (my|the) agenda",
+    r"\bmy day\b.*(look|ahead|like|plan)",
+    r"what meetings (do i have|are (there|scheduled))",
 ]
 
 CALL_PATTERNS = [
@@ -128,8 +139,10 @@ CALENDAR_CREATE_PATTERNS = [
 ]
 
 CALENDAR_WEEK_PATTERNS = [
-    r"(this week|week's|weekly).*(schedule|plan|events|calendar)",
-    r"(what's|what is).*(week|this week)",
+    r"(this week|week's|weekly).*(schedule|plan|events|calendar|meetings?)",
+    r"(what's|what is).*(this week|week ahead|upcoming week)",
+    r"(calendar|schedule|agenda).*(this week|next week|for the week)",
+    r"\bthis week\b.*(do i have|look like|ahead)",
 ]
 
 # ──────────────────────────────────────────────
@@ -142,9 +155,10 @@ COUNCIL_PATTERNS = [
 ]
 
 DECISION_PATTERNS = [
-    r"(simulate|decision|life sim|branches|paths)",
-    r"(should i|which.*(path|option|choice))",
+    r"(simulate|life sim|branches|decision.*paths?)",
+    r"(which.*(path|option|choice))\b",
     r"(what happens if|what would happen)",
+    r"\bshould i\b.*(quit|leave|move|change.*career|give up|start|choose between)",
 ]
 
 BRIEFING_PATTERNS = [
@@ -167,8 +181,9 @@ PROFILE_PATTERNS = [
 ]
 
 UPGRADE_PATTERNS = [
-    r"(self.improve|upgrade yourself|arxiv|research|papers)",
-    r"(improve yourself|what.*learn|latest research)",
+    r"(self.improve|upgrade yourself|arxiv|research.*papers?)",
+    r"(improve yourself|latest research|read.*papers?)",
+    r"\bwhat.*new.*learn\b|\blearn.*new.*thing\b",
 ]
 
 SESSION_PATTERNS = [
@@ -378,6 +393,12 @@ def detect_intent(text):
     if any(re.search(p, text_lower) for p in WEATHER_PATTERNS):
         return "weather"
 
+    # Email — check early before lookup/search swallows "what is in my inbox"
+    if any(re.search(p, text_lower) for p in UNREAD_EMAIL_PATTERNS):
+        return "unread_email"
+    if any(re.search(p, text_lower) for p in EMAIL_PATTERNS):
+        return "email"
+
     # Phase 5: OCR and WhatsApp
     if any(re.search(p, text_lower) for p in OCR_PATTERNS):
         return "ocr"
@@ -445,11 +466,11 @@ def detect_intent(text):
         return "sms"
     if any(re.search(p, text_lower) for p in PHONE_PATTERNS):
         return "phone"
-    # Calendar — before vision ("what is on my calendar" matches vision "what is on")
-    if any(re.search(p, text_lower) for p in CALENDAR_TODAY_PATTERNS):
-        return "calendar_today"
+    # Calendar — week BEFORE today (more specific → less likely to false-positive)
     if any(re.search(p, text_lower) for p in CALENDAR_WEEK_PATTERNS):
         return "calendar_week"
+    if any(re.search(p, text_lower) for p in CALENDAR_TODAY_PATTERNS):
+        return "calendar_today"
     if any(re.search(p, text_lower) for p in VISION_PATTERNS):
         return "vision"
     if any(re.search(p, text_lower) for p in RAG_PATTERNS):
@@ -458,6 +479,10 @@ def detect_intent(text):
     # File query — natural file browsing (before agent/shell to prevent misrouting)
     if any(re.search(p, text_lower) for p in FILE_QUERY_PATTERNS):
         return "file_query"
+
+    # Open app — check BEFORE data_analysis to prevent "open file browser" → data_analysis
+    if any(re.search(p, text_lower) for p in OPEN_APP_PATTERNS):
+        return "open_app"
 
     # Agent — needs higher confidence (multi-step, avoid false positives)
     if agent_score >= 1 and word_count >= MIN_WORDS_FOR_ACTION:
@@ -492,10 +517,6 @@ def detect_intent(text):
     if any(re.search(p, text_lower) for p in SEARCH_PATTERNS):
         return "search"
 
-    # Open app — no word count gate (2-word commands like "open chrome" valid)
-    if any(re.search(p, text_lower) for p in OPEN_APP_PATTERNS):
-        return "open_app"
-
     # Shell — require higher confidence for dangerous intents
     shell_score = _count_matches(text_lower, SHELL_PATTERNS)
     if shell_score >= 1 and word_count >= MIN_WORDS_FOR_ACTION:
@@ -510,11 +531,6 @@ def detect_intent(text):
         if re.search(r"delete|remove", text_lower):
             return "delete_file"
         return "create_file"
-
-    if any(re.search(p, text_lower) for p in UNREAD_EMAIL_PATTERNS):
-        return "unread_email"
-    if any(re.search(p, text_lower) for p in EMAIL_PATTERNS):
-        return "email"
 
     # Weak single-keyword match for code (fallback)
     if code_score == 1:
@@ -604,6 +620,210 @@ _ML_TRAINING_DATA = [
     ("mcp server status", "mcp"),
     ("github repo search", "mcp"),
     ("read file from drive", "mcp"),
+    # ── Extended training data (250+ additional samples) ──
+    # email
+    ("any new emails today", "email"),
+    ("what is cooking in my inbox", "email"),
+    ("got any messages", "email"),
+    ("pull up my gmail", "email"),
+    ("any mail waiting for me", "email"),
+    ("inbox check", "email"),
+    ("show me what is in my mailbox", "email"),
+    ("anything sitting in my inbox", "email"),
+    # unread_email
+    ("how many unread do i have", "unread_email"),
+    ("unseen messages count", "unread_email"),
+    ("how many emails have not been read", "unread_email"),
+    # calendar_today
+    ("what is on my plate today", "calendar_today"),
+    ("what meetings do i have", "calendar_today"),
+    ("give me my agenda", "calendar_today"),
+    ("any appointments today", "calendar_today"),
+    ("what time is my next meeting", "calendar_today"),
+    ("how does my day look", "calendar_today"),
+    # calendar_create
+    ("book me a slot tomorrow at 3pm", "calendar_create"),
+    ("set up a meeting for friday", "calendar_create"),
+    ("add dentist appointment next monday", "calendar_create"),
+    ("put this on my calendar", "calendar_create"),
+    # open_app
+    ("open up my file browser", "open_app"),
+    ("launch the file manager", "open_app"),
+    ("open my files", "open_app"),
+    ("start file explorer", "open_app"),
+    ("bring up dolphin", "open_app"),
+    ("fire up chrome", "open_app"),
+    ("get firefox going", "open_app"),
+    ("spin up vscode", "open_app"),
+    ("open terminal please", "open_app"),
+    # weather
+    ("is it going to be hot today", "weather"),
+    ("should i carry an umbrella", "weather"),
+    ("what is the temperature outside", "weather"),
+    ("how is the weather looking", "weather"),
+    ("any rain expected", "weather"),
+    ("what is it like outside", "weather"),
+    # search
+    ("look up the latest ipl score", "search"),
+    ("find information about quantum computing", "search"),
+    ("google this for me", "search"),
+    ("search for best python frameworks 2026", "search"),
+    ("what happened in the news today", "search"),
+    ("current price of bitcoin", "search"),
+    ("what is trending right now", "search"),
+    # code
+    ("write a function to reverse a list", "code"),
+    ("i have a bug in my fastapi route", "code"),
+    ("help me refactor this class", "code"),
+    ("write unit tests for this module", "code"),
+    ("explain this python traceback", "code"),
+    ("create a bash script to backup files", "code"),
+    ("fix the syntax error in my javascript", "code"),
+    ("how do i implement async in python", "code"),
+    ("write a regex to match email addresses", "code"),
+    # shell
+    ("run apt update for me", "shell"),
+    ("check disk usage with df", "shell"),
+    ("kill this process", "shell"),
+    ("list all running services", "shell"),
+    ("execute this bash script", "shell"),
+    ("run git status", "shell"),
+    ("chmod 755 on this file", "shell"),
+    # agent
+    ("handle all of this for me step by step", "agent"),
+    ("automate this workflow", "agent"),
+    ("complete this multi-step task", "agent"),
+    ("do everything needed to set up this project", "agent"),
+    ("take care of this end to end", "agent"),
+    # vision
+    ("what am i looking at on the screen", "vision"),
+    ("can you describe my current screen", "vision"),
+    ("look at my monitor and tell me what you see", "vision"),
+    ("screenshot and analyze", "vision"),
+    ("what application is open right now", "vision"),
+    ("read what is written in this image", "vision"),
+    # council
+    ("run a roundtable discussion on this", "council"),
+    ("get all your personas to weigh in", "council"),
+    ("what do your different sides think", "council"),
+    ("debate this with yourself", "council"),
+    # decision
+    ("help me think through this life decision", "decision"),
+    ("what are my options and their outcomes", "decision"),
+    ("simulate what happens if i quit my job", "decision"),
+    ("walk me through the different paths", "decision"),
+    # briefing
+    ("give me my weekly update", "briefing"),
+    ("how am i doing against my goals", "briefing"),
+    ("status report please", "briefing"),
+    ("what are my open items", "briefing"),
+    ("am i on track", "briefing"),
+    # profile
+    ("what do you know about me", "profile"),
+    ("show my cognitive profile", "profile"),
+    ("am i drifting from my goals", "profile"),
+    ("check my prime directive", "profile"),
+    ("update my north star", "profile"),
+    # self_improve
+    ("check arxiv for new research", "self_improve"),
+    ("propose an upgrade for yourself", "self_improve"),
+    ("what can you do better", "self_improve"),
+    ("improve your capabilities", "self_improve"),
+    # memory (store)
+    ("save this for later", "memory"),
+    ("remember i prefer dark mode", "memory"),
+    ("note that i do not like verbose responses", "memory"),
+    ("keep in mind i use supabase for ayurstock", "memory"),
+    ("store this preference", "memory"),
+    ("never forget that i work best at night", "memory"),
+    # memory (recall)
+    ("what have you saved about me", "memory"),
+    ("show my preferences", "memory"),
+    ("what do you remember", "memory"),
+    ("recall my history", "memory"),
+    # rag
+    ("look in my notes about this", "rag"),
+    ("what do my notes say about ayurstock", "rag"),
+    ("search my documents for this", "rag"),
+    ("check my knowledge base", "rag"),
+    ("find this in my personal notes", "rag"),
+    # data_analysis
+    ("analyze this spreadsheet", "data_analysis"),
+    ("load this csv and show me trends", "data_analysis"),
+    ("create a chart from this data", "data_analysis"),
+    ("plot this excel file", "data_analysis"),
+    ("what insights can you find in this data", "data_analysis"),
+    # phone
+    ("where is my phone", "phone"),
+    ("ring my device", "phone"),
+    ("how much battery does my phone have", "phone"),
+    ("check my phone notifications", "phone"),
+    # sms
+    ("text my mom hello", "sms"),
+    ("send an sms to this number", "sms"),
+    ("shoot a quick text to vaibhav", "sms"),
+    # call
+    ("dial this number for me", "call"),
+    ("place a call to the office", "call"),
+    ("call 9305819663 now", "call"),
+    ("make a phone call please", "call"),
+    # chat
+    ("what do you think about this idea", "chat"),
+    ("just chat with me for a bit", "chat"),
+    ("tell me something interesting", "chat"),
+    ("how are things going", "chat"),
+    ("i am bored entertain me", "chat"),
+    ("give me a quick pep talk", "chat"),
+    # lookup
+    ("what is the capital of germany", "lookup"),
+    ("define machine learning", "lookup"),
+    ("who is linus torvalds", "lookup"),
+    ("what does idempotent mean", "lookup"),
+    # reason
+    ("pros and cons of using rust vs python", "reason"),
+    ("walk me through why this approach is better", "reason"),
+    ("analyze the tradeoffs here", "reason"),
+    ("help me think through this", "reason"),
+    ("explain why this happens", "reason"),
+    # system_health
+    ("are all systems go", "system_health"),
+    ("anything broken right now", "system_health"),
+    ("run a full diagnostic", "system_health"),
+    ("check everything is working", "system_health"),
+    # repo_analyze
+    ("analyze this github repo", "repo_analyze"),
+    ("study this codebase for me", "repo_analyze"),
+    # whatsapp
+    ("send a whatsapp to my brother", "whatsapp"),
+    ("message on whatsapp", "whatsapp"),
+    # mcp
+    ("read this file using mcp", "mcp"),
+    ("use mcp to list the directory", "mcp"),
+    ("search brave for this query", "mcp"),
+    # devlog
+    ("add to my dev journal", "devlog"),
+    ("log this progress", "devlog"),
+    ("record this in the devlog", "devlog"),
+    # vault
+    ("what api keys do i have stored", "vault"),
+    ("show my credentials", "vault"),
+    ("open the vault", "vault"),
+    # session_end
+    ("i am done for today", "session_end"),
+    ("let us wrap up", "session_end"),
+    ("signing off", "session_end"),
+    # morning_briefing
+    ("good morning edith what do i have today", "morning_briefing"),
+    ("morning briefing please", "morning_briefing"),
+    ("give me my daily digest", "morning_briefing"),
+    # image_gen
+    ("generate an image of a sunset", "image_gen"),
+    ("create a picture of a robot", "image_gen"),
+    ("draw something for me", "image_gen"),
+    # wake
+    ("hey edith wake up", "wake"),
+    ("edith are you there", "wake"),
+    ("hello edith", "wake"),
 ]
 
 

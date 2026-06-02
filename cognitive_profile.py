@@ -272,7 +272,9 @@ _DRIFT_LOG_FILE = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "d
 def drift_score() -> float:
     """Compute quantitative drift score (0.0 = aligned, 1.0 = fully drifted).
 
-    Based on: % of recent queries that don't match prime directive keywords.
+    Uses cosine similarity between recent query embeddings and the prime
+    directive embedding (all-MiniLM-L6-v2 via sentence-transformers).
+    Falls back to keyword overlap if embeddings unavailable.
     """
     try:
         recent = _get_query_log_collection().get(limit=20, include=["documents"])
@@ -283,9 +285,41 @@ def drift_score() -> float:
     if not docs:
         return 0.0
 
+    # ── Embedding-based semantic drift (preferred) ──
+    try:
+        from sentence_transformers import SentenceTransformer
+        import numpy as np
+
+        _model = SentenceTransformer("all-MiniLM-L6-v2")
+        directive_emb = _model.encode(PRIME_DIRECTIVE, normalize_embeddings=True)
+
+        similarities = []
+        for doc in docs:
+            text = str(doc).strip()
+            if not text:
+                continue
+            query_emb = _model.encode(text, normalize_embeddings=True)
+            similarity = float(np.dot(directive_emb, query_emb))
+            similarities.append(similarity)
+
+        if not similarities:
+            return 0.0
+
+        avg_similarity = sum(similarities) / len(similarities)
+        # Cosine similarity: 1.0 = identical, 0.0 = orthogonal, <0 = opposite
+        # Threshold: 0.25 = aligned, below = drifting
+        drift = max(0.0, min(1.0, 1.0 - (avg_similarity / 0.5)))
+        return round(drift, 2)
+
+    except ImportError:
+        log.debug("sentence-transformers not available — falling back to keyword drift")
+    except Exception as e:
+        log.warning(f"Embedding drift failed: {e} — falling back to keyword drift")
+
+    # ── Keyword overlap fallback ──
     directive_words = set(PRIME_DIRECTIVE.lower().split())
-    # Remove filler words
-    directive_words -= {"the", "a", "an", "to", "is", "and", "of", "in", "for", "with", "on"}
+    directive_words -= {"the", "a", "an", "to", "is", "and", "of", "in", "for", "with", "on",
+                        "stay", "real", "my", "i", "build", "ship"}
 
     aligned = 0
     for doc in docs:

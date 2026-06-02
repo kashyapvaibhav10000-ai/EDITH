@@ -12,6 +12,31 @@ from trace_logger import set_feedback, get_trace, log_layer
 log = get_logger("feedback_tagger")
 
 
+def _ensure_feedback_signals_table():
+    """Create feedback_signals table if it doesn't exist. Safe to call multiple times."""
+    try:
+        import sqlite3 as _sql
+        from config import MEMORY_ARCHIVE_PATH
+        _conn = _sql.connect(MEMORY_ARCHIVE_PATH)
+        _conn.execute("""
+            CREATE TABLE IF NOT EXISTS feedback_signals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                trace_id TEXT,
+                intent TEXT,
+                provider TEXT,
+                timestamp REAL,
+                was_negative INTEGER DEFAULT 1
+            )
+        """)
+        _conn.commit()
+        _conn.close()
+    except Exception as _e:
+        log.debug(f"feedback_signals table init failed: {_e}")
+
+# Ensure table exists at import time so tuner never reads a missing table
+_ensure_feedback_signals_table()
+
+
 def tag_feedback(trace_id: str, feedback_type: str, reason: str = ""):
     """Tag a trace with explicit feedback.
 
@@ -22,34 +47,35 @@ def tag_feedback(trace_id: str, feedback_type: str, reason: str = ""):
     """
     set_feedback(trace_id, feedback_type)
 
-    # Store feedback signal for tuner (thumbs_down only — negative signals drive weight adjustment)
-    if feedback_type == "thumbs_down":
-        try:
-            import sqlite3 as _sql, time as _time
-            from config import MEMORY_ARCHIVE_PATH
-            from trace_logger import get_trace
-            _trace = get_trace(trace_id) or {}
-            _intent = _trace.get("intent", "unknown")
-            _provider = _trace.get("provider", "unknown")
-            _conn = _sql.connect(MEMORY_ARCHIVE_PATH)
-            _conn.execute("""
-                CREATE TABLE IF NOT EXISTS feedback_signals (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    trace_id TEXT,
-                    intent TEXT,
-                    provider TEXT,
-                    timestamp REAL,
-                    was_negative INTEGER DEFAULT 1
-                )
-            """)
-            _conn.execute(
-                "INSERT INTO feedback_signals (trace_id, intent, provider, timestamp, was_negative) VALUES (?,?,?,?,1)",
-                (trace_id, _intent, _provider, _time.time())
+    # Store feedback signal for tuner — both positive and negative signals for accurate weighting
+    try:
+        import sqlite3 as _sql, time as _time
+        from config import MEMORY_ARCHIVE_PATH
+        from trace_logger import get_trace
+        _trace = get_trace(trace_id) or {}
+        _intent = _trace.get("intent", "unknown")
+        _provider = _trace.get("provider", "unknown")
+        _was_negative = 1 if feedback_type == "thumbs_down" else 0
+        _conn = _sql.connect(MEMORY_ARCHIVE_PATH)
+        _conn.execute("""
+            CREATE TABLE IF NOT EXISTS feedback_signals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                trace_id TEXT,
+                intent TEXT,
+                provider TEXT,
+                timestamp REAL,
+                was_negative INTEGER DEFAULT 1
             )
-            _conn.commit()
-            _conn.close()
-        except Exception as _e:
-            log.debug(f"feedback_signals write failed (non-fatal): {_e}")
+        """)
+        _conn.execute(
+            "INSERT INTO feedback_signals (trace_id, intent, provider, timestamp, was_negative) VALUES (?,?,?,?,?)",
+            (trace_id, _intent, _provider, _time.time(), _was_negative)
+        )
+        _conn.commit()
+        _conn.close()
+        log.info(f"Feedback signal stored: trace={trace_id} intent={_intent} provider={_provider} negative={_was_negative}")
+    except Exception as _e:
+        log.debug(f"feedback_signals write failed (non-fatal): {_e}")
 
     # Log the feedback as a layer in the trace
     log_layer(

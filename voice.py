@@ -391,8 +391,9 @@ def speak_piper(text: str):
 
 def speak_groq_orpheus(text: str):
     """
-    Groq Orpheus TTS (playai-tts / Fritz-PlayAI).
-    Streams audio response directly to aplay subprocess — no disk write.
+    Groq Orpheus TTS (canopylabs/orpheus-v1-english).
+    Returns WAV audio streamed directly to aplay.
+    Input capped at 200 chars per Groq limit — longer text is chunked.
     Raises on any error so caller can fall back to Piper.
     """
     global _aplay_pid
@@ -402,58 +403,75 @@ def speak_groq_orpheus(text: str):
         raise ValueError("No GROQ_API_KEY — cannot use Groq TTS")
 
     import requests
-    resp = requests.post(
-        "https://api.groq.com/openai/v1/audio/speech",
-        headers={
-            "Authorization": f"Bearer {groq_key}",
-            "Content-Type": "application/json",
-        },
-        json={
-            "model": GROQ_TTS_MODEL,
-            "input": text,
-            "voice": GROQ_TTS_VOICE,
-        },
-        stream=True,
-        timeout=20,
-    )
-    resp.raise_for_status()
 
-    # H7: Check content type
-    content_type = resp.headers.get("content-type", "")
-    log.info(f"Groq TTS content-type: {content_type}")
-    
-    if "mpeg" in content_type or "mp3" in content_type:
-        aplay_cmd = ["ffplay", "-nodisp", "-autoexit", "-"]
-    elif "wav" in content_type:
-        aplay_cmd = ["aplay", "-D", "pulse", "-q", "-"]
+    # Orpheus hard limit: 200 chars per request — chunk if needed
+    _MAX_CHARS = 190  # leave a small buffer
+    chunks = []
+    if len(text) <= _MAX_CHARS:
+        chunks = [text]
     else:
-        aplay_cmd = ["aplay", "-D", "pulse", "-q", "-f", "S16_LE", "-r", "24000", "-c", "1", "-"]
-    
-    aplay = subprocess.Popen(
-        aplay_cmd,
-        stdin=subprocess.PIPE,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    # H1: Track aplay PID
-    with _aplay_pid_lock:
-        _aplay_pid = aplay.pid
-    try:
-        for chunk in resp.iter_content(chunk_size=4096):
-            if chunk:
-                aplay.stdin.write(chunk)
-        aplay.stdin.close()
-        try:
-            aplay.wait(timeout=60)
-        except subprocess.TimeoutExpired:
-            log.warning("Groq TTS: aplay hung — killing")
-            aplay.kill()
-    except Exception:
-        aplay.kill()
-        raise
-    finally:
+        # Split on sentence boundaries, group up to limit
+        import re as _re
+        sentences = _re.split(r'(?<=[.!?])\s+', text.strip())
+        current = ""
+        for sent in sentences:
+            if len(current) + len(sent) + 1 <= _MAX_CHARS:
+                current = (current + " " + sent).strip() if current else sent
+            else:
+                if current:
+                    chunks.append(current)
+                # If single sentence > limit, hard-truncate
+                current = sent[:_MAX_CHARS]
+        if current:
+            chunks.append(current)
+
+    for chunk in chunks:
+        if not chunk.strip():
+            continue
+        resp = requests.post(
+            "https://api.groq.com/openai/v1/audio/speech",
+            headers={
+                "Authorization": f"Bearer {groq_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": GROQ_TTS_MODEL,
+                "input": chunk,
+                "voice": GROQ_TTS_VOICE,
+                "response_format": "wav",
+            },
+            stream=True,
+            timeout=20,
+        )
+        resp.raise_for_status()
+
+        # Orpheus always returns WAV
+        aplay_cmd = ["aplay", "-D", "pulse", "-q", "-"]
+
+        aplay = subprocess.Popen(
+            aplay_cmd,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
         with _aplay_pid_lock:
-            _aplay_pid = None
+            _aplay_pid = aplay.pid
+        try:
+            for audio_chunk in resp.iter_content(chunk_size=4096):
+                if audio_chunk:
+                    aplay.stdin.write(audio_chunk)
+            aplay.stdin.close()
+            try:
+                aplay.wait(timeout=60)
+            except subprocess.TimeoutExpired:
+                log.warning("Groq Orpheus TTS: aplay hung — killing")
+                aplay.kill()
+        except Exception:
+            aplay.kill()
+            raise
+        finally:
+            with _aplay_pid_lock:
+                _aplay_pid = None
 
 
 CHATTERBOX_WORKER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "chatterbox_worker.py")

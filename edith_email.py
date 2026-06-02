@@ -37,11 +37,12 @@ Respond ONLY in this exact JSON format, nothing else:
   "body": "Full email body here"
 }}"""
     import json
-    response = _llm_gen(MODELS["chat"], prompt)
+    response = _llm_gen(prompt, intent="email")
     # Strip markdown fences if present
     if response.startswith("```"):
-        response = response.split("```")[1]
-        if response.starprompt, intent="email"
+        parts = response.split("```")
+        response = parts[1] if len(parts) > 1 else response
+        if response.startswith("json"):
             response = response[4:]
     response = response.strip()
     return json.loads(response)

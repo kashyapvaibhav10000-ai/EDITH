@@ -799,6 +799,14 @@ do it differently." That's what makes you useful. That's what makes you real.
         else:
             conversation_history.append(u_msg)
             conversation_history.append(a_msg)
+            # Keep HistoryManager in sync so its token-based auto-compaction is active
+            _history_manager.add("user", user_input)
+            _history_manager.add("assistant", reply)
+            # Use HistoryManager's compacted view for future context (syncs back to list)
+            _compacted = _history_manager.get_context()
+            if len(_compacted) < len(conversation_history):
+                conversation_history = _compacted
+                log.debug(f"[HistoryManager] compacted context: {len(_compacted)} msgs")
             _append_session_jsonl(u_msg)
             _append_session_jsonl(a_msg)
             # Final cap to prevent unbounded growth

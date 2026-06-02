@@ -120,11 +120,11 @@ def ask_code_like_vaibhav(question):
     with open(CODING_PERSONALITY_TXT) as _fh:
         personality = _fh.read()
     prompt = personality + f"\n\nTask: {question}\n\nWrite the code:"
-    return _llm_gen(MODELS["chat"], prompt)
+    return _llm_gen(prompt, intent="code")
 
 if __name__ == "__main__":
     if not os.path.exists(CODING_PERSONALITY_TXT):
-        extract_stylprompt, intent="code"
+        extract_style()
     print("\n[EDITH Coding Assistant] Powered by your style")
     print("Ask me to write any code — I'll code like you!\n")
     while True:

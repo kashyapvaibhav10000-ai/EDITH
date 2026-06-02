@@ -27,8 +27,7 @@ def run_all_tests() -> list:
 
     # 1. Config
     def test_config():
-        from config import MODELS, DANGER_KEYWORDS, INPUT_SCOPE_CATEGORIES
-        assert MODELS["chat"] == "gemma3:1b"
+        from config import DANGER_KEYWORDS, INPUT_SCOPE_CATEGORIES
         assert len(DANGER_KEYWORDS) > 5
         assert "security" in INPUT_SCOPE_CATEGORIES
     results.append(_test("Config loads correctly", test_config))

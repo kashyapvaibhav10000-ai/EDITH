@@ -1,5 +1,65 @@
-My name is Vaibhav. I am a developer working on AyurStock Pro.
+My name is Vaibhav Kashyap. I am a solo software developer and AI builder.
 I live in Fatehpur, Uttar Pradesh, India.
-I am building a personal AI assistant called EDITH.
-EDITH stands for Even Dead I'm The Hero.
-My PC has an Intel i5-12400, 8GB RAM, 1TB SSD, running Manjaro Linux.
+I am building a personal AI assistant called EDITH (Even Dead I'm The Hero).
+My PC has an Intel i5-12400, 8GB RAM, 1TB SSD, running Manjaro Linux. No GPU — CPU only.
+
+PROJECTS
+--------
+I am working on two serious projects simultaneously:
+1. EDITH — a personal AI operating system that I built from scratch for myself. It is production v1.0 and runs as a background daemon on my machine.
+2. AyurStock Pro — a cloud-based SaaS platform for Ayurvedic pharmacies and medicine distribution businesses in India. It handles inventory, billing, prescriptions, and reporting.
+
+WORK STYLE AND SCHEDULE
+------------------------
+I work best late at night — my most productive hours are 10pm to 3am.
+In the mornings I am slower and need time to ramp up.
+I prefer deep work sessions without interruption when I am in flow state.
+I often context-switch between EDITH and AyurStock when I get stuck on one.
+I keep a devlog journal to track my progress and decisions.
+I use Telegram as my main remote interface to EDITH when I am away from my desk.
+
+TECHNICAL PREFERENCES
+----------------------
+I strongly prefer Python for everything. I avoid JavaScript where possible.
+I like clean, functional code with minimal abstraction layers.
+I prefer direct, readable code over clever one-liners.
+I do not like verbose docstrings in simple utility functions.
+I use FastAPI for all web backends. I have been using it for over 2 years.
+I use SQLite for almost all local storage — I rarely need a full database server.
+I use ChromaDB for vector storage and LlamaIndex for RAG.
+I run Manjaro Linux and am comfortable in the terminal.
+My shell is zsh with Oh My Zsh. I use VS Code as my editor.
+I strongly dislike vendor lock-in and prefer open source tools.
+I have a zero-cost philosophy for EDITH — I only use free-tier APIs.
+I use Groq as my primary LLM API because it is the fastest free tier available.
+I back things up frequently and believe in defensive programming.
+
+COMMUNICATION PREFERENCES
+--------------------------
+I prefer short, direct responses. Do not pad with fluff.
+I do not want bullet point walls when a paragraph will do.
+I dislike when AI starts responses with "Great question!" or "Certainly!".
+I appreciate when EDITH pushes back if I am wrong or missing something.
+I want honesty over comfort — tell me the real assessment, not what I want to hear.
+When I am deep in problem-solving mode, match my energy — go technical and precise.
+When I am just chatting, be casual and relaxed.
+I call EDITH "Boss" sometimes but mostly just talk naturally.
+
+GOALS AND NORTH STAR
+---------------------
+My prime directive: Build a career in AI/ML and software engineering. Ship real products (AyurStock Pro, EDITH). Stay focused, stay learning, stay building.
+My immediate goal for EDITH is to make it genuinely know me — remember my context, adapt to my style, and be a real extension of my thinking rather than a generic assistant.
+My immediate goal for AyurStock Pro is to get it to paying customers in India.
+Long term I want to work on AI systems and possibly start a company.
+
+PERSONAL FACTS
+--------------
+I am from Fatehpur, a city in Uttar Pradesh in central India.
+I am a solo developer — I do not have a team. I build everything myself.
+I take pride in building ambitious systems from scratch.
+I find conventional career paths boring and prefer building my own path.
+I get frustrated when things do not work as expected, especially flaky APIs or tools.
+I value reliability and predictability in the tools I use.
+KDE Connect device ID for my phone: 73517393415c46c9919085918cdccfe4
+My city for weather lookups: Fatehpur, Uttar Pradesh, India (IST timezone)
+AyurStock Pro project path on my machine: ~/Documents/Ayur-stock pro

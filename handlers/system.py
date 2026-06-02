@@ -11,9 +11,14 @@ def _handle_wake(ctx: DispatchContext) -> Result:
 
 
 def _handle_session_end(ctx: DispatchContext) -> Result:
-    return Result.success(
-        "Session noted. Goodbye, Boss. All conversation history has been saved. 👋"
-    )
+    try:
+        from session import end_session
+        summary = end_session()
+        return Result.success(summary)
+    except Exception as e:
+        return Result.success(
+            "Session ended. Goodbye, Boss. All conversation history has been saved. 👋"
+        )
 
 
 def _handle_system_health(ctx: DispatchContext) -> Result:

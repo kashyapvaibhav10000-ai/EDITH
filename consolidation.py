@@ -36,23 +36,48 @@ def _needs_consolidation() -> bool:
 
 
 def _get_all_observations() -> list:
-    """Retrieve all profile observations with their IDs and metadata."""
+    """Retrieve all profile observations from SmartMemoryManager (primary) with ChromaDB fallback."""
+    entries = []
+
+    # Primary: SmartMemoryManager (where cognitive_profile.py now writes)
+    try:
+        from config import MEMORY_ARCHIVE_PATH, SMART_MEMORY_MAX_RAM_ITEMS, SMART_MEMORY_MAX_RAM_MB
+        from smart_memory import SmartMemoryManager
+        profile_mem = SmartMemoryManager(
+            db_path=MEMORY_ARCHIVE_PATH,
+            max_ram_items=SMART_MEMORY_MAX_RAM_ITEMS,
+            max_ram_mb=SMART_MEMORY_MAX_RAM_MB,
+        )
+        all_memories = profile_mem.get_all(category="user_profile", limit=100)
+        for i, mem in enumerate(all_memories):
+            value = mem.get("value", mem) if isinstance(mem, dict) else mem
+            key = mem.get("key", f"sm_{i}") if isinstance(mem, dict) else f"sm_{i}"
+            entries.append({
+                "id": key,
+                "text": str(value),
+                "timestamp": "",
+                "type": "observation",
+                "source": "smart_memory",
+            })
+    except Exception as e:
+        log.warning(f"SmartMemory profile read failed: {e}")
+
+    # Fallback: ChromaDB (legacy entries written before the migration)
     try:
         data = _get_profile_collection().get()
-        if not data["documents"]:
-            return []
-        entries = []
-        for doc, doc_id, meta in zip(data["documents"], data["ids"], data["metadatas"]):
-            entries.append({
-                "id": doc_id,
-                "text": doc,
-                "timestamp": meta.get("timestamp", ""),
-                "type": meta.get("type", "observation"),
-            })
-        return entries
+        if data["documents"]:
+            for doc, doc_id, meta in zip(data["documents"], data["ids"], data["metadatas"]):
+                entries.append({
+                    "id": doc_id,
+                    "text": doc,
+                    "timestamp": meta.get("timestamp", ""),
+                    "type": meta.get("type", "observation"),
+                    "source": "chromadb",
+                })
     except Exception as e:
-        log.error(f"Failed to get observations: {e}")
-        return []
+        log.warning(f"ChromaDB profile read failed: {e}")
+
+    return entries
 
 
 def run_consolidation() -> str:
@@ -159,32 +184,55 @@ Rules:
     deleted_count = 0
     added_count = 0
 
-    # Delete merged observations
-    if merged_ids:
-        try:
-            _get_profile_collection().delete(ids=list(merged_ids))
-            deleted_count = len(merged_ids)
-            log.info(f"Deleted {deleted_count} merged observations")
-        except Exception as e:
-            log.error(f"Failed to delete merged observations: {e}")
+    # Delete merged observations from both stores
+    chroma_ids_to_delete = [mid for mid in merged_ids
+                             if any(e["id"] == mid and e.get("source") == "chromadb"
+                                    for e in observations)]
+    sm_keys_to_delete = [mid for mid in merged_ids
+                          if any(e["id"] == mid and e.get("source") == "smart_memory"
+                                 for e in observations)]
 
-    # Add core truths
-    timestamp = datetime.datetime.now().isoformat()
-    for i, truth in enumerate(core_truths):
-        doc_id = f"core_truth_{abs(hash(truth + timestamp))}_{i}"
+    if chroma_ids_to_delete:
         try:
-            _get_profile_collection().upsert(
-                documents=[truth],
-                ids=[doc_id],
-                metadatas=[{
-                    "timestamp": timestamp,
-                    "type": "core_truth",
-                    "session": "consolidation",
-                }],
-            )
-            added_count += 1
+            _get_profile_collection().delete(ids=chroma_ids_to_delete)
+            deleted_count += len(chroma_ids_to_delete)
+            log.info(f"Deleted {len(chroma_ids_to_delete)} ChromaDB observations")
         except Exception as e:
-            log.error(f"Failed to add core truth: {e}")
+            log.error(f"Failed to delete ChromaDB observations: {e}")
+
+    if sm_keys_to_delete:
+        try:
+            from config import MEMORY_ARCHIVE_PATH, SMART_MEMORY_MAX_RAM_ITEMS, SMART_MEMORY_MAX_RAM_MB
+            from smart_memory import SmartMemoryManager
+            profile_mem = SmartMemoryManager(
+                db_path=MEMORY_ARCHIVE_PATH,
+                max_ram_items=SMART_MEMORY_MAX_RAM_ITEMS,
+                max_ram_mb=SMART_MEMORY_MAX_RAM_MB,
+            )
+            for key in sm_keys_to_delete:
+                profile_mem.delete(key)
+            deleted_count += len(sm_keys_to_delete)
+            log.info(f"Deleted {len(sm_keys_to_delete)} SmartMemory observations")
+        except Exception as e:
+            log.error(f"Failed to delete SmartMemory observations: {e}")
+
+    # Add core truths to SmartMemoryManager (primary store)
+    timestamp = datetime.datetime.now().isoformat()
+    try:
+        from config import MEMORY_ARCHIVE_PATH, SMART_MEMORY_MAX_RAM_ITEMS, SMART_MEMORY_MAX_RAM_MB
+        from smart_memory import SmartMemoryManager
+        profile_mem = SmartMemoryManager(
+            db_path=MEMORY_ARCHIVE_PATH,
+            max_ram_items=SMART_MEMORY_MAX_RAM_ITEMS,
+            max_ram_mb=SMART_MEMORY_MAX_RAM_MB,
+        )
+        for i, truth in enumerate(core_truths):
+            doc_id = f"core_truth_{abs(hash(truth + timestamp))}_{i}"
+            profile_mem.remember(key=doc_id, value=truth, category="user_profile")
+            added_count += 1
+            log.info(f"Core truth stored: {truth[:60]}")
+    except Exception as e:
+        log.error(f"Failed to add core truths to SmartMemory: {e}")
 
     with _consol_lock:
         _last_consolidation = datetime.datetime.now()

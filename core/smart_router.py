@@ -673,12 +673,33 @@ def _call_openrouter_stream(prompt: str, system: str = ""):
 
 
 def _call_ollama_stream(prompt: str, system: str = ""):
-    """Stream from local Ollama."""
+    """Stream from local Ollama. Only used when Ollama is running locally."""
     final_system = f"{EDITH_PERSONA_PREFIX}\n\n{system}" if system else EDITH_PERSONA_PREFIX
     messages = [{"role": "system", "content": final_system}, {"role": "user", "content": prompt}]
-    for chunk in ollama_lib.chat(model=PROVIDER_MODELS["ollama"], messages=messages, stream=True):
-        token = chunk["message"]["content"]
-        if token: yield token
+    try:
+        import requests as _req
+        _OLLAMA_URL = "http://localhost:11434"
+        _model = PROVIDER_MODELS.get("ollama", "llama3")
+        resp = _req.post(
+            f"{_OLLAMA_URL}/api/chat",
+            json={"model": _model, "messages": messages, "stream": True},
+            stream=True, timeout=60,
+        )
+        resp.raise_for_status()
+        for line in resp.iter_lines():
+            if line:
+                try:
+                    data = json.loads(line.decode("utf-8"))
+                    token = data.get("message", {}).get("content", "")
+                    if token:
+                        yield token
+                    if data.get("done"):
+                        break
+                except (ValueError, KeyError):
+                    continue
+    except Exception as e:
+        log.warning(f"Ollama stream failed: {e}")
+        return
 
 _PROVIDER_STREAM_CALLS = {
     "groq": _call_groq_stream,

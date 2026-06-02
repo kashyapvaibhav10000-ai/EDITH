@@ -163,12 +163,10 @@ def analyze_photo(image_path, question="What do you see in this image?"):
     if not os.path.exists(image_path):
         return f"I can't find that file: {image_path}. Double-check the path and try again."
 
-    if not _check_vision_model():
-        return f"The vision model ({MODELS['vision']}) isn't loaded. Run `ollama pull {MODELS['vision']}` first."
-
     log.info(f"Analyzing photo: {image_path}")
     description = analyze_image(image_path, question)
-    
+    _log_vision_analysis(image_path, description)
+    return description if description else "Could not analyze the image. Check that GEMINI_API_KEY is set in the vault."
 if __name__ == "__main__":
     print("EDITH Vision Test")
     print("1. Analyze screenshot")

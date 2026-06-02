@@ -102,7 +102,6 @@ Body: {em['body']}
 
 Summary:"""
         try:
-            # summary = _llm(MODELS["chat"], prompt)
             summary = smart_call(prompt, intent="reason")
         except Exception as e:
             log.error(f"Email summarization failed: {e}")
