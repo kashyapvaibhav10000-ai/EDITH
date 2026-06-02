@@ -802,18 +802,41 @@ def start_briefing_scheduler():
 
 
 if __name__ == "__main__":
-    print("[EDITH Telegram Bot]")
-    print("1. Poll for messages (live terminal)")
-    print("2. Send weekly briefing now")
-    print("3. Start scheduler + polling")
-    choice = input(">> ").strip()
+    import sys
 
-    if choice == "1":
+    # Support CLI args for non-interactive server startup:
+    #   python telegram_bot.py poll        — poll only
+    #   python telegram_bot.py start       — scheduler + polling (default for server)
+    #   python telegram_bot.py briefing    — send weekly briefing now and exit
+    # No args → interactive menu (local dev only)
+
+    _cmd = sys.argv[1].lower() if len(sys.argv) > 1 else None
+
+    if _cmd in ("poll",):
         poll_telegram()
-    elif choice == "2":
-        send_weekly_briefing()
-    elif choice == "3":
+    elif _cmd in ("start", "server"):
         start_briefing_scheduler()
         poll_telegram()
+    elif _cmd in ("briefing",):
+        send_weekly_briefing()
+    elif _cmd is None:
+        # Interactive menu — local dev
+        print("[EDITH Telegram Bot]")
+        print("1. Poll for messages (live terminal)")
+        print("2. Send weekly briefing now")
+        print("3. Start scheduler + polling")
+        choice = input(">> ").strip()
+
+        if choice == "1":
+            poll_telegram()
+        elif choice == "2":
+            send_weekly_briefing()
+        elif choice == "3":
+            start_briefing_scheduler()
+            poll_telegram()
+        else:
+            print("Usage: python telegram_bot.py [poll|start|briefing]")
     else:
-        print("Run with: python telegram_bot.py")
+        print(f"Unknown command: {_cmd}")
+        print("Usage: python telegram_bot.py [poll|start|briefing]")
+        sys.exit(1)
