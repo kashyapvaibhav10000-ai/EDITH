@@ -70,6 +70,9 @@ def save_vault(password, vault):
     with open(tmp_path, "wb") as vf:
         vf.write(encrypted)
     os.replace(tmp_path, VAULT_PATH)
+    # Enforce owner-only permissions — vault must not be world-readable
+    os.chmod(VAULT_PATH, 0o600)
+    os.chmod(VAULT_SALT_PATH, 0o600)
 
 def rotate_key(old_password, new_password):
     vault = load_vault(old_password)

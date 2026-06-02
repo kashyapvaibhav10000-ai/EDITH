@@ -156,21 +156,31 @@ def _llm_gen(prompt, intent="reason"):
 # Core helpers (preserved for intent_dispatch.py)
 # ──────────────────────────────────────────────
 def is_dangerous(cmd):
-    """Check if a command contains any dangerous patterns."""
+    """Check if a command contains any dangerous patterns.
+    
+    Uses regex-based normalization to catch whitespace obfuscation,
+    command substitution, variable expansion, and semicolon chaining.
+    """
     cmd_lower = cmd.lower().strip()
-    cmd_nospace = cmd_lower.replace(" ", "")
+    # Normalize ALL whitespace variants (double spaces, tabs, newlines) — not just single space
+    cmd_nospace = re.sub(r'\s+', '', cmd_lower)
     for pattern in DANGEROUS_PATTERNS:
-        pattern_nospace = pattern.lower().replace(" ", "")
+        pattern_nospace = re.sub(r'\s+', '', pattern.lower())
         if pattern.lower() in cmd_lower or pattern_nospace in cmd_nospace:
             return True
     if "|" in cmd and any(d in cmd_lower for d in ["rm", "dd", "mkfs", "shred", "wipefs"]):
         return True
     if ">" in cmd and any(f in cmd_lower for f in ["/etc/", "/dev/", "/boot/", "/usr/", "/bin/", "/sbin/"]):
         return True
+    # Detect semicolon command chaining — check each sub-statement recursively
+    if ";" in cmd:
+        for stmt in cmd.split(";"):
+            stmt = stmt.strip()
+            if stmt and is_dangerous(stmt):
+                return True
     _DANGER_REGEX = [
         r'\$\{[^}]+\}',                          # variable expansion ${VAR}
         r'`[^`]+`',                               # backtick execution
-        r';\s*\w',                                # semicolon command chaining
         r'\bnc\s+-\w*e\b|\bbash\s+-i\b|/dev/tcp', # reverse shells
         r'curl\s+\S+.*\|\s*(ba)?sh|wget\s+\S+.*\|\s*(ba)?sh', # remote exec
     ]
@@ -263,7 +273,7 @@ Step: {step}"""
 class AgentRunner:
     """Manages a single agent task through its state machine lifecycle."""
 
-    MAX_REPLANS = 2
+    MAX_REPLANS = 3
 
     def __init__(self, task: str, task_id: str = None):
         self.run = AgentRun(
@@ -351,13 +361,13 @@ class AgentRunner:
                         _persist(self.run)
                         return Result.failure(f"Step {idx+1} error: {step.error}", error_type="agent")
                     stdout_chunks.append(chunk)
-                stderr_data = await asyncio.wait_for(proc.stderr.read(_MAX_OUTPUT), timeout=30)
-                await asyncio.wait_for(proc.wait(), timeout=30)
+                stderr_data = await asyncio.wait_for(proc.stderr.read(_MAX_OUTPUT), timeout=120)
+                await asyncio.wait_for(proc.wait(), timeout=120)
             except asyncio.TimeoutError:
                 proc.kill()
                 await proc.wait()
                 step.status = "error"
-                step.error = "Timeout (30s)"
+                step.error = "Timeout (120s)"
                 self.run.current_step += 1
                 _persist(self.run)
                 return Result.failure(f"Step {idx+1} error: {step.error}", error_type="agent")

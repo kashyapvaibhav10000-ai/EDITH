@@ -305,6 +305,15 @@ async def chat_stream_endpoint(req: Request):
             except Exception:
                 pass
             used_sid = _persist_exchange(user_input, full_reply, req_session_id)
+            # Implicit feedback: detect if this message is a correction/satisfaction for prev response
+            try:
+                _recent = get_recent_traces(limit=2)
+                if len(_recent) >= 2:
+                    _prev_trace_id = _recent[1].get("trace_id")
+                    if _prev_trace_id:
+                        detect_implicit_feedback(_prev_trace_id, user_input)
+            except Exception:
+                pass
             yield f"data: {json.dumps({'type': 'done', 'id': msg_id, 'provider': provider, 'intent': intent, 'tts_engine': tts_engine, 'session_id': used_sid})}\n\n"
         except Exception as e:
             log.error(f"Streaming error: {e}")

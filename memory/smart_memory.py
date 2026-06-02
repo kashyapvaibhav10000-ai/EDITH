@@ -73,6 +73,13 @@ class SmartMemoryManager:
             CREATE INDEX IF NOT EXISTS idx_timestamp ON memories(timestamp DESC)
         """)
 
+        # Retrieval frequency column — additive migration, safe on existing DBs
+        try:
+            cursor.execute("ALTER TABLE memories ADD COLUMN retrieval_count INTEGER DEFAULT 0")
+            log.info("Added retrieval_count column to memories table")
+        except Exception:
+            pass  # Column already exists
+
         self.sql_db.commit()
         log.info("SmartMemoryManager database initialized")
 
@@ -107,7 +114,7 @@ class SmartMemoryManager:
                     if key in self.ram_cache:
                         del self.ram_cache[key]  # Move to end (most recent)
 
-                    self.ram_cache[key] = {"value": value, "timestamp": timestamp}
+                    self.ram_cache[key] = {"value": value, "timestamp": timestamp, "retrieval_count": 0}
 
                     # Evict LRU if RAM cache too large
                     while len(self.ram_cache) > self.max_ram_items:
@@ -138,76 +145,118 @@ class SmartMemoryManager:
         halflife = RECENCY_DECAY_HALFLIFE_DAYS
         return math.exp(-0.693 * age_days / halflife)  # ln(2) ≈ 0.693
 
-    def recall(self, query, n=3):
+    @staticmethod
+    def _combined_score(timestamp: float, retrieval_count: int) -> float:
+        """Score = recency_decay * (1 + log(retrieval_count + 1)).
+
+        Frequently recalled memories stay near the top regardless of age.
+        A memory recalled 10 times scores ~3.4x higher than one recalled once.
         """
-        Smart recall with recency decay scoring.
+        recency = SmartMemoryManager._recency_score(timestamp)
+        frequency_boost = 1.0 + math.log1p(retrieval_count)  # log1p(0)=0, log1p(9)≈2.3
+        return recency * frequency_boost
+
+    def recall(self, query, n=5):
+        """
+        Smart recall with combined recency + retrieval-frequency scoring.
         Check RAM first (fast), then SQLite (comprehensive).
-        Results are ranked by: keyword_match * recency_score.
+        Results ranked by: recency_decay * log(retrieval_count + 1).
+        Increments retrieval_count for every memory returned (frequency learning).
         Returns top n matches.
         """
         import re
         # Sanitize query for SQLite FTS5 (strip special syntax characters)
         safe_query = re.sub(r'[:\"^\*\|\(\)\[\]]', ' ', query)
-        
-        scored_results = []  # (score, value) tuples
+
+        scored_results = []   # (score, value, key) tuples — key used to bump retrieval_count
+        seen_keys = set()
 
         try:
             # Phase 1: Check RAM cache first (instant for recent memories)
             for key, data in list(self.ram_cache.items())[::-1]:  # Most recent first
+                if key in seen_keys:
+                    continue
                 if query.lower() in str(data["value"]).lower() or query.lower() in key.lower():
-                    score = self._recency_score(data["timestamp"])
-                    scored_results.append((score, data["value"]))
+                    rc = data.get("retrieval_count", 0)
+                    score = self._combined_score(data["timestamp"], rc)
+                    scored_results.append((score, data["value"], key))
+                    seen_keys.add(key)
 
             # Phase 2: Search SQLite with FTS if not enough results found in RAM
-            if len(scored_results) < n * 2:  # Fetch extra candidates for re-ranking
+            if len(scored_results) < n * 2:
                 cursor = self.sql_db.cursor()
 
-                # FTS query for full-text search
+                # FTS query — include retrieval_count in SELECT
                 cursor.execute("""
-                    SELECT value, timestamp FROM memories
-                    WHERE id IN (
+                    SELECT m.key, m.value, m.timestamp, COALESCE(m.retrieval_count, 0)
+                    FROM memories m
+                    WHERE m.id IN (
                         SELECT rowid FROM memories_fts
                         WHERE memories_fts MATCH ?
                         LIMIT ?
                     )
-                    ORDER BY timestamp DESC
+                    ORDER BY m.timestamp DESC
                 """, (safe_query, (n * 2) - len(scored_results)))
 
                 for row in cursor.fetchall():
-                    value = row[0]
-                    ts = row[1] if len(row) > 1 else time.time()
+                    k, value, ts, rc = row[0], row[1], row[2] or time.time(), row[3] or 0
+                    if k in seen_keys:
+                        continue
                     try:
                         parsed = json.loads(value)
                     except (json.JSONDecodeError, TypeError):
                         parsed = value
-                    score = self._recency_score(ts)
-                    scored_results.append((score, parsed))
+                    score = self._combined_score(ts, rc)
+                    scored_results.append((score, parsed, k))
+                    seen_keys.add(k)
 
-                # If FTS didn't find enough, try LIKE search (fallback)
+                # LIKE fallback if FTS didn't return enough
                 if len(scored_results) < n:
                     cursor.execute("""
-                        SELECT value, timestamp FROM memories
+                        SELECT key, value, timestamp, COALESCE(retrieval_count, 0)
+                        FROM memories
                         WHERE value LIKE ? OR key LIKE ?
                         ORDER BY timestamp DESC
                         LIMIT ?
                     """, (f"%{query}%", f"%{query}%", n - len(scored_results)))
 
                     for row in cursor.fetchall():
-                        value = row[0]
-                        ts = row[1] if len(row) > 1 else time.time()
+                        k, value, ts, rc = row[0], row[1], row[2] or time.time(), row[3] or 0
+                        if k in seen_keys:
+                            continue
                         try:
                             parsed = json.loads(value)
                         except (json.JSONDecodeError, TypeError):
                             parsed = value
-                        score = self._recency_score(ts)
-                        scored_results.append((score, parsed))
+                        score = self._combined_score(ts, rc)
+                        scored_results.append((score, parsed, k))
+                        seen_keys.add(k)
 
         except Exception as e:
             log.error(f"Error recalling query '{query}': {e}")
 
-        # Sort by recency-weighted score (highest first) and return top n
+        # Sort by combined score and return top n
         scored_results.sort(key=lambda x: x[0], reverse=True)
-        return [val for _, val in scored_results[:n]]
+        top = scored_results[:n]
+
+        # ── Increment retrieval_count for returned memories (frequency learning) ──
+        if top:
+            returned_keys = [k for _, _, k in top]
+            try:
+                cursor = self.sql_db.cursor()
+                cursor.executemany(
+                    "UPDATE memories SET retrieval_count = COALESCE(retrieval_count, 0) + 1 WHERE key = ?",
+                    [(k,) for k in returned_keys]
+                )
+                self.sql_db.commit()
+                # Also update RAM cache if present
+                for k in returned_keys:
+                    if k in self.ram_cache:
+                        self.ram_cache[k]["retrieval_count"] = self.ram_cache[k].get("retrieval_count", 0) + 1
+            except Exception as _re:
+                log.debug(f"retrieval_count update failed: {_re}")
+
+        return [val for _, val, _ in top]
 
     def get_all(self, category=None, limit=100):
         """Get all memories, optionally filtered by category"""

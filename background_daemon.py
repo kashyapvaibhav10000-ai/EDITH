@@ -604,6 +604,101 @@ def _run_weekly_tuner():
         log.error(f"Weekly tuner failed: {e}")
 
 
+# Track last-seen commit SHA per repo to avoid re-ingesting the same commit
+_last_seen_commits: dict = {}
+# Track last-seen devlog size to avoid re-ingesting unchanged content
+_last_devlog_size: int = 0
+
+
+def _ingest_context_activity():
+    """Every 15 min — ingest new git commits + devlog entries into EDITH's memory.
+
+    This gives EDITH ground-truth context about what Vaibhav is actually working on
+    without him needing to explicitly tell her. Inspired by OpenHuman's always-on
+    context ingestion pattern.
+    """
+    global _last_seen_commits, _last_devlog_size
+
+    _WATCHED_REPOS = [
+        EDITH_PATH,
+        os.path.expanduser("~/Documents/Ayur-stock pro"),
+    ]
+
+    # ── 1. Git commit ingestion ──
+    for repo_path in _WATCHED_REPOS:
+        if not os.path.isdir(os.path.join(repo_path, ".git")):
+            continue
+        repo_name = os.path.basename(repo_path)
+        try:
+            result = subprocess.run(
+                ["git", "-C", repo_path, "log", "--oneline", "-5",
+                 "--pretty=format:%H|%s|%ai"],
+                capture_output=True, text=True, timeout=10
+            )
+            if result.returncode != 0:
+                continue
+
+            last_known = _last_seen_commits.get(repo_name, "")
+            new_commits = []
+            for line in result.stdout.strip().splitlines():
+                parts = line.split("|", 2)
+                if len(parts) < 2:
+                    continue
+                sha, msg = parts[0][:12], parts[1].strip()
+                date = parts[2].strip() if len(parts) > 2 else ""
+                if sha == last_known:
+                    break
+                new_commits.append((sha, msg, date))
+
+            if new_commits:
+                # Update last-seen SHA
+                _last_seen_commits[repo_name] = new_commits[0][0]
+                # Ingest into memory
+                try:
+                    from orchestrator import remember
+                    for sha, msg, date in new_commits:
+                        mem_key = f"git_{repo_name}_{sha}"
+                        mem_value = f"[git:{repo_name}] {date[:10]} — {msg} (sha:{sha})"
+                        remember(mem_key, mem_value)
+                    log.info(f"[context_watcher] Ingested {len(new_commits)} new commits from {repo_name}")
+                except Exception as _me:
+                    log.debug(f"[context_watcher] memory write failed for {repo_name}: {_me}")
+        except Exception as _ge:
+            log.debug(f"[context_watcher] git read failed for {repo_name}: {_ge}")
+
+    # ── 2. Devlog ingestion ──
+    devlog_path = os.path.join(EDITH_PATH, "devlog.md")
+    if os.path.exists(devlog_path):
+        try:
+            current_size = os.path.getsize(devlog_path)
+            if current_size > _last_devlog_size:
+                with open(devlog_path, encoding="utf-8") as _df:
+                    content = _df.read()
+                # Only process the new portion
+                new_bytes = current_size - _last_devlog_size
+                new_content = content[-new_bytes:] if new_bytes < len(content) else content
+                _last_devlog_size = current_size
+
+                # Extract individual log entries (lines starting with "##" or "- ")
+                new_entries = [
+                    line.strip() for line in new_content.splitlines()
+                    if line.strip() and len(line.strip()) > 20
+                ][:10]  # Cap at 10 new entries per cycle
+
+                if new_entries:
+                    try:
+                        from orchestrator import remember
+                        import time as _t
+                        for entry in new_entries:
+                            mem_key = f"devlog_{abs(hash(entry))}"
+                            remember(mem_key, f"[devlog] {entry[:150]}")
+                        log.info(f"[context_watcher] Ingested {len(new_entries)} devlog entries")
+                    except Exception as _me:
+                        log.debug(f"[context_watcher] devlog memory write failed: {_me}")
+        except Exception as _de:
+            log.debug(f"[context_watcher] devlog read failed: {_de}")
+
+
 # ──────────────────────────────────────────────
 # Scheduler Setup
 # ──────────────────────────────────────────────
@@ -662,12 +757,16 @@ def _setup_schedule():
     # Weekly router tuner: Monday 4 AM
     schedule.every().monday.at("04:00").do(_run_weekly_tuner)
 
+    # Git commit + devlog context watcher: every 15 minutes
+    schedule.every(15).minutes.do(_ingest_context_activity)
+
     log.info("Scheduled tasks configured:")
     log.info("  03:00 → Nightly maintenance (backup + consolidation + cleanup)")
     log.info("  07:00 → Pre-fetch weather")
     log.info("  08:00 → Pre-fetch daily report")
     log.info("  Every 5 min → KDE heartbeat")
     log.info("  Every 10 min → Proactive checks (disk, breaks)")
+    log.info("  Every 15 min → Git commit + devlog context watcher")
 
 
 def _scheduler_loop():

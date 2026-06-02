@@ -315,7 +315,7 @@ def _schedule_cleanup():
     threading.Timer(86400, _schedule_cleanup).start()
 
 
-def recall(query, n=3):
+def recall(query, n=5):
     """Recall from smart memory with fallback to ChromaDB"""
     # Try smart memory first
     results = smart_memory.recall(query, n=n)
@@ -511,7 +511,7 @@ def _maybe_create_skill(task_id: str, summary: str) -> None:
 
 
 def _post_turn_reflection(user_input: str, response: str) -> None:
-    """Fire-and-forget: ask cheap LLM if anything worth saving."""
+    """Fire-and-forget: save facts, detect contradictions, update memory.md."""
     import threading
     def _reflect():
         try:
@@ -524,17 +524,182 @@ def _post_turn_reflection(user_input: str, response: str) -> None:
                 "If NO: reply with exactly: SKIP"
             )
             result = smart_call(prompt, intent="memory")
-            if result and isinstance(result, str) and "SKIP" not in result.upper():
-                key = f"reflection_{abs(hash(user_input))}"
-                remember(key, result.strip()[:100])
-                log.info(f"[reflection] saved: {result.strip()[:60]}")
-                try:
-                    extract_and_store_triples(f"{user_input} {response}")
-                except Exception as e:
-                    log.warning(f"Graph extraction failed: {e}")
+            if not result or not isinstance(result, str) or "SKIP" in result.upper():
+                return
+
+            new_fact = result.strip()[:100]
+
+            # ── Contradiction check (Change 3) ──
+            # Ask the LLM if this new fact contradicts anything already stored
+            try:
+                existing = smart_memory.recall(new_fact, n=3)
+                existing_text = "\n".join(
+                    str(m.get("value", m) if isinstance(m, dict) else m)
+                    for m in existing
+                )
+                if existing_text.strip():
+                    contra_prompt = (
+                        f"Existing memory entries:\n{existing_text}\n\n"
+                        f"New fact to save: {new_fact}\n\n"
+                        "Does the new fact CONTRADICT or UPDATE any existing entry?\n"
+                        "If YES: reply with the key to delete (first 40 chars of the old entry) "
+                        "then a newline then the corrected merged fact.\n"
+                        "Format: DELETE: <old snippet>\nSAVE: <merged fact>\n"
+                        "If NO contradiction: reply with exactly: NOCONFLICT"
+                    )
+                    contra_result = smart_call(contra_prompt, intent="memory")
+                    if contra_result and "DELETE:" in contra_result:
+                        lines = contra_result.strip().splitlines()
+                        for line in lines:
+                            if line.startswith("DELETE:"):
+                                old_snippet = line[7:].strip()
+                                # Find and delete matching memory key
+                                try:
+                                    import sqlite3 as _sql
+                                    from config import MEMORY_ARCHIVE_PATH
+                                    conn = _sql.connect(MEMORY_ARCHIVE_PATH)
+                                    conn.execute(
+                                        "DELETE FROM memories WHERE value LIKE ?",
+                                        (f"%{old_snippet[:30]}%",)
+                                    )
+                                    conn.commit()
+                                    conn.close()
+                                    log.info(f"[reflection] contradiction resolved — deleted: {old_snippet[:40]}")
+                                except Exception as _de:
+                                    log.debug(f"Contradiction delete failed: {_de}")
+                            elif line.startswith("SAVE:"):
+                                new_fact = line[5:].strip()[:100]
+            except Exception as _ce:
+                log.debug(f"Contradiction check failed (using original fact): {_ce}")
+
+            key = f"reflection_{abs(hash(user_input))}"
+            remember(key, new_fact)
+            log.info(f"[reflection] saved: {new_fact[:60]}")
+
+            # ── Update memory.md (Change 1 dynamic part) ──
+            try:
+                import datetime as _dt
+                _notes_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "notes")
+                _mem_path = os.path.join(_notes_dir, "memory.md")
+                if os.path.exists(_mem_path):
+                    with open(_mem_path, encoding="utf-8") as _mf:
+                        _content = _mf.read()
+                    _ts = _dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+                    _new_line = f"\n- [{_ts}] {new_fact}"
+                    # Insert after "## Recent Observations" section header
+                    if "## Recent Observations" in _content:
+                        _content = _content.replace(
+                            "## Recent Observations",
+                            f"## Recent Observations{_new_line}"
+                        )
+                    else:
+                        _content += f"{_new_line}"
+                    # Prune: keep at most 30 observation lines in memory.md
+                    _lines = _content.splitlines()
+                    _obs_lines = [l for l in _lines if l.startswith("- [20")]
+                    if len(_obs_lines) > 30:
+                        _to_remove = _obs_lines[:-30]
+                        for _old in _to_remove:
+                            _content = _content.replace(_old + "\n", "")
+                    with open(_mem_path, "w", encoding="utf-8") as _mf:
+                        _mf.write(_content)
+                    log.debug(f"[reflection] memory.md updated")
+            except Exception as _me:
+                log.debug(f"memory.md update failed: {_me}")
+
+            try:
+                extract_and_store_triples(f"{user_input} {response}")
+            except Exception as e:
+                log.warning(f"Graph extraction failed: {e}")
         except Exception as e:
             log.warning(f"Post-turn reflection failed: {e}")
     threading.Thread(target=_reflect, daemon=True).start()
+
+
+# Turn counter for periodic skill review (Change 2)
+_chat_turn_counter = 0
+_chat_turn_counter_lock = threading.Lock()
+
+
+def _maybe_review_skills_from_chat(user_input: str, response: str) -> None:
+    """Every 10 chat turns, check if recent conversation warrants a new skill.
+
+    Hermes-style: skills grow from normal use, not just agent task completion.
+    """
+    global _chat_turn_counter
+    with _chat_turn_counter_lock:
+        _chat_turn_counter += 1
+        should_review = (_chat_turn_counter % 10 == 0)
+
+    if not should_review:
+        return
+
+    def _review():
+        try:
+            # Pull last 10 exchanges for context
+            recent = []
+            for src_hist in [conversation_history, *_source_history.values()]:
+                if src_hist:
+                    recent = src_hist[-20:]
+                    break
+            context = "\n".join(
+                f"{m.get('role','?')}: {m.get('content','')[:120]}"
+                for m in recent
+                if m.get("role") in ("user", "assistant")
+            )
+
+            prompt = (
+                f"Review these last 10 conversation turns:\n{context}\n\n"
+                "Is there a reusable workflow, pattern, or preference EDITH should "
+                "save as a skill for future sessions?\n"
+                "If YES: reply with a SKILL.md in this exact format:\n"
+                "---\n"
+                "name: <short-kebab-case-name>\n"
+                "trigger: <simple regex matching similar future requests>\n"
+                "inject: suffix\n"
+                "---\n"
+                "<ONE concise instruction line for EDITH, max 120 chars>\n"
+                "If NO (most of the time is NO): reply with exactly: SKIP"
+            )
+
+            result = smart_call(prompt, intent="reason")
+            if not result or "SKIP" in result.upper():
+                return
+
+            import re as _re
+            lines = result.strip().splitlines()
+            skill_name = None
+            skill_trigger = None
+            for line in lines:
+                if line.startswith("name:"):
+                    skill_name = line.split(":", 1)[1].strip()
+                if line.startswith("trigger:"):
+                    skill_trigger = line.split(":", 1)[1].strip()
+
+            if not skill_name:
+                return
+            if skill_trigger:
+                try:
+                    _re.compile(skill_trigger)
+                except _re.error:
+                    return
+
+            from skills_loader import SKILLS_DIR, reload_skills
+            skill_dir = os.path.join(SKILLS_DIR, skill_name)
+            os.makedirs(skill_dir, exist_ok=True)
+            skill_path = os.path.join(skill_dir, "SKILL.md")
+            if os.path.exists(skill_path):
+                return  # Already exists
+
+            with open(skill_path, "w", encoding="utf-8") as f:
+                f.write(result.strip())
+            reload_skills()
+            log.info(f"[skill_review] New skill from chat: {skill_name}")
+            remember(f"skill_from_chat_{skill_name}", f"EDITH learned skill from conversation: {skill_name}")
+        except Exception as e:
+            log.debug(f"[skill_review] failed: {e}")
+
+    threading.Thread(target=_review, daemon=True, name="skill-review").start()
 
 
 def _verify_response(query: str, response: str) -> str:
@@ -714,6 +879,19 @@ do it differently." That's what makes you useful. That's what makes you real.
 
 {memory_context}"""
 
+    # ── Inject user.md (static profile) + memory.md (dynamic) into system prompt ──
+    _notes_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "notes")
+    for _md_file, _label in [("user.md", "USER PROFILE"), ("memory.md", "DYNAMIC MEMORY")]:
+        _md_path = os.path.join(_notes_dir, _md_file)
+        try:
+            if os.path.exists(_md_path):
+                with open(_md_path, encoding="utf-8") as _mf:
+                    _md_content = _mf.read().strip()
+                if _md_content:
+                    system_prompt += f"\n\n## {_label}\n{_md_content}"
+        except Exception as _e:
+            log.debug(f"Could not inject {_md_file}: {_e}")
+
     # Inject project state context
     try:
         import json as _json
@@ -817,6 +995,7 @@ do it differently." That's what makes you useful. That's what makes you real.
     remember(_mem_key, f"Vaibhav said: {user_input}. EDITH replied: {reply}")
     _emit_memory_updated(_mem_key)
     _post_turn_reflection(user_input, reply)
+    _maybe_review_skills_from_chat(user_input, reply)  # every 10 turns, check for new skills
     try:
         save_episode(
             session_id=str(abs(hash(user_input + str(len(conversation_history))))),
