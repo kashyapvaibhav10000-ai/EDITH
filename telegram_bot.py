@@ -284,7 +284,13 @@ def poll_telegram():
                 text = msg.get("text", "").strip()
                 chat_id = str(msg.get("chat", {}).get("id", ""))
 
-                if chat_id != str(CHAT_ID) or not text:
+                # Security: reject messages from anyone other than the owner
+                if not chat_id or chat_id != str(CHAT_ID):
+                    if chat_id:
+                        log.warning(f"Rejected message from unauthorized chat_id={chat_id}")
+                    continue
+
+                if not text:
                     continue
 
                 if _tg_is_rate_limited(chat_id):
@@ -344,7 +350,13 @@ def handle_telegram_update(update: dict) -> None:
     text = msg.get("text", "").strip()
     chat_id = str(msg.get("chat", {}).get("id", ""))
 
-    if not text or chat_id != str(CHAT_ID):
+    # Security: reject messages from anyone other than the owner
+    if not chat_id or chat_id != str(CHAT_ID):
+        if chat_id:
+            log.warning(f"Webhook: rejected message from unauthorized chat_id={chat_id}")
+        return
+
+    if not text:
         return
 
     if _tg_is_rate_limited(chat_id):

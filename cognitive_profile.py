@@ -268,6 +268,26 @@ import os as _os
 
 _DRIFT_LOG_FILE = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "drift_log.json")
 
+# Module-level singleton for the sentence transformer — avoids 2-4s reload on every drift_score() call
+_st_model = None
+_st_model_lock = threading.Lock()
+
+
+def _get_st_model():
+    """Lazy-load SentenceTransformer once and reuse across all calls."""
+    global _st_model
+    if _st_model is not None:
+        return _st_model
+    with _st_model_lock:
+        if _st_model is None:
+            try:
+                from sentence_transformers import SentenceTransformer
+                _st_model = SentenceTransformer("all-MiniLM-L6-v2")
+                log.info("SentenceTransformer model loaded (all-MiniLM-L6-v2)")
+            except ImportError:
+                pass
+    return _st_model
+
 
 def drift_score() -> float:
     """Compute quantitative drift score (0.0 = aligned, 1.0 = fully drifted).
@@ -287,10 +307,12 @@ def drift_score() -> float:
 
     # ── Embedding-based semantic drift (preferred) ──
     try:
-        from sentence_transformers import SentenceTransformer
         import numpy as np
 
-        _model = SentenceTransformer("all-MiniLM-L6-v2")
+        _model = _get_st_model()
+        if _model is None:
+            raise ImportError("SentenceTransformer not available")
+
         directive_emb = _model.encode(PRIME_DIRECTIVE, normalize_embeddings=True)
 
         similarities = []

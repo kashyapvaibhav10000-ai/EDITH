@@ -66,6 +66,7 @@ class ApiWorker(QObject):
     response_signal = pyqtSignal(str, str)
     partial_signal  = pyqtSignal(str)
     loading_signal  = pyqtSignal(bool)
+    trace_signal    = pyqtSignal(str)   # emits trace_id from server response
 
     def send_message(self, message):
         self.loading_signal.emit(True)
@@ -73,22 +74,45 @@ class ApiWorker(QObject):
             with requests.post(STREAM_URL, json={"message": message}, stream=True, timeout=120) as res:
                 if res.status_code == 200:
                     full_reply = ""
+                    last_intent = "chat"
+                    last_trace_id = ""
                     for line in res.iter_lines():
                         if line:
                             decoded = line.decode("utf-8")
                             if decoded.startswith("data: "):
-                                content = decoded[6:]
-                                if content == "[DONE]":
-                                    break
-                                elif content.startswith("[STREAM_ERROR]"):
-                                    raise Exception(content)
-                                else:
-                                    full_reply += content
-                                    self.partial_signal.emit(content)
-                    self.response_signal.emit(full_reply, "chat")
+                                raw = decoded[6:]
+                                # Try to parse as JSON SSE event first
+                                try:
+                                    import json as _j
+                                    evt = _j.loads(raw)
+                                    evt_type = evt.get("type", "")
+                                    if evt_type == "token":
+                                        tok = evt.get("token", "")
+                                        full_reply += tok
+                                        self.partial_signal.emit(tok)
+                                    elif evt_type == "done":
+                                        last_intent = evt.get("intent", "chat")
+                                        last_trace_id = evt.get("trace_id", "")
+                                    elif evt_type == "error":
+                                        raise Exception(evt.get("error", "stream error"))
+                                except (ValueError, KeyError):
+                                    # Legacy plain-text token
+                                    if raw == "[DONE]":
+                                        break
+                                    elif raw.startswith("[STREAM_ERROR]"):
+                                        raise Exception(raw)
+                                    else:
+                                        full_reply += raw
+                                        self.partial_signal.emit(raw)
+                    if last_trace_id:
+                        self.trace_signal.emit(last_trace_id)
+                    self.response_signal.emit(full_reply, last_intent)
                     return
+            # Fallback: non-streaming JSON endpoint
             res = requests.post(API_URL, json={"message": message}, timeout=120)
             data = res.json()
+            if data.get("trace_id"):
+                self.trace_signal.emit(data["trace_id"])
             self.response_signal.emit(data.get("reply", "No reply."), data.get("intent", "chat"))
         except Exception as e:
             self.response_signal.emit(f"Connection Error: {e}", "error")
@@ -165,6 +189,7 @@ class EdithWidget(QWidget):
         self.api_worker.response_signal.connect(self._on_api_response)
         self.api_worker.partial_signal.connect(self._on_partial)
         self.api_worker.loading_signal.connect(self._on_loading)
+        self.api_worker.trace_signal.connect(self._on_trace_id)
 
         self.voice_worker = VoiceWorker()
         self.voice_worker.transcription_signal.connect(self._on_voice_result)
@@ -805,7 +830,7 @@ class EdithWidget(QWidget):
         final = self._streaming_buffer.strip() if self._streaming_buffer.strip() else reply
         self._streaming_buffer = ""
         self._last_reply = final
-        self._last_trace_id = f"trace_{int(time.time())}"
+        # _last_trace_id is set by _on_trace_id() via trace_signal before this fires
         latency = f"{time.time() - getattr(self, '_t_start', time.time()):.1f}s"
 
         self._append_bot(final, intent=intent, latency=latency)
@@ -813,25 +838,10 @@ class EdithWidget(QWidget):
         self.footer_label.setText(f"intent:{intent} · {latency}")
         self.feedback_bar.show()
 
-        # TTS (non-blocking, first 2 sentences)
-        if reply and not reply.startswith("Connection Error"):
-            def _tts(t):
-                import re as _re
-                import logging as _log
-                _wlog = _log.getLogger("edith.widget")
-                sentences = _re.split(r"(?<=[.!?]) +", t)
-                snippet = " ".join(sentences[:2])[:300]
-                try:
-                    from voice import speak
-                    speak(snippet)
-                except Exception as _e:
-                    _wlog.warning(f"Widget TTS error: {_e}")
-            # FIX 1D: Only launch TTS if not already active
-            from voice import _tts_active
-            if not _tts_active.is_set():
-                if not (self.tts_thread and self.tts_thread.is_alive()):
-                    self.tts_thread = threading.Thread(target=_tts, args=(reply,), daemon=True)
-                    self.tts_thread.start()
+    def _on_trace_id(self, trace_id: str):
+        """Receive precise trace_id from server — used for accurate feedback tagging."""
+        if trace_id:
+            self._last_trace_id = trace_id
 
     def _send_feedback(self, fb):
         trace_id = self._last_trace_id

@@ -361,7 +361,7 @@ class SmartMemory(SmartMemoryManager):
 # ──────────────────────────────────────────────
 # Context Compressor (Phase 2.4)
 # ──────────────────────────────────────────────
-def compress_context(chunks: list, similarity_threshold: float = 0.7) -> list:
+def compress_context(chunks: list, similarity_threshold: float = 0.6) -> list:
     """Deduplicate overlapping RAG chunks before sending to LLM.
 
     Compares every pair of chunks using SequenceMatcher.

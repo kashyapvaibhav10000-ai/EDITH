@@ -314,7 +314,14 @@ async def chat_stream_endpoint(req: Request):
                         detect_implicit_feedback(_prev_trace_id, user_input)
             except Exception:
                 pass
-            yield f"data: {json.dumps({'type': 'done', 'id': msg_id, 'provider': provider, 'intent': intent, 'tts_engine': tts_engine, 'session_id': used_sid})}\n\n"
+            # Include current trace_id in done event for precise widget feedback
+            _cur_trace_id = ""
+            try:
+                _tr = get_recent_traces(limit=1)
+                _cur_trace_id = _tr[0].get("trace_id", "") if _tr else ""
+            except Exception:
+                pass
+            yield f"data: {json.dumps({'type': 'done', 'id': msg_id, 'provider': provider, 'intent': intent, 'tts_engine': tts_engine, 'session_id': used_sid, 'trace_id': _cur_trace_id})}\n\n"
         except Exception as e:
             log.error(f"Streaming error: {e}")
             yield f"data: {json.dumps({'type': 'error', 'id': msg_id, 'error': str(e)})}\n\n"
@@ -381,4 +388,11 @@ async def chat_endpoint(req: Request):
                 detect_implicit_feedback(_prev_trace_id, user_input)
     except Exception:
         pass
-    return {"reply": reply, "intent": intent, "session_id": used_sid}
+    # Include trace_id in response so widget can send precise feedback
+    _trace_id = ""
+    try:
+        _tr = get_recent_traces(limit=1)
+        _trace_id = _tr[0].get("trace_id", "") if _tr else ""
+    except Exception:
+        pass
+    return {"reply": reply, "intent": intent, "session_id": used_sid, "trace_id": _trace_id}

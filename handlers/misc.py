@@ -123,24 +123,45 @@ def _handle_decision(ctx: DispatchContext) -> Result:
 
 def _handle_morning_briefing(ctx: DispatchContext) -> Result:
     parts = []
+    # Try prefetch cache first (near-instant) before making live API calls
     try:
-        from weather import get_current_weather, format_weather
-        r = get_current_weather()
-        parts.append(f"🌤️ Weather: {format_weather(r.value) if r.ok else 'Unavailable'}")
+        from background_daemon import get_cached
+    except ImportError:
+        get_cached = lambda *a, **kw: None  # not running under daemon
+
+    try:
+        cached_weather = get_cached("weather", max_age_seconds=3600)
+        if cached_weather:
+            parts.append(f"🌤️ Weather: {cached_weather}")
+        else:
+            from weather import get_current_weather, format_weather
+            r = get_current_weather()
+            parts.append(f"🌤️ Weather: {format_weather(r.value) if r.ok else 'Unavailable'}")
     except Exception:
         parts.append("🌤️ Weather: Unavailable")
+
     try:
-        from email_reader import check_inbox
-        r = check_inbox(limit=3, unread_only=True)
-        parts.append(f"📧 Email: {r.value if r.ok else 'Unavailable'}")
+        cached_email = get_cached("email_summary", max_age_seconds=1800)
+        if cached_email:
+            parts.append(f"📧 Email: {cached_email}")
+        else:
+            from email_reader import check_inbox
+            r = check_inbox(limit=3, unread_only=True)
+            parts.append(f"📧 Email: {r.value if r.ok else 'Unavailable'}")
     except Exception:
         parts.append("📧 Email: Unavailable")
+
     try:
-        from calendar_reader import get_today_briefing
-        r = get_today_briefing()
-        parts.append(f"📅 Calendar: {r.value if r.ok else 'Unavailable'}")
+        cached_cal = get_cached("daily_report", max_age_seconds=3600)
+        if cached_cal:
+            parts.append(f"📅 Calendar: {cached_cal}")
+        else:
+            from calendar_reader import get_today_briefing
+            r = get_today_briefing()
+            parts.append(f"📅 Calendar: {r.value if r.ok else 'Unavailable'}")
     except Exception:
         parts.append("📅 Calendar: Unavailable")
+
     try:
         from life_os import format_open_loops
         loops = format_open_loops()

@@ -151,12 +151,51 @@ smart_memory = SmartMemoryManager(
 import json as _json
 import threading
 SESSION_JSONL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "session_memory.jsonl")
+TELEGRAM_JSONL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "telegram_memory.jsonl")
 MAX_HISTORY = 20
 _rag_index = None
 _history_lock = threading.Lock()  # Prevent race conditions on conversation_history
 
 # O4: Per-source conversation history (widget, telegram, voice, cli are isolated)
 _source_history: dict[str, list] = {"widget": [], "telegram": [], "voice": [], "cli": []}
+
+
+def _load_telegram_history() -> list:
+    """Load Telegram conversation history from disk (survives daemon restarts)."""
+    try:
+        if os.path.exists(TELEGRAM_JSONL):
+            with open(TELEGRAM_JSONL, "r") as f:
+                lines = f.read().splitlines()
+                return [_json.loads(line) for line in lines[-MAX_HISTORY:] if line.strip()]
+    except Exception:
+        pass
+    return []
+
+
+def _append_telegram_jsonl(message: dict):
+    """Persist a Telegram message to disk for cross-restart continuity."""
+    try:
+        os.makedirs(os.path.dirname(TELEGRAM_JSONL), exist_ok=True)
+        with open(TELEGRAM_JSONL, "a") as f:
+            f.write(_json.dumps(message) + "\n")
+        # Rotate at 500 lines
+        with open(TELEGRAM_JSONL, "r") as f:
+            lines = f.readlines()
+        if len(lines) > 500:
+            import tempfile
+            with tempfile.NamedTemporaryFile(
+                mode="w", delete=False,
+                dir=os.path.dirname(TELEGRAM_JSONL), suffix=".jsonl"
+            ) as tmp:
+                tmp.writelines(lines[100:])
+                tmp_path = tmp.name
+            os.replace(tmp_path, TELEGRAM_JSONL)
+    except Exception as e:
+        log.debug(f"Telegram JSONL persist failed: {e}")
+
+
+# Pre-load Telegram history so it survives daemon restarts
+_source_history["telegram"] = _load_telegram_history()
 
 
 # ──────────────────────────────────────────────
@@ -743,7 +782,7 @@ def chat(user_input, intent="chat", device="unknown", source="widget"):
     log.debug(f"Input scope: {scope}, danger: {danger['is_dangerous']}")
 
     memories = recall(user_input)
-    episodes = recall_episodes(user_input, n=1)
+    episodes = recall_episodes(user_input, n=3)  # 3 past sessions for real continuity
 
     # --- Phase 2.4: Context Compression ---
     memory_list = memories if memories else []
@@ -978,6 +1017,10 @@ do it differently." That's what makes you useful. That's what makes you real.
             _source_history[source].append(a_msg)
             if len(_source_history[source]) > MAX_HISTORY:
                 _source_history[source] = _source_history[source][-MAX_HISTORY:]
+            # Persist Telegram history across daemon restarts
+            if source == "telegram":
+                _append_telegram_jsonl(u_msg)
+                _append_telegram_jsonl(a_msg)
         else:
             conversation_history.append(u_msg)
             conversation_history.append(a_msg)
@@ -1029,11 +1072,11 @@ def chat_stream(user_input: str, intent: str = None, context: str = "", system_p
     
     # Assembly of same system prompt as chat()
     memories = recall(user_input)
-    episodes = recall_episodes(user_input, n=1)
+    episodes = recall_episodes(user_input, n=3)  # 3 past sessions for real continuity
     memory_list = [m["value"] for m in memories if isinstance(m, dict) and "value" in m] or memories
     memory_context = "\n".join(str(m) for m in memory_list) if memory_list else "No specific facts recalled."
     if episodes:
-        memory_context += f"\n\nPast Session Context:\n{episodes[0]}"
+        memory_context += f"\n\nPast Session Context:\n" + "\n---\n".join(str(e) for e in episodes)
     system_prompt = f"""You are EDITH — Vaibhav's personal AI operating system, built by him, for him.
 You are not a generic assistant. You are not a chatbot. You are the most capable 
 mind Vaibhav has access to, and you treat every conversation like it matters.
@@ -1119,6 +1162,19 @@ do it differently." That's what makes you useful. That's what makes you real.
         system_prompt += f"\n\n## PROJECT STATE\n{_json.dumps(_ps, indent=2)}"
     except Exception:
         pass
+
+    # ── Inject user.md (static profile) + memory.md (dynamic) — same as chat() ──
+    _notes_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "notes")
+    for _md_file, _label in [("user.md", "USER PROFILE"), ("memory.md", "DYNAMIC MEMORY")]:
+        _md_path = os.path.join(_notes_dir, _md_file)
+        try:
+            if os.path.exists(_md_path):
+                with open(_md_path, encoding="utf-8") as _mf:
+                    _md_content = _mf.read().strip()
+                if _md_content:
+                    system_prompt += f"\n\n## {_label}\n{_md_content}"
+        except Exception as _e:
+            log.debug(f"chat_stream: Could not inject {_md_file}: {_e}")
 
     # Note: Council doesn't support streaming yet, so we fall back to smart_call_stream
     full_response = ""
