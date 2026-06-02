@@ -47,8 +47,36 @@ try:
 except Exception as _eb_err:
     log.warning(f"event_bus subscription failed: {_eb_err}")
 
-TOKEN = vault.get_secret("TELEGRAM_TOKEN", "") or os.getenv("TELEGRAM_TOKEN", "")
-CHAT_ID = vault.get_secret("TELEGRAM_CHAT_ID", "") or os.getenv("TELEGRAM_CHAT_ID", "")
+def _get_token() -> str:
+    """Resolve Telegram token — env var takes precedence over vault."""
+    # 1. Direct env var (set before launching: TELEGRAM_TOKEN=xxx python3 telegram_bot.py)
+    env_val = os.environ.get("TELEGRAM_TOKEN", "")
+    if env_val and len(env_val) > 10:
+        return env_val
+    # 2. Vault
+    try:
+        vault_val = vault.get_secret("TELEGRAM_TOKEN", "")
+        if vault_val and len(vault_val) > 10:
+            return vault_val
+    except Exception:
+        pass
+    return ""
+
+def _get_chat_id() -> str:
+    """Resolve Telegram chat ID — env var takes precedence over vault."""
+    env_val = os.environ.get("TELEGRAM_CHAT_ID", "")
+    if env_val:
+        return env_val
+    try:
+        vault_val = vault.get_secret("TELEGRAM_CHAT_ID", "")
+        if vault_val:
+            return vault_val
+    except Exception:
+        pass
+    return ""
+
+TOKEN = _get_token()
+CHAT_ID = _get_chat_id()
 
 # Per-sender rate limit: max 10 messages per 60 seconds
 _TG_RATE_LIMIT = 10
