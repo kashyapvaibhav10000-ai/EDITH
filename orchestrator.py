@@ -625,7 +625,11 @@ def _maybe_review_skills_from_chat(user_input: str, response: str) -> None:
     """Every 10 chat turns, check if recent conversation warrants a new skill.
 
     Hermes-style: skills grow from normal use, not just agent task completion.
+    Skills are local-only — skip on cloud node since they accumulate locally.
     """
+    # Skills are injected into local session prompts only — useless on cloud node
+    if os.getenv("EDITH_NODE_TYPE", "local") == "cloud":
+        return
     global _chat_turn_counter
     with _chat_turn_counter_lock:
         _chat_turn_counter += 1
