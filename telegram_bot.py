@@ -586,7 +586,10 @@ def poll_telegram():
     print("  Send messages from your phone → EDITH processes → replies")
     print("  Ctrl+C to stop\n")
 
-    send_telegram("🤖 *EDITH online.* Memory loaded. Awaiting commands, Boss.")
+    try:
+        send_telegram("🤖 *EDITH online.* Memory loaded. Awaiting commands, Boss.")
+    except Exception as e:
+        log.warning(f"Failed to send startup message: {e}")
 
     while True:
         try:
