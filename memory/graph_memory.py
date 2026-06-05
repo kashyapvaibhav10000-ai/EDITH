@@ -13,8 +13,27 @@ import os
 import json
 import threading
 import re
-import networkx as nx
 import datetime
+
+try:
+    import networkx as nx
+    _NETWORKX_AVAILABLE = True
+except ImportError:
+    _NETWORKX_AVAILABLE = False
+    # Stub NetworkX if not available
+    class nx:
+        class DiGraph:
+            def __init__(self):
+                pass
+            def add_node(self, *args, **kwargs):
+                pass
+            def add_edge(self, *args, **kwargs):
+                pass
+            def nodes(self, *args, **kwargs):
+                return []
+            def edges(self, *args, **kwargs):
+                return []
+
 from config import MEMORY_DB_PATH, get_logger
 from smart_router import smart_call
 

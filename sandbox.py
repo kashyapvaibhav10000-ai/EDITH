@@ -1,10 +1,22 @@
 import asyncio
-import docker
-from tools import confirm as hitl_confirm
 
-client = None
+try:
+    import docker
+    from tools import confirm as hitl_confirm
+    client = None
+    _DOCKER_AVAILABLE = True
+except ImportError:
+    docker = None
+    client = None
+    _DOCKER_AVAILABLE = False
+    def hitl_confirm(prompt):
+        return False
 
 def run_code_in_sandbox(code, language="python"):
+    # Early exit if docker not available
+    if not _DOCKER_AVAILABLE:
+        return "[Sandbox unavailable — docker module not installed on this node]"
+    
     try:
         loop = asyncio.get_running_loop()
         if loop is not None:

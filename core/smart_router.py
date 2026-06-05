@@ -16,11 +16,20 @@ import requests
 import sqlite3
 import datetime
 from collections import OrderedDict, deque
-from dotenv import load_dotenv
+
+try:
+    from dotenv import load_dotenv
+    _DOTENV_AVAILABLE = True
+except ImportError:
+    _DOTENV_AVAILABLE = False
+    def load_dotenv(*args, **kwargs):
+        pass
+
 from config import get_logger, CONTEXT_FINGERPRINT_ENABLED, MEMORY_ARCHIVE_PATH
 import vault
 
-load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+if _DOTENV_AVAILABLE:
+    load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 log = get_logger("smart_router")
 
 # ──────────────────────────────────────────────

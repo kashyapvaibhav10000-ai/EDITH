@@ -5,7 +5,18 @@ import shutil
 import getpass
 import base64
 from cryptography.fernet import Fernet
-from argon2.low_level import hash_secret_raw, Type
+
+try:
+    from argon2.low_level import hash_secret_raw, Type
+    _ARGON2_AVAILABLE = True
+except ImportError:
+    _ARGON2_AVAILABLE = False
+    # Fallback to SHA256 if argon2 not available
+    import hashlib
+    def hash_secret_raw(password, salt, time_cost=3, memory_cost=65536, parallelism=4, hash_len=32, type=None):
+        return hashlib.pbkdf2_hmac('sha256', password, salt, 100000, dklen=hash_len)
+    Type = None
+
 from config import VAULT_PATH, VAULT_SALT_PATH, get_logger
 
 log = get_logger("vault")
@@ -16,8 +27,12 @@ def _check_keyfile_perms(path):
         raise PermissionError(f"Keyfile {path} perms too open: {mode}. Run: chmod 400 {path}")
 
 def get_key(password, salt):
-    key = hash_secret_raw(password.encode(), salt, time_cost=3, memory_cost=65536,
-                          parallelism=2, hash_len=32, type=Type.ID)
+    if _ARGON2_AVAILABLE:
+        key = hash_secret_raw(password.encode(), salt, time_cost=3, memory_cost=65536,
+                              parallelism=2, hash_len=32, type=Type.ID)
+    else:
+        # Fallback: use PBKDF2 if argon2 not available
+        key = hash_secret_raw(password.encode(), salt)
     return base64.urlsafe_b64encode(key)
 
 def get_master_password():

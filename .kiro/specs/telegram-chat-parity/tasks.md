@@ -75,7 +75,7 @@ All changes land in `telegram_bot.py`. The core change replaces the direct `disp
   - Ensure existing tests pass, the open-loop/close-loop shortcuts still short-circuit correctly, and basic `process_message()` calls reach `orchestrator.chat`. Ask the user if questions arise.
 
 - [ ] 5. Update `poll_telegram()` and `handle_telegram_update()` — typing, commands, HITL detection
-  - [-] 5.1 Add typing indicator + `/history`, `/clear`, `/status` dispatch to both poll and webhook paths
+  - [x] 5.1 Add typing indicator + `/history`, `/clear`, `/status` dispatch to both poll and webhook paths
     - Call `_send_typing(chat_id)` immediately after auth/rate-limit guards pass and before the placeholder send
     - Add command branches: `text == "/history"` → `_handle_history_cmd()`, `text == "/clear"` → `_handle_clear_cmd()`, `text == "/status"` → `_handle_status_cmd()`; send result directly, skip orchestrator
     - _Requirements: 4.1, 4.2, 4.3, 5.4, 6.4, 7.4, 12.1, 12.2_
@@ -88,15 +88,15 @@ All changes land in `telegram_bot.py`. The core change replaces the direct `disp
     - _Requirements: 10.1, 10.4, 11.1, 11.2, 11.3, 11.4, 12.8_
 
 - [ ] 6. Implement inline HITL keyboard helpers
-  - [-] 6.1 Implement `_answer_callback(cq_id, text="")` helper
+  - [ ] 6.1 Implement `_answer_callback(cq_id, text="")` helper
     - POST to `answerCallbackQuery`, timeout=5, swallow exceptions with `log.warning`
     - _Requirements: 10.1, 10.5_
-  - [-] 6.2 Implement `_send_hitl_keyboard(msg_id, prompt_text)`
+  - [ ] 6.2 Implement `_send_hitl_keyboard(msg_id, prompt_text)`
     - Build `inline_keyboard` with `[{"text": "✅ Yes, run it", "callback_data": "hitl_confirm"}, {"text": "❌ Cancel", "callback_data": "hitl_cancel"}]`
     - Call `editMessageText` with `chat_id`, `message_id`, `text=prompt_text`, and `reply_markup`
     - Swallow exceptions with `log.warning`
     - _Requirements: 10.1, 10.4_
-  - [-] 6.3 Implement `_handle_callback_query(cq)`
+  - [ ] 6.3 Implement `_handle_callback_query(cq)`
     - Extract `cq_id`, `data`, `msg_id` from `cq`; call `_answer_callback(cq_id, "")` immediately
     - If `get_pending_action()` is None: log warning and return
     - If `data == "hitl_confirm"`: call `execute_pending_action(pending)` in try/except, edit message with result, `reply_markup={}`, call `clear_pending_action()`
@@ -104,7 +104,7 @@ All changes land in `telegram_bot.py`. The core change replaces the direct `disp
     - _Requirements: 10.2, 10.3, 10.5, 10.6_
 
 - [ ] 7. Implement photo / vision support
-  - [-] 7.1 Implement `_handle_photo(msg, chat_id)` function
+  - [ ] 7.1 Implement `_handle_photo(msg, chat_id)` function
     - Select highest-res photo via `msg["photo"][-1]`; call `getFile` to resolve `file_path`; download image bytes; write to temp file; build `DispatchContext(user_input=f"{caption} [image: {local_path}]", intent="vision", source="telegram", device="telegram")`; call `_handle_vision(ctx)`; clean up temp file in `finally`
     - Return EDITH-voiced error strings for download failure or vision unavailability
     - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5_
@@ -141,7 +141,7 @@ All changes land in `telegram_bot.py`. The core change replaces the direct `disp
     - **Validates: Requirements 13.3**
     - For a JSONL file with exactly 500 lines, after `_append_telegram_jsonl(msg)`, assert the file has at most 500 lines (rotation should drop oldest 100 before appending)
 
-- [~] 10. Final checkpoint — end-to-end wiring complete
+- [ ] 10. Final checkpoint — end-to-end wiring complete
   - Ensure all non-optional tests pass; smoke-test the full message path (text → `orchestrator.chat()` → placeholder edit) with mocks; confirm all existing commands (`/mcpstatus`, `/mcp`, open-loop, close-loop) still work; ask the user if questions arise.
 
 ## Notes

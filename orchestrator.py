@@ -2,15 +2,71 @@ import sys
 import os
 import requests
 from tools import confirm as hitl_confirm, delete_file, run_shell as run_command
-from sandbox import run_code_in_sandbox
-from search import web_search, format_results
-from email_reader import check_inbox
-from calendar_reader import get_today_briefing, get_week_briefing, create_event
-from data_analyst import analyze_file
-from agent import run_agent, dry_run_agent, format_dry_run
-from rag import build_index, query_rag
-from vision import analyze_screenshot, analyze_photo
-from phone import ring_phone, send_sms, get_notifications, phone_status, get_battery, send_notification
+
+# Heavy/optional imports — loaded lazily to avoid crashing on missing deps
+def _import_sandbox():
+    try:
+        from sandbox import run_code_in_sandbox as _f
+        return _f
+    except Exception as e:
+        def _f(code, language="python"):
+            return f"[Sandbox unavailable: {e}]"
+        return _f
+
+run_code_in_sandbox = _import_sandbox()
+
+try:
+    from search import web_search, format_results
+except Exception:
+    def web_search(q, **kw): return []
+    def format_results(r): return ""
+
+try:
+    from email_reader import check_inbox
+except Exception:
+    def check_inbox(*a, **kw): return "[Email unavailable]"
+
+try:
+    from calendar_reader import get_today_briefing, get_week_briefing, create_event
+except Exception:
+    def get_today_briefing(): return "[Calendar unavailable]"
+    def get_week_briefing(): return "[Calendar unavailable]"
+    def create_event(*a, **kw): return "[Calendar unavailable]"
+
+try:
+    from data_analyst import analyze_file
+except Exception:
+    def analyze_file(*a, **kw): return "[Data analyst unavailable]"
+
+try:
+    from agent import run_agent, dry_run_agent, format_dry_run
+except Exception:
+    def run_agent(*a, **kw): return "[Agent unavailable]"
+    def dry_run_agent(*a, **kw): return None
+    def format_dry_run(*a, **kw): return ""
+
+try:
+    from rag import build_index, query_rag
+except Exception:
+    def build_index(*a, **kw): pass
+    def query_rag(*a, **kw): return ""
+
+try:
+    from vision import analyze_screenshot, analyze_photo
+except Exception:
+    def analyze_screenshot(*a, **kw): return "[Vision unavailable]"
+    def analyze_photo(*a, **kw): return "[Vision unavailable]"
+
+try:
+    from phone import ring_phone, send_sms, get_notifications, phone_status, get_battery, send_notification
+except Exception:
+    def ring_phone(*a, **kw): return "[Phone unavailable]"
+    def send_sms(*a, **kw): return "[Phone unavailable]"
+    def get_notifications(*a, **kw): return []
+    def phone_status(*a, **kw): return "[Phone unavailable]"
+    def get_battery(*a, **kw): return "[Phone unavailable]"
+    def send_notification(*a, **kw): return False
+
 from intent import is_coding_request, detect_intent
 from config import MEMORY_DB_PATH, MEMORY_ARCHIVE_PATH, SMART_MEMORY_MAX_RAM_ITEMS, SMART_MEMORY_MAX_RAM_MB, get_logger, get_chroma_client, DANGER_KEYWORDS, INPUT_SCOPE_CATEGORIES
 from smart_memory import SmartMemoryManager, compress_context
