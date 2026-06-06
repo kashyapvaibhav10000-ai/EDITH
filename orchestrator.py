@@ -191,9 +191,14 @@ def _emit_session_ended(session_id: str = "", summary: str = ""):
 
 log = get_logger("orchestrator")
 
-# Memory setup — use shared ChromaDB client
-client = get_chroma_client()
-collection = client.get_or_create_collection("edith_memory")
+# Memory setup — use shared ChromaDB client (lazy: gracefully skip if chromadb not installed)
+try:
+    client = get_chroma_client()
+    collection = client.get_or_create_collection("edith_memory")
+except Exception as _chroma_err:
+    log.warning(f"ChromaDB unavailable — memory features degraded: {_chroma_err}")
+    client = None
+    collection = None
 
 # Smart Memory Manager — hybrid Hot (RAM) + Cold (SQLite) storage
 smart_memory = SmartMemoryManager(
@@ -429,6 +434,8 @@ def recall(query, n=5):
 
     # Fallback to ChromaDB for compatibility
     try:
+        if collection is None:
+            return []
         chroma_results = collection.query(query_texts=[query], n_results=n)
         return chroma_results["documents"][0] if chroma_results["documents"] else []
     except Exception as e:
