@@ -157,20 +157,26 @@ INTENT_HANDLERS = {
 }
 
 
-def _validate_tool_output(output: str, intent: str) -> str:
-    if not output or not output.strip(): return f"I couldn't get a result for {intent} right now, Boss."
+def _validate_tool_output(output: str, intent: str, handler_name: str = "") -> str:
+    if not output or not output.strip():
+        log.warning(
+            f"_validate_tool_output: empty result from handler "
+            f"[{handler_name or intent}] for intent '{intent}'"
+        )
+        return f"I couldn't get a result for {intent} right now, Boss."
     return output[:4000] + "... [truncated]" if len(output) > 4000 else output
 
 def _dispatch_single(ctx: DispatchContext) -> str:
     handler = INTENT_HANDLERS.get(ctx.intent, _handle_chat_fallback)
+    handler_name = handler.__name__ if hasattr(handler, "__name__") else str(handler)
     try:
         result = handler(ctx)
         if isinstance(result, Result):
-            if result.ok: return _validate_tool_output(str(result.value), ctx.intent)
+            if result.ok: return _validate_tool_output(str(result.value), ctx.intent, handler_name)
             log.error(f"Handler [{ctx.intent}] failure: {result.error} ({result.error_type})")
             return _friendly_error(ctx.intent, result.error)
         output = str(result) if result else ""
-        return _validate_tool_output(output, ctx.intent) if output else _friendly_error(ctx.intent, "No response generated")
+        return _validate_tool_output(output, ctx.intent, handler_name) if output else _friendly_error(ctx.intent, "No response generated")
     except Exception as e:
         log.error(f"Dispatch exception [{ctx.intent}]: {e}")
         return _friendly_error(ctx.intent, e)
