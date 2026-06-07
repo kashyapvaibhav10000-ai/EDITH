@@ -78,6 +78,19 @@ edith_memory_deleted_backup/
 *.gguf
 
 # ──────────────────────────────────────────────
+# Runtime / Generated Data (never commit)
+# ──────────────────────────────────────────────
+data/session_memory.jsonl
+data/telegram_memory.jsonl
+data/telegram_todos.json
+data/pinned_notes.json
+devlog.md
+devlog_session_*.md
+drift_log.json
+upgrade_proposals.json
+prime_directive.json
+
+# ──────────────────────────────────────────────
 # Local scratch / malformed historical files
 # ──────────────────────────────────────────────
 tree.txt

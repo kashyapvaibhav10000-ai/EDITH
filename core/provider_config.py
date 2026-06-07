@@ -11,7 +11,7 @@ Handles:
 
 import os
 import re
-from config import get_logger, MODELS, get_routing_chains
+from config import get_logger, get_routing_chains
 import vault
 
 log = get_logger("provider_config")

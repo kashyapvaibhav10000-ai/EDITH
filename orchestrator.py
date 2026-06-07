@@ -219,6 +219,7 @@ _history_lock = threading.Lock()  # Prevent race conditions on conversation_hist
 
 # O4: Per-source conversation history (widget, telegram, voice, cli are isolated)
 _source_history: dict[str, list] = {"widget": [], "telegram": [], "voice": [], "cli": []}
+_source_history_lock = threading.Lock()  # Protects _source_history from concurrent access
 
 
 def _load_telegram_history() -> list:
@@ -256,7 +257,8 @@ def _append_telegram_jsonl(message: dict):
 
 
 # Pre-load Telegram history so it survives daemon restarts
-_source_history["telegram"] = _load_telegram_history()
+with _source_history_lock:
+    _source_history["telegram"] = _load_telegram_history()
 
 
 # ──────────────────────────────────────────────
@@ -744,7 +746,9 @@ def _maybe_review_skills_from_chat(user_input: str, response: str) -> None:
         try:
             # Pull last 10 exchanges for context
             recent = []
-            for src_hist in [conversation_history, *_source_history.values()]:
+            with _source_history_lock:
+                _src_snapshots = [list(h) for h in _source_history.values()]
+            for src_hist in [conversation_history, *_src_snapshots]:
                 if src_hist:
                     recent = src_hist[-20:]
                     break
@@ -886,7 +890,10 @@ def chat(user_input, intent="chat", device="unknown", source="widget"):
 
     # --- Phase 2: Smart response routing ---
     # O4: use source-isolated history for non-widget channels
-    _active_history = _source_history[source] if _use_source_isolation else conversation_history
+    with _source_history_lock:
+        _active_history = list(_source_history[source]) if _use_source_isolation else None
+    if _active_history is None:
+        _active_history = conversation_history
     context = f"Relevant memories:\n{memory_context}\n\nConversation so far:\n"
     for msg in _active_history[-4:]:
         context += f"{msg['role']}: {msg['content']}\n"
@@ -1075,11 +1082,12 @@ do it differently." That's what makes you useful. That's what makes you real.
         u_msg = {"role": "user", "content": user_input}
         a_msg = {"role": "assistant", "content": reply}
         if _use_source_isolation:
-            # O4: append to source-specific history only
-            _source_history[source].append(u_msg)
-            _source_history[source].append(a_msg)
-            if len(_source_history[source]) > MAX_HISTORY:
-                _source_history[source] = _source_history[source][-MAX_HISTORY:]
+            # O4: append to source-specific history only (lock covers _source_history writes)
+            with _source_history_lock:
+                _source_history[source].append(u_msg)
+                _source_history[source].append(a_msg)
+                if len(_source_history[source]) > MAX_HISTORY:
+                    _source_history[source] = _source_history[source][-MAX_HISTORY:]
             # Persist Telegram history across daemon restarts
             if source == "telegram":
                 _append_telegram_jsonl(u_msg)
