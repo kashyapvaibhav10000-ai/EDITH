@@ -79,6 +79,61 @@
       "env_vars": {
         "BRAVE_API_KEY": "required"
       }
+    },
+    "obsidian": {
+      "enabled": true,
+      "command": "node",
+      "args": [
+        "/home/vaibhav/.nvm/versions/node/v20.20.2/lib/node_modules/obsidian-mcp/build/main.js",
+        "/home/vaibhav/Documents/EDITH BRAIN"
+      ],
+      "description": "Obsidian vault — read, search, create, edit notes in EDITH BRAIN vault",
+      "allowed_intents": [
+        "mcp",
+        "rag",
+        "file_query",
+        "create_file",
+        "agent",
+        "memory_store",
+        "memory_recall"
+      ],
+      "env_vars": {}
+    },
+    "spotify": {
+      "enabled": false,
+      "command": "node",
+      "args": [
+        "/home/vaibhav/.nvm/versions/node/v20.20.2/lib/node_modules/spotify-mcp/dist/index.js"
+      ],
+      "description": "Spotify — control playback, search music, manage playlists. Requires SPOTIFY_CLIENT_ID and one-time auth: SPOTIFY_CLIENT_ID=<id> node /home/vaibhav/.nvm/versions/node/v20.20.2/lib/node_modules/spotify-mcp/dist/index.js auth",
+      "allowed_intents": [
+        "mcp",
+        "agent"
+      ],
+      "env_vars": {
+        "SPOTIFY_CLIENT_ID": "required"
+      }
+    },
+    "google-workspace": {
+      "enabled": true,
+      "command": "node",
+      "args": [
+        "/home/vaibhav/.nvm/versions/node/v20.20.2/lib/node_modules/google-workspace-mcp/dist/cli.js",
+        "serve"
+      ],
+      "description": "Google Workspace — Docs, Sheets, Drive, Gmail, Calendar, Slides, Forms (95+ tools). Auth: node /home/vaibhav/.nvm/versions/node/v20.20.2/lib/node_modules/google-workspace-mcp/dist/cli.js accounts add vaibhav",
+      "allowed_intents": [
+        "mcp",
+        "email",
+        "calendar_today",
+        "calendar_week",
+        "calendar_create",
+        "file_query",
+        "create_file",
+        "agent",
+        "data"
+      ],
+      "env_vars": {}
     }
   }
 }

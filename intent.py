@@ -233,8 +233,15 @@ MCP_PATTERNS = [
     r"(search web|brave search|web search via mcp)",
     r"\bgithub\b.*(repo|issue|pr|pull request|code|search)",
     r"\bnotion\b|\bobsidian\b",
+    r"\b(search|find|list|read|create)\s+(notes?|vault)\b",
     r"(my drive|google drive|gdrive)\s+(files?|docs?|list|search)",
     r"(mcp|model context protocol)\s+(status|tools?|call|server)",
+    r"\bspotify\b",
+    r"\b(play|pause|skip|next track|previous track)\s+(music|song|track|album|playlist)\b",
+    r"\bwhat.?s\s+playing\b",
+    r"\b(google\s+)?(docs?|sheets?|slides?|forms?|workspace)\b",
+    r"\b(spreadsheet|presentation)\b",
+    r"\b(list|read|create)\s+(doc|document|sheet|spreadsheet|slide|presentation|form)\b",
 ]
 
 COMPACT_PATTERNS = [

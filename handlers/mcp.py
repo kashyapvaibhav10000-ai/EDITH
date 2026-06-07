@@ -291,6 +291,108 @@ def _handle_mcp(ctx: DispatchContext) -> Result:
             result = mcp_bridge.call_mcp_server("gdrive", "search_files", {"query": query}, context_intent=ctx.intent)
             return Result.success(f"📁 **Google Drive**: {query}\n\n{result}")
 
+        if re.search(r"\b(obsidian|vault|note|notes)\b", lower):
+            if re.search(r"\b(search|find|look for)\b", lower):
+                query_m = re.search(r"(?:search|find|look for)\s+(?:in\s+(?:obsidian|vault|notes?)\s+)?(?:for\s+)?(.+)$", ctx.user_input, re.IGNORECASE)
+                query = query_m.group(1).strip() if query_m else ctx.user_input
+                result = mcp_bridge.call_mcp_server("obsidian", "search-vault", {"vault": "edith-brain", "query": query, "searchType": "both"}, context_intent=ctx.intent)
+                return Result.success(f"📓 **Obsidian search**: {query}\n\n{result}")
+            if re.search(r"\b(create|write|add|new note)\b", lower):
+                title_m = re.search(r"(?:create|write|add|new)\s+(?:note\s+)?(?:called|named|titled|about)?\s+(.+?)(?:\s+with content\s+(.+))?$", ctx.user_input, re.IGNORECASE | re.DOTALL)
+                title = (title_m.group(1).strip() if title_m else "New Note").rstrip()
+                content = title_m.group(2).strip() if title_m and title_m.group(2) else ""
+                filename = title if title.endswith(".md") else f"{title}.md"
+                result = mcp_bridge.call_mcp_server("obsidian", "create-note", {"vault": "edith-brain", "filename": filename, "content": content or f"# {title}\n"}, context_intent=ctx.intent)
+                return Result.success(f"📓 **Obsidian**: {result}")
+            if re.search(r"\b(list|show|all notes)\b", lower):
+                result = mcp_bridge.call_mcp_server("obsidian", "search-vault", {"vault": "edith-brain", "query": "", "searchType": "filename"}, context_intent=ctx.intent)
+                return Result.success(f"📓 **Obsidian vault — all notes**\n\n{result}")
+            # Default: read note by name
+            note_m = re.search(r"(?:read\s+note|note|obsidian)\s+(.+)$", ctx.user_input, re.IGNORECASE)
+            note = note_m.group(1).strip() if note_m else ""
+            if note:
+                filename = note if note.endswith(".md") else f"{note}.md"
+                result = mcp_bridge.call_mcp_server("obsidian", "read-note", {"vault": "edith-brain", "filename": filename}, context_intent=ctx.intent)
+                return Result.success(f"📓 **{note}**\n\n{result}")
+            return Result.success("📓 Obsidian is connected (vault: edith-brain). Try: 'search notes for X', 'list notes', 'read note <title>', 'create note <title>'")
+
+        if re.search(r"\b(spotify|music|song|playlist|track|album|artist|play|pause|skip|next track|previous track)\b", lower):
+            if re.search(r"\b(play)\b", lower) and not re.search(r"\b(what.s playing|now playing|current)\b", lower):
+                query_m = re.search(r"\bplay\s+(.+)$", ctx.user_input, re.IGNORECASE)
+                query = query_m.group(1).strip() if query_m else ""
+                if query:
+                    result = mcp_bridge.call_mcp_server("spotify", "play", {"query": query}, context_intent=ctx.intent)
+                else:
+                    result = mcp_bridge.call_mcp_server("spotify", "resume", {}, context_intent=ctx.intent)
+                return Result.success(f"🎵 {result}")
+            if re.search(r"\b(pause|stop music)\b", lower):
+                result = mcp_bridge.call_mcp_server("spotify", "pause", {}, context_intent=ctx.intent)
+                return Result.success(f"⏸️ {result}")
+            if re.search(r"\b(next|skip)\b", lower):
+                result = mcp_bridge.call_mcp_server("spotify", "next", {}, context_intent=ctx.intent)
+                return Result.success(f"⏭️ {result}")
+            if re.search(r"\b(previous|prev|back)\b", lower):
+                result = mcp_bridge.call_mcp_server("spotify", "previous", {}, context_intent=ctx.intent)
+                return Result.success(f"⏮️ {result}")
+            if re.search(r"\b(what.s playing|now playing|current track|current song)\b", lower):
+                result = mcp_bridge.call_mcp_server("spotify", "get_current_track", {}, context_intent=ctx.intent)
+                return Result.success(f"🎵 **Now playing**: {result}")
+            if re.search(r"\b(search|find)\b", lower):
+                query_m = re.search(r"(?:search|find)\s+(?:for\s+)?(?:on spotify\s+)?(.+)$", ctx.user_input, re.IGNORECASE)
+                query = query_m.group(1).strip() if query_m else ctx.user_input
+                result = mcp_bridge.call_mcp_server("spotify", "search", {"query": query}, context_intent=ctx.intent)
+                return Result.success(f"🔍 **Spotify search**: {query}\n\n{result}")
+            return Result.success(
+                "🎵 Spotify is configured but needs setup first.\n"
+                "1. Get a Client ID from https://developer.spotify.com/dashboard\n"
+                "2. Run: `SPOTIFY_CLIENT_ID=<your_id> node /home/vaibhav/.nvm/versions/node/v20.20.2/lib/node_modules/spotify-mcp/dist/index.js auth`\n"
+                "3. Add SPOTIFY_CLIENT_ID to vault: `vault set SPOTIFY_CLIENT_ID <your_id>`\n"
+                "4. Enable in mcp_config.json: set `\"enabled\": true` for spotify"
+            )
+
+        # ── Google Workspace (Docs, Sheets, Drive, Gmail, Calendar, Slides, Forms) ──
+        if re.search(r"\b(google\s+)?(docs?|sheets?|slides?|forms?|workspace)\b", lower) or \
+           re.search(r"\b(spreadsheet|document|presentation)\b", lower):
+            _GWS = "google-workspace"
+            if re.search(r"\b(read|open|show|get)\b", lower) and re.search(r"\b(doc|document)\b", lower):
+                doc_m = re.search(r"(?:doc(?:ument)?\s+(?:id\s+)?|read\s+)([a-zA-Z0-9_-]{25,}|https?://\S+)", ctx.user_input, re.IGNORECASE)
+                doc_id = doc_m.group(1).strip() if doc_m else ""
+                if not doc_id:
+                    result = mcp_bridge.call_mcp_server(_GWS, "listGoogleDocs", {"account": "vaibhav"}, context_intent=ctx.intent)
+                    return Result.success(f"📄 **Google Docs**\n\n{result}")
+                result = mcp_bridge.call_mcp_server(_GWS, "readGoogleDoc", {"documentId": doc_id, "account": "vaibhav"}, context_intent=ctx.intent)
+                return Result.success(f"📄 **Doc**\n\n{result}")
+            if re.search(r"\b(list|show|all)\b", lower) and re.search(r"\b(doc|document)\b", lower):
+                result = mcp_bridge.call_mcp_server(_GWS, "listGoogleDocs", {"account": "vaibhav"}, context_intent=ctx.intent)
+                return Result.success(f"📄 **Google Docs**\n\n{result}")
+            if re.search(r"\b(read|open|show|get)\b", lower) and re.search(r"\b(sheet|spreadsheet)\b", lower):
+                sheet_m = re.search(r"(?:sheet\s+|spreadsheet\s+)([a-zA-Z0-9_-]{25,}|https?://\S+)", ctx.user_input, re.IGNORECASE)
+                sheet_id = sheet_m.group(1).strip() if sheet_m else ""
+                if not sheet_id:
+                    result = mcp_bridge.call_mcp_server(_GWS, "listGoogleSheets", {"account": "vaibhav"}, context_intent=ctx.intent)
+                    return Result.success(f"📊 **Google Sheets**\n\n{result}")
+                result = mcp_bridge.call_mcp_server(_GWS, "readSpreadsheet", {"spreadsheetId": sheet_id, "account": "vaibhav"}, context_intent=ctx.intent)
+                return Result.success(f"📊 **Sheet**\n\n{result}")
+            if re.search(r"\b(list|show|all)\b", lower) and re.search(r"\b(sheet|spreadsheet)\b", lower):
+                result = mcp_bridge.call_mcp_server(_GWS, "listGoogleSheets", {"account": "vaibhav"}, context_intent=ctx.intent)
+                return Result.success(f"📊 **Google Sheets**\n\n{result}")
+            if re.search(r"\b(list|show|all)\b", lower) and re.search(r"\b(slides?|presentation)\b", lower):
+                result = mcp_bridge.call_mcp_server(_GWS, "listPresentations", {"account": "vaibhav"}, context_intent=ctx.intent)
+                return Result.success(f"📊 **Google Slides**\n\n{result}")
+            if re.search(r"\b(list|show)\b", lower) and re.search(r"\bform\b", lower):
+                result = mcp_bridge.call_mcp_server(_GWS, "listForms", {"account": "vaibhav"}, context_intent=ctx.intent)
+                return Result.success(f"📋 **Google Forms**\n\n{result}")
+            # Default: show available workspace tools
+            return Result.success(
+                "📁 Google Workspace is connected (after auth). Available:\n"
+                "• `list docs` / `read doc <id>` — Google Docs\n"
+                "• `list sheets` / `read sheet <id>` — Google Sheets\n"
+                "• `list presentations` — Google Slides\n"
+                "• `list forms` — Google Forms\n"
+                "• Use `drive` for file management\n\n"
+                "⚠️ Run auth first: see `mcp status` for instructions."
+            )
+
         enabled = mcp_bridge.get_enabled_servers()
         if not enabled:
             return Result.success(
@@ -309,6 +411,21 @@ def _handle_mcp(ctx: DispatchContext) -> Result:
             f"• `find *.py in {EDITH_PATH}` — search files\n"
             "• `info /path/to/file` — file metadata\n"
             "• `delete /path/to/file` — delete (requires confirmation)\n\n"
+            "Obsidian vault:\n"
+            "• `search notes for <query>` — search vault\n"
+            "• `list notes` — show all notes\n"
+            "• `read note <title>` — read a note\n"
+            "• `create note <title> with content ...` — new note\n\n"
+            "Spotify:\n"
+            "• `play <song/artist/album>` — play music\n"
+            "• `pause` / `next` / `previous` — playback control\n"
+            "• `what's playing` — current track\n"
+            "• `search spotify <query>` — search catalog\n\n"
+            "Google Workspace:\n"
+            "• `list docs` / `read doc <id>` — Google Docs\n"
+            "• `list sheets` / `read sheet <id>` — Google Sheets\n"
+            "• `list presentations` — Google Slides\n"
+            "• `list forms` — Google Forms\n\n"
             "Other:\n"
             "• `search <query>` — Brave web search\n"
             "• `github <query>` — GitHub search\n"
