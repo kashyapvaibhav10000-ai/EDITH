@@ -97,12 +97,30 @@
   .sb-history-sub .icon { font-size: 10px; }
 
   .hist-item {
-    padding: 5px 8px; font-size: 11px; color: var(--muted);
-    cursor: pointer; border-radius: 4px;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    display: flex; align-items: center; justify-content: space-between; gap: 4px;
+    padding: 5px 8px; cursor: pointer; border-radius: 4px;
+    border-left: 2px solid transparent;
     transition: background 0.12s, color 0.12s;
   }
   .hist-item:hover { background: #1e1e1e; color: var(--text); }
+  .hist-item-title {
+    flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px;
+    color: var(--muted);
+  }
+  .hist-item:hover .hist-item-title { color: var(--text); }
+  .hist-item-meta {
+    font-size: 9px; color: var(--muted); font-family: var(--font-mono); flex-shrink: 0;
+  }
+  .pin-btn {
+    background: none; border: none; cursor: pointer; font-size: 12px;
+    padding: 0 2px; opacity: 0.5; transition: opacity 0.15s; flex-shrink: 0; line-height: 1;
+  }
+  .pin-btn:hover { opacity: 1; }
+  .hist-item.pinned { border-left: 2px solid var(--orange); }
+  .hist-item.pinned .pin-btn { opacity: 1; color: var(--orange); }
+  .hist-item.active-session {
+    background: #1a2a1a; color: var(--green); border-left: 2px solid var(--green);
+  }
 
   /* Sidebar health */
   .sb-health {
@@ -336,17 +354,9 @@
       <div class="nav-item" data-nav="commands"><span class="icon">🖥️</span> Commands</div>
 
       <div class="sb-section">History</div>
-
-      <div class="sb-history-sub"><span class="icon">🕐</span> Today</div>
-      <div class="hist-item" id="hist-today-1">MCP setup plan</div>
-      <div class="hist-item" id="hist-today-2">Council decision</div>
-
-      <div class="sb-history-sub"><span class="icon">📅</span> Yesterday</div>
-      <div class="hist-item">Orchestrator refactor</div>
-      <div class="hist-item">Email draft</div>
-
-      <div class="sb-history-sub"><span class="icon">📊</span> This Week</div>
-      <div class="hist-item">Weekly briefing</div>
+      <div id="sidebar-history">
+        <div class="hist-item" style="color:var(--muted);font-size:10px;padding:8px 8px;">Loading...</div>
+      </div>
     </div>
 
     <!-- Health -->
@@ -500,6 +510,7 @@
 
 <script>
 const API = window.location.origin;
+let _activeSessionId = null;
 
 // ── Live clock ──
 function updateClock() {
@@ -542,6 +553,8 @@ document.getElementById('btn-new-session').addEventListener('click', async () =>
       body: JSON.stringify({message: '__reset__'})
     });
   } catch(e) {}
+  _activeSessionId = null;
+  fetchSessions();
   setTimeout(() => {
     btn.textContent = '+ New Session';
     btn.style.background = '';
@@ -629,19 +642,124 @@ async function fetchTraces() {
 fetchTraces();
 setInterval(fetchTraces, 30000);
 
-// ── History — poll every 30s ──
-async function fetchHistory() {
+// ── Sessions — poll every 30s ──
+async function fetchSessions() {
   try {
-    const res = await fetch(API + '/api/recent_traces?limit=5');
-    if (!res.ok) throw new Error();
-    const d = await res.json();
-    const traces = d.traces || [];
-    if (traces[0]) document.getElementById('hist-today-1').textContent = (traces[0].user_input || 'MCP setup plan').slice(0, 26);
-    if (traces[1]) document.getElementById('hist-today-2').textContent = (traces[1].user_input || 'Council decision').slice(0, 26);
-  } catch(e) {}
+    const res = await fetch(API + '/api/sessions');
+    if (!res.ok) throw new Error('sessions fetch failed');
+    const data = await res.json();
+    renderSidebarHistory(data);
+  } catch (e) {
+    const container = document.getElementById('sidebar-history');
+    if (container) container.innerHTML =
+      '<div class="hist-item" style="color:var(--muted);font-size:10px;">History unavailable</div>';
+  }
 }
-fetchHistory();
-setInterval(fetchHistory, 30000);
+
+function renderSidebarHistory(data) {
+  const container = document.getElementById('sidebar-history');
+  if (!container) return;
+  const groups = [
+    { label: '🕐 Today',    items: data.today     || [] },
+    { label: '📅 Yesterday', items: data.yesterday || [] },
+    { label: '📊 Older',    items: data.older     || [] },
+  ];
+  let html = '';
+  for (const group of groups) {
+    if (!group.items.length) continue;
+    html += `<div class="sb-history-sub"><span>${group.label}</span></div>`;
+    for (const session of group.items) {
+      const isActive = session.session_id === _activeSessionId;
+      const isPinned = session.pinned === true;
+      const pinIcon  = isPinned ? '📌' : '📍';
+      const msgLabel = session.message_count === 1 ? '1 msg' : `${session.message_count} msgs`;
+      const cls = [isActive ? 'active-session' : '', isPinned ? 'pinned' : ''].filter(Boolean).join(' ');
+      html += `
+        <div class="hist-item ${cls}" data-session-id="${session.session_id}"
+             onclick="loadSession('${session.session_id}')">
+          <span class="hist-item-title" title="${session.title}">${session.title}</span>
+          <span class="hist-item-meta">${msgLabel}</span>
+          <button class="pin-btn" title="${isPinned ? 'Unpin' : 'Pin'}"
+                  onclick="event.stopPropagation();togglePin('${session.session_id}',${isPinned})">
+            ${pinIcon}
+          </button>
+        </div>`;
+    }
+  }
+  if (!html) html = '<div class="hist-item" style="color:var(--muted);font-size:10px;padding:8px;">No sessions yet</div>';
+  container.innerHTML = html;
+}
+
+async function loadSession(sessionId) {
+  if (sessionId === _activeSessionId) return;
+  _activeSessionId = sessionId;
+  document.querySelectorAll('.hist-item').forEach(el => {
+    el.classList.toggle('active-session', el.dataset.sessionId === sessionId);
+  });
+  const cardsCol = document.querySelector('.cards-col');
+  if (!cardsCol) return;
+  let chatCard = document.getElementById('session-restore-card');
+  if (!chatCard) {
+    chatCard = document.createElement('div');
+    chatCard.id = 'session-restore-card';
+    chatCard.className = 'card';
+    cardsCol.prepend(chatCard);
+  }
+  chatCard.innerHTML = `
+    <div class="card-header">
+      <span class="card-label">Session Restore</span>
+      <span style="font-size:10px;color:var(--muted);font-family:var(--font-mono)">ID: ${sessionId}</span>
+    </div>
+    <div id="session-messages" style="display:flex;flex-direction:column;gap:8px;max-height:400px;overflow-y:auto;">
+      <div style="color:var(--muted);font-size:11px;text-align:center;padding:16px;">Loading messages...</div>
+    </div>`;
+  try {
+    const res = await fetch(API + '/api/sessions/' + sessionId + '/messages');
+    if (!res.ok) throw new Error('messages fetch failed');
+    const data = await res.json();
+    const messages = data.messages || [];
+    const msgContainer = document.getElementById('session-messages');
+    if (!msgContainer) return;
+    if (!messages.length) {
+      msgContainer.innerHTML = '<div style="color:var(--muted);font-size:11px;text-align:center;padding:16px;">No messages in this session</div>';
+      return;
+    }
+    msgContainer.innerHTML = messages.map(turn => {
+      const isUser = turn.role === 'user';
+      const bg    = isUser ? 'var(--blue)' : 'var(--card2)';
+      const align = isUser ? 'flex-end'   : 'flex-start';
+      const color = isUser ? '#fff'       : 'var(--text)';
+      const ts    = turn.ts ? `<span style="font-size:9px;opacity:0.5;margin-left:6px;">${turn.ts}</span>` : '';
+      return `<div style="display:flex;justify-content:${align};">
+        <div style="max-width:85%;background:${bg};color:${color};padding:8px 12px;border-radius:8px;font-size:12px;line-height:1.5;">
+          ${turn.content}${ts}
+        </div>
+      </div>`;
+    }).join('');
+    msgContainer.scrollTop = msgContainer.scrollHeight;
+  } catch (e) {
+    const msgContainer = document.getElementById('session-messages');
+    if (msgContainer)
+      msgContainer.innerHTML = '<div style="color:#f87171;font-size:11px;text-align:center;padding:16px;">Failed to load session</div>';
+  }
+}
+
+async function togglePin(sessionId, currentlyPinned) {
+  try {
+    const res = await fetch(API + '/api/sessions/' + sessionId + '/pin', {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({pinned: !currentlyPinned}),
+    });
+    if (!res.ok) throw new Error('pin toggle failed');
+    await fetchSessions();
+  } catch (e) {
+    console.warn('togglePin failed:', e);
+  }
+}
+
+fetchSessions();
+setInterval(fetchSessions, 30000);
 
 // ── Command pills ──
 document.querySelectorAll('.cmd-pill').forEach(pill => {
@@ -659,6 +777,7 @@ document.querySelectorAll('.cmd-pill').forEach(pill => {
       });
       const d = await res.json();
       resp.textContent = '> ' + (d.reply || d.response || 'Done.').slice(0, 400);
+      fetchSessions();
     } catch(e) {
       resp.textContent = '> Error: EDITH server unreachable.';
     }

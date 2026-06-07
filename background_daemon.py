@@ -263,6 +263,13 @@ def _run_nightly_maintenance():
     except Exception as e:
         results.append(f"❌ Cleanup failed: {e}")
 
+    # 4. Session Expiry
+    try:
+        _cleanup_stale_sessions()
+        results.append("✅ Session cleanup: Done")
+    except Exception as e:
+        results.append(f"❌ Session cleanup failed: {e}")
+
     summary = "🌙 Nightly Maintenance Report\n\n" + "\n".join(results)
     log.info(summary)
 
@@ -270,6 +277,31 @@ def _run_nightly_maintenance():
     _save_maintenance_timestamp()
 
     return summary
+
+
+def _cleanup_stale_sessions():
+    """Delete sessions older than 7 days that are not pinned."""
+    import sqlite3 as _sq
+    from datetime import datetime, timedelta
+    _db = os.path.join(EDITH_PATH, "session_state.db")
+    if not os.path.exists(_db):
+        log.info("[session_cleanup] No session DB found, skipping.")
+        return
+    cutoff = (datetime.now() - timedelta(days=7)).isoformat()
+    try:
+        conn = _sq.connect(_db)
+        cursor = conn.execute(
+            "DELETE FROM sessions "
+            "WHERE COALESCE(created_at, start_time, last_active) < ? "
+            "AND COALESCE(pinned, 0) = 0",
+            (cutoff,)
+        )
+        deleted = cursor.rowcount
+        conn.commit()
+        conn.close()
+        log.info(f"[session_cleanup] Deleted {deleted} stale session(s) older than 7 days.")
+    except Exception as e:
+        log.error(f"[session_cleanup] Failed: {e}")
 
 
 def _backup_chromadb() -> str:
