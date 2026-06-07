@@ -69,9 +69,13 @@ async def shutdown_event():
 # ── Middleware ─────────────────────────────────
 from middleware.logging import logging_middleware
 from middleware.rate_limit import rate_limit_middleware
+from middleware.auth import api_key_middleware
 
+# Order matters in Starlette: last-added runs first.
+# Rate limit → Auth → Logging (outermost)
 app.add_middleware(logging_middleware)
 app.add_middleware(rate_limit_middleware)
+app.add_middleware(api_key_middleware)
 
 _ALLOWED_ORIGINS = [
     o.strip()

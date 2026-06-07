@@ -568,12 +568,36 @@ def _call_openrouter(prompt: str, system: str = "") -> str:
     return resp.json()["choices"][0]["message"]["content"]
 
 
-# Provider function map
+def _call_ollama(prompt: str, system: str = "") -> str:
+    """Call local Ollama (http://localhost:11434).
+
+    Used for private/PII intents on the local node.
+    Raises ConnectionError if Ollama is not running so callers can give a clear message.
+    """
+    final_system = f"{EDITH_PERSONA_PREFIX}\n\n{system}" if system else EDITH_PERSONA_PREFIX
+    messages = [
+        {"role": "system", "content": final_system},
+        {"role": "user",   "content": prompt},
+    ]
+    _OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
+    _model = PROVIDER_MODELS.get("ollama", os.getenv("OLLAMA_MODEL", "llama3"))
+    resp = requests.post(
+        f"{_OLLAMA_URL}/api/chat",
+        json={"model": _model, "messages": messages, "stream": False},
+        timeout=120,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    return data.get("message", {}).get("content", "") or str(data)
+
+
+# Provider function map (includes ollama for local private-intent routing)
 _PROVIDER_CALLS = {
-    "groq": _call_groq,
-    "gemini": _call_gemini,
-    "nvidia": _call_nvidia,
+    "groq":       _call_groq,
+    "gemini":     _call_gemini,
+    "nvidia":     _call_nvidia,
     "openrouter": _call_openrouter,
+    "ollama":     _call_ollama,
 }
 
 
@@ -765,7 +789,11 @@ def smart_call(prompt: str, intent: str = "chat", system: str = "") -> str:
             return result
         except Exception as e:
             log.error(f"Local Ollama failed: {e}")
-            return f"[EDITH] Ollama is offline (Private Task). Error: {e}"
+            return (
+                "[EDITH] This is a private task (intent: "
+                f"{intent}) but Ollama is not running locally. "
+                "Start it with: ollama serve — then try again."
+            )
 
     # ── Determine routing chain ──
     task_type = INTENT_TASK_TYPE.get(intent, "conversation")
