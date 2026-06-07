@@ -13,7 +13,6 @@ import asyncio
 import datetime
 import json
 import os
-import urllib.request as _urlreq
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -96,24 +95,18 @@ async def devpanel_query(req: Request):
             pass
     context = "\n\n".join(ctx_parts) if ctx_parts else "(no files loaded)"
     system = {"qa": _SYSTEM_QA, "council": _SYSTEM_COUNCIL, "next": _SYSTEM_NEXT}.get(mode, _SYSTEM_QA)
-    full_msg = f"[SYSTEM ROLE]\n{system}\n\n[CODEBASE CONTEXT]\n{context}\n\n[QUESTION]\n{query}"
+    full_prompt = f"[CODEBASE CONTEXT]\n{context}\n\n[QUESTION]\n{query}"
 
+    # Call smart_call directly — avoids circular HTTP round-trip to localhost:8001
+    # which would now be blocked by the auth middleware anyway.
     def _call():
-        payload = json.dumps({"message": full_msg}).encode()
-        rq = _urlreq.Request(
-            "http://localhost:8001/api/chat",
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with _urlreq.urlopen(rq, timeout=90) as r:
-            return json.loads(r.read())
+        from smart_router import smart_call
+        return smart_call(full_prompt, intent="reason", system=system)
 
     try:
-        data = await asyncio.get_event_loop().run_in_executor(None, _call)
-        answer = data.get("reply") or data.get("response") or data.get("message") or str(data)
+        answer = await asyncio.to_thread(_call)
     except Exception as e:
-        answer = f"[ERROR — could not reach chat endpoint]\n{type(e).__name__}: {e}"
+        answer = f"[ERROR — smart_call failed]\n{type(e).__name__}: {e}"
     return {"response": answer}
 
 

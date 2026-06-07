@@ -210,11 +210,27 @@ async def chat_stream_endpoint(req: Request):
             # Queue bridge hangs when chat_stream does heavy pre-work (memory, context assembly)
             if intent in {"chat", "lookup", "reason"}:
                 from smart_router import smart_call as _smart_call
+                # ── Memory injection (mirrors /api/chat behaviour) ──
+                try:
+                    from orchestrator import recall, recall_episodes
+                    _memories = await asyncio.to_thread(recall, user_input)
+                    _episodes = await asyncio.to_thread(recall_episodes, user_input, 1)
+                    _mem_list = [m["value"] for m in _memories if isinstance(m, dict) and "value" in m] or _memories
+                    _memory_context = "\n".join(str(m) for m in _mem_list) if _mem_list else ""
+                    if _episodes:
+                        _memory_context += f"\n\nPast Session: {_episodes[0]}"
+                except Exception as _me:
+                    _memory_context = ""
+                    log.debug(f"Stream memory injection failed (non-fatal): {_me}")
+
                 _system = (
                     "You are EDITH — Vaibhav's personal AI OS, built by him for him. "
                     "Sharp, warm, direct. Talk like a brilliant friend, not a corporate bot. "
                     "Never say 'Great question' or 'Certainly'. Just answer."
                 )
+                if _memory_context:
+                    _system += f"\n\nRelevant context from memory:\n{_memory_context[:800]}"
+
                 full_reply = await asyncio.to_thread(_smart_call, user_input, intent, _system)
                 if not full_reply:
                     full_reply = "[EDITH] No response generated."

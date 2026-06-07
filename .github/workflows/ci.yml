@@ -34,26 +34,63 @@ jobs:
       - name: Pyflakes check
         run: python -m pyflakes . 2>&1 | grep -v "edith-env\|\.git" || true
 
-  smoke:
-    name: Smoke Tests
+  unit-tests:
+    name: Unit Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Syntax-only smoke test
+
+      - name: Install test dependencies
         run: |
+          pip install pytest pytest-asyncio
+          # Install only the packages needed for intent + compound_dag + agent tests
+          # Avoids pulling the full 2GB requirements.txt in CI
+          pip install chromadb requests python-dotenv fastapi starlette uvicorn psutil
+
+      - name: Create stub vault + env so imports don't fail
+        run: |
+          # Stub .env so config.py doesn't warn about missing file
+          cp .env.example .env
+          # Stub vault.enc so vault.py initialises without prompting
           python -c "
-          import ast, glob, sys
-          files = [f for f in glob.glob('**/*.py', recursive=True)
-                   if 'edith-env' not in f and '.git' not in f]
-          errors = []
-          for f in files:
-              try: ast.parse(open(f).read())
-              except SyntaxError as e: errors.append(f'{f}: {e}')
-          if errors:
-              print('\n'.join(errors)); sys.exit(1)
-          print(f'All {len(files)} files syntax OK')
+          import os, json
+          # Write a no-op vault shim for CI
+          with open('vault.py', 'w') as f:
+              f.write('from core.vault import *\n')
           "
+
+      - name: Run intent dispatch tests
+        run: |
+          python -m pytest tests/test_intent_dispatch.py -v --tb=short \
+            --ignore=edith-env --ignore=whisper.cpp \
+            -p no:warnings
+        env:
+          EDITH_API_KEY: ci-test-key
+          PYTHONPATH: .
+
+      - name: Run compound DAG tests
+        run: |
+          python -m pytest test/test_integration.py::TestDAGDispatch -v --tb=short \
+            --ignore=edith-env --ignore=whisper.cpp \
+            -p no:warnings
+        env:
+          EDITH_API_KEY: ci-test-key
+          PYTHONPATH: .
+
+      - name: Run result contract tests
+        run: |
+          python -m pytest test/test_integration.py::TestResultContract \
+            test/test_integration.py::TestEventBus \
+            test/test_integration.py::TestValidator \
+            test/test_integration.py::TestAgentStateMachine \
+            -v --tb=short \
+            --ignore=edith-env --ignore=whisper.cpp \
+            -p no:warnings
+        env:
+          EDITH_API_KEY: ci-test-key
+          PYTHONPATH: .
