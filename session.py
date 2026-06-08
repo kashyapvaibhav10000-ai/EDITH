@@ -48,10 +48,37 @@ def _get_db():
         query_count INTEGER DEFAULT 0,
         queries_json TEXT DEFAULT '[]',
         context_snapshot TEXT DEFAULT '{}',
-        status TEXT DEFAULT 'active'
+        status TEXT DEFAULT 'active',
+        pinned INTEGER DEFAULT 0,
+        created_at TEXT,
+        conversation_json TEXT DEFAULT '[]'
     )""")
     conn.commit()
+    _run_migration(conn)
     return conn
+
+
+def _run_migration(conn):
+    """Idempotent migration: add pinned, created_at, conversation_json if absent."""
+    migrations = [
+        ("pinned",            "ALTER TABLE sessions ADD COLUMN pinned INTEGER DEFAULT 0"),
+        ("created_at",        "ALTER TABLE sessions ADD COLUMN created_at TEXT"),
+        ("conversation_json", "ALTER TABLE sessions ADD COLUMN conversation_json TEXT DEFAULT '[]'"),
+    ]
+    for col, sql in migrations:
+        try:
+            conn.execute(sql)
+            conn.commit()
+            log.info(f"[migration] Added column '{col}' to sessions table")
+        except Exception:
+            pass  # column already exists — safe to ignore
+
+    # Back-fill created_at from start_time for existing rows
+    conn.execute(
+        "UPDATE sessions SET created_at = start_time "
+        "WHERE created_at IS NULL AND start_time IS NOT NULL"
+    )
+    conn.commit()
 
 
 # ──────────────────────────────────────────────

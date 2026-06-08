@@ -36,6 +36,13 @@ from voice import speak_sentence
 log = get_logger("chat_routes")
 router = APIRouter()
 
+_CONTEXTUAL_FOLLOWUP_PATTERNS = re.compile(
+    r"^\s*(why|why\s+\w+|explain\s+(that|this|it|more)|tell\s+me\s+more|"
+    r"elaborate|what\s+do\s+you\s+mean|how\s+(so|come)|"
+    r"go\s+on|continue|and\s*\?|so\s*\?)\s*[?.]?\s*$",
+    re.IGNORECASE,
+)
+
 _DISPATCH_LOCK = asyncio.Lock()
 _SIDE_EFFECT_INTENTS = {"email", "sms", "call", "calendar_create", "shell", "agent", "create_file", "delete_file"}
 _MAX_WIDGET_HISTORY = 50
@@ -98,6 +105,8 @@ def _is_followup(user_input):
     last_reply = last_bot.get("content", "").lower()
     if lower in ("yes", "y", "no", "n", "ok", "sure", "cancel", "nevermind", "stop"):
         return True, "confirmation"
+    if _CONTEXTUAL_FOLLOWUP_PATTERNS.match(user_input.strip()):
+        return True, "contextual_followup"
     if len(lower.split()) <= 5:
         new_intent = detect_intent(user_input)
         if new_intent not in ("chat", "unknown", last_intent):
@@ -140,6 +149,22 @@ def _handle_followup(user_input, fu_type):
     elif fu_type == "confirmation":
         context = f"Previous: {last_bot.get('content', '')[:200]}\nUser follow-up: {user_input}"
         return chat(context, intent="chat"), "chat"
+    elif fu_type == "contextual_followup":
+        prior_result = last_bot.get("content", "") if last_bot else ""
+        prior_intent = last_bot.get("intent", "chat") if last_bot else "chat"
+        system = (
+            "You are EDITH — Vaibhav's personal AI OS. "
+            "The user is asking a follow-up question about your previous response. "
+            f"Your previous response was:\n\n{prior_result[:1000]}\n\n"
+            "Answer the follow-up concisely and directly, grounded in the above context."
+        )
+        from smart_router import smart_call as _sc
+        reply = _sc(
+            f"Follow-up question: {user_input}",
+            intent="chat",
+            system=system,
+        )
+        return reply or "I'm not sure what to add, Boss.", prior_intent
     context = last_bot.get("content", "") if last_bot else ""
     prev_intent = last_user.get("intent", "chat") if last_user else "chat"
     return chat(f"Previous: {context[:500]}\n\nUser follow-up: {user_input}", intent=prev_intent), prev_intent
@@ -196,7 +221,32 @@ async def chat_stream_endpoint(req: Request):
             _ACTION_INTENTS = set(INTENT_HANDLERS.keys()) - {"chat", "lookup", "reason", "search"}
             if intent in _ACTION_INTENTS:
                 log.info(f"[Stream] Action intent '{intent}' — dispatching")
-                _ctx = DispatchContext(user_input=user_input, intent=intent, source="stream", chat_fn=chat, chat_stream_fn=chat_stream)
+
+                # ── Memory injection (mirrors /api/chat behaviour) ──────────────────
+                _action_memory_context = ""
+                try:
+                    from orchestrator import recall, recall_episodes
+                    _a_memories = await asyncio.to_thread(recall, user_input)
+                    _a_episodes = await asyncio.to_thread(recall_episodes, user_input, 1)
+                    _a_mem_list = (
+                        [m["value"] for m in _a_memories if isinstance(m, dict) and "value" in m]
+                        or _a_memories
+                    )
+                    _action_memory_context = "\n".join(str(m) for m in _a_mem_list) if _a_mem_list else ""
+                    if _a_episodes:
+                        _action_memory_context += f"\n\nPast Session: {_a_episodes[0]}"
+                except Exception as _ame:
+                    log.warning(f"[Stream] Action memory injection failed (non-fatal): {_ame}")
+                # ────────────────────────────────────────────────────────────────────
+
+                _ctx = DispatchContext(
+                    user_input=user_input,
+                    intent=intent,
+                    source="stream",
+                    chat_fn=chat,
+                    chat_stream_fn=chat_stream,
+                    memory_context=_action_memory_context,
+                )
                 if intent in _SIDE_EFFECT_INTENTS:
                     async with _DISPATCH_LOCK:
                         _result = await asyncio.to_thread(dispatch, _ctx)

@@ -118,18 +118,18 @@ async def get_sessions():
         _db = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "session_state.db")
         conn = _sq.connect(_db)
         rows = conn.execute(
-            "SELECT session_id, conversation_json, start_time FROM sessions "
-            "WHERE session_id IS NOT NULL ORDER BY last_active DESC LIMIT 50"
+            "SELECT session_id, conversation_json, start_time, COALESCE(pinned, 0) "
+            "FROM sessions WHERE session_id IS NOT NULL ORDER BY last_active DESC LIMIT 50"
         ).fetchall()
         conn.close()
         today = date.today().isoformat()
         yesterday = (date.today() - timedelta(days=1)).isoformat()
         result = {"today": [], "yesterday": [], "older": []}
-        for sid, cjson, start_time in rows:
+        for sid, cjson, start_time, pinned in rows:
             turns = json.loads(cjson or "[]")
             first_user = next((t["content"] for t in turns if t.get("role") == "user"), None)
             title = (first_user[:40] + ("..." if len(first_user) > 40 else "")) if first_user else f"New Chat ({sid})"
-            item = {"session_id": sid, "title": title, "timestamp": start_time or "", "message_count": len(turns) // 2}
+            item = {"session_id": sid, "title": title, "timestamp": start_time or "", "message_count": len(turns) // 2, "pinned": bool(pinned)}
             day = (start_time or "")[:10]
             if day == today:
                 result["today"].append(item)
@@ -177,6 +177,31 @@ async def get_session_messages(session_id: str):
     except Exception as e:
         log.warning(f"get_session_messages failed: {e}")
         return {"messages": []}
+
+
+@router.patch("/api/sessions/{session_id}/pin")
+async def pin_session(session_id: str, request: Request):
+    """Toggle pinned state for a session. Body: {"pinned": true/false}"""
+    try:
+        body = await request.json()
+        pinned_val = 1 if body.get("pinned", False) else 0
+        import sqlite3 as _sq
+        _db = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "session_state.db")
+        conn = _sq.connect(_db)
+        conn.execute(
+            "UPDATE sessions SET pinned = ? WHERE session_id = ?",
+            (pinned_val, session_id)
+        )
+        conn.commit()
+        affected = conn.execute("SELECT changes()").fetchone()[0]
+        conn.close()
+        if affected == 0:
+            return JSONResponse(status_code=404, content={"ok": False, "error": "Session not found"})
+        log.info(f"Session {session_id} pinned={pinned_val}")
+        return {"ok": True, "session_id": session_id, "pinned": bool(pinned_val)}
+    except Exception as e:
+        log.warning(f"pin_session failed: {e}")
+        return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
 
 
 @router.post("/webhook/{source}")

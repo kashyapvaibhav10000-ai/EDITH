@@ -6,10 +6,15 @@ Strategist · Critic · Builder · Wildcard
 
 import datetime
 import concurrent.futures
+import threading
 from config import get_chroma_client, get_logger
 from smart_router import smart_call
 
 log = get_logger("council")
+
+# Semaphore: max 2 concurrent LLM calls across both council rounds.
+# Prevents hitting provider rate limits when 4+4 persona calls fire in parallel.
+_COUNCIL_SEM = threading.Semaphore(2)
 
 PERSONAS = {
     "strategist": {
@@ -104,7 +109,8 @@ POSITIONS FROM OTHER COUNCIL MEMBERS:
 Because this is a high-speed parallel session, you are all speaking simultaneously.
 Focus on your unique perspective. The synthesis phase will reconcile any conflicts."""
 
-        response = smart_call(prompt, intent="council")
+        with _COUNCIL_SEM:
+            response = smart_call(prompt, intent="council")
         _save_persona_position(key, query, response)
         return key, f"{p['emoji']} {p['name'].upper()}\n{response}"
 
@@ -140,7 +146,8 @@ Focus on your unique perspective. The synthesis phase will reconcile any conflic
             "Find the weakest argument among ALL responses including your own. "
             "Attack it in 2-3 sentences. Be precise about which claim is flawed and why."
         )
-        attack = smart_call(attack_prompt, intent="council")
+        with _COUNCIL_SEM:
+            attack = smart_call(attack_prompt, intent="council")
         return key, f"{p['emoji']} {p['name'].upper()} (ATTACK)\n{attack}"
 
     attacks = []
