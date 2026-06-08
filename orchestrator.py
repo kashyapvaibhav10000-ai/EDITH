@@ -264,6 +264,13 @@ with _source_history_lock:
 # ──────────────────────────────────────────────
 # UPGRADE #1: HistoryManager with Auto-Compaction
 # ──────────────────────────────────────────────
+try:
+    import tiktoken as _tiktoken
+    _TK_ENC = _tiktoken.get_encoding("cl100k_base")
+except Exception:
+    _TK_ENC = None
+
+
 class HistoryManager:
     """Manages conversation history with token-based auto-compaction."""
     
@@ -279,8 +286,13 @@ class HistoryManager:
         self._maybe_compact()
     
     def _estimate_tokens(self, text: str) -> int:
-        """Rough token estimate: 1 token ≈ 4 chars."""
-        return len(str(text)) // 4
+        """Accurate token count via tiktoken cl100k_base; fallback to char/4."""
+        try:
+            if _TK_ENC is not None:
+                return len(_TK_ENC.encode(str(text)))
+        except Exception:
+            pass
+        return len(str(text)) // 4  # fallback only
     
     def _maybe_compact(self):
         """If total tokens exceed threshold, summarize oldest half."""
@@ -1112,7 +1124,9 @@ do it differently." That's what makes you useful. That's what makes you real.
     _mem_key = f"exchange_{abs(hash(user_input))}"
     remember(_mem_key, f"Vaibhav said: {user_input}. EDITH replied: {reply}")
     _emit_memory_updated(_mem_key)
-    _post_turn_reflection(user_input, reply)
+    import random as _random
+    if _random.random() < 0.20:
+        _post_turn_reflection(user_input, reply)
     _maybe_review_skills_from_chat(user_input, reply)  # every 10 turns, check for new skills
     try:
         save_episode(

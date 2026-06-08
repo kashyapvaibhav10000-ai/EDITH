@@ -92,6 +92,8 @@ class AgentRun:
 # ──────────────────────────────────────────────
 def _get_db() -> sqlite3.Connection:
     conn = sqlite3.connect(_AGENT_DB)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("""CREATE TABLE IF NOT EXISTS agent_runs (
         task_id TEXT PRIMARY KEY,
         task TEXT NOT NULL,
