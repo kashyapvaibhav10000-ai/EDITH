@@ -23,7 +23,7 @@ router = APIRouter()
 
 _DASHBOARD_HTML_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "edith_dashboard.html",
+    "edith_dashboard_v3.html",
 )
 
 
