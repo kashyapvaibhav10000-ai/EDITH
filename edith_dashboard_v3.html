@@ -1,0 +1,1907 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EDITH</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+
+/* ── RESET ── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#000;color:#e3e3e3;
+  font-family:'Inter',system-ui,sans-serif;font-size:14px;overflow:hidden}
+button,input,textarea{font-family:inherit;outline:none;border:none;background:none;color:inherit}
+a{text-decoration:none;color:inherit}
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:2px}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ── TOKENS ── */
+:root{
+  --bg:        #000000;
+  --bg1:       #0a0a0a;
+  --bg2:       #111116;
+  --bg3:       #18181f;
+  --border:    rgba(255,255,255,.07);
+  --border-hi: rgba(255,255,255,.13);
+  --text:      #e3e3e3;
+  --text2:     #8a8f9a;
+  --text3:     rgba(255,255,255,.28);
+  --accent:    #4285f4;
+  --accent2:   #9c5cf5;
+  --green:     #34a853;
+  --amber:     #fbbc04;
+  --red:       #ea4335;
+  --radius:    12px;
+  --rail-w:    60px;
+}
+
+/* ── ANIMATIONS ── */
+@keyframes aurora{
+  0%{background-position:0% 50%}
+  50%{background-position:100% 50%}
+  100%{background-position:0% 50%}
+}
+@keyframes fadeUp{
+  from{opacity:0;transform:translateY(8px)}
+  to{opacity:1;transform:translateY(0)}
+}
+@keyframes shimmer{0%,100%{opacity:.5}50%{opacity:1}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes slideRight{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:translateX(0)}}
+
+/* ── APP SHELL ── */
+.app{
+  display:flex;
+  height:100vh;
+  overflow:hidden;
+  background:var(--bg);
+}
+
+/* ──────────────────────────────────────────
+   RAIL SIDEBAR
+────────────────────────────────────────── */
+.rail{
+  width:var(--rail-w);
+  flex-shrink:0;
+  background:var(--bg);
+  border-right:1px solid var(--border);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  padding:12px 0 14px;
+  z-index:30;
+  gap:2px;
+}
+
+/* Logo orb */
+.rail-logo{
+  width:32px;height:32px;border-radius:50%;
+  background:conic-gradient(from 0deg,#4285f4,#9c5cf5,#34a853,#ea4335,#4285f4);
+  background-size:200%;
+  animation:aurora 5s ease infinite;
+  position:relative;cursor:pointer;
+  margin-bottom:18px;flex-shrink:0;
+}
+.rail-logo::after{
+  content:'';position:absolute;inset:3px;
+  border-radius:50%;background:var(--bg);
+}
+.rail-logo-e{
+  position:absolute;inset:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:700;color:#fff;z-index:1;
+}
+
+/* Nav item */
+.ri{
+  width:46px;height:46px;border-radius:var(--radius);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  cursor:pointer;
+  color:var(--text2);
+  transition:background .15s,color .15s;
+  position:relative;gap:3px;
+}
+.ri:hover{background:rgba(255,255,255,.07);color:var(--text)}
+.ri.active{background:rgba(66,133,244,.14);color:#8ab4f8}
+.ri-ico{font-size:17px;line-height:1}
+.ri-lbl{font-size:9px;font-weight:500;letter-spacing:.3px;color:inherit;opacity:.75}
+
+/* Notification dot */
+.ri-dot{
+  position:absolute;top:7px;right:7px;
+  width:6px;height:6px;border-radius:50%;
+  border:1.5px solid var(--bg);
+}
+.ri-dot.blue{background:var(--accent)}
+.ri-dot.amber{background:var(--amber)}
+.ri-dot.red{background:var(--red)}
+
+.rail-gap{flex:1}
+.rail-avatar{
+  width:28px;height:28px;border-radius:50%;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:700;color:#fff;
+  cursor:pointer;margin-top:6px;
+}
+
+/* ──────────────────────────────────────────
+   MAIN AREA
+────────────────────────────────────────── */
+.main{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  background:var(--bg1);
+  min-width:0;
+}
+
+/* Topbar */
+.topbar{
+  height:48px;flex-shrink:0;
+  background:rgba(10,10,10,.92);
+  backdrop-filter:blur(16px);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;
+  padding:0 18px;gap:10px;
+  z-index:10;
+}
+.tb-title{font-size:14px;font-weight:500;color:var(--text);flex:1}
+.tb-right{margin-left:auto;display:flex;align-items:center;gap:7px}
+.tb-pill{
+  font-size:10px;padding:3px 9px;border-radius:14px;
+  border:1px solid var(--border);
+  color:var(--text3);white-space:nowrap;
+}
+.tb-pill.on{
+  border-color:rgba(52,168,83,.4);
+  color:var(--green);
+  background:rgba(52,168,83,.08);
+}
+.tb-kb{
+  font-size:11px;padding:3px 8px;border-radius:7px;
+  border:1px solid var(--border);
+  color:var(--text3);cursor:pointer;
+  transition:all .15s;font-family:'JetBrains Mono',monospace;
+}
+.tb-kb:hover{border-color:var(--border-hi);color:var(--text2)}
+.tb-clock{
+  font-family:'JetBrains Mono',monospace;font-size:11px;
+  color:var(--text3);
+  background:rgba(255,255,255,.04);
+  padding:3px 9px;border-radius:7px;
+}
+
+/* ──────────────────────────────────────────
+   PAGE ROUTER
+────────────────────────────────────────── */
+.page{display:none;flex:1;flex-direction:column;overflow:hidden}
+.page.active{display:flex;animation:fadeUp .18s ease}
+
+/* ──────────────────────────────────────────
+   COMMAND PALETTE (⌘K)
+────────────────────────────────────────── */
+.cmd-backdrop{
+  display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,.6);backdrop-filter:blur(4px);
+  z-index:200;align-items:flex-start;justify-content:center;
+  padding-top:120px;
+}
+.cmd-backdrop.open{display:flex}
+.cmd-box{
+  background:var(--bg2);
+  border:1px solid var(--border-hi);
+  border-radius:16px;width:560px;max-width:92vw;
+  box-shadow:0 24px 60px rgba(0,0,0,.6);
+  overflow:hidden;
+}
+.cmd-input-wrap{
+  display:flex;align-items:center;gap:10px;
+  padding:14px 18px;
+  border-bottom:1px solid var(--border);
+}
+.cmd-icon{font-size:16px;color:var(--text3)}
+.cmd-input{
+  flex:1;font-size:15px;color:var(--text);background:transparent;
+}
+.cmd-input::placeholder{color:var(--text3)}
+.cmd-esc{
+  font-size:10px;padding:2px 7px;border-radius:5px;
+  background:rgba(255,255,255,.06);color:var(--text3);
+  font-family:'JetBrains Mono',monospace;
+}
+.cmd-results{padding:6px 0;max-height:320px;overflow-y:auto}
+.cmd-group-label{
+  font-size:10px;font-weight:600;letter-spacing:.7px;
+  text-transform:uppercase;color:var(--text3);
+  padding:8px 18px 4px;
+}
+.cmd-item{
+  display:flex;align-items:center;gap:12px;
+  padding:9px 18px;cursor:pointer;
+  transition:background .1s;font-size:13px;color:var(--text2);
+}
+.cmd-item:hover,.cmd-item.sel{background:rgba(255,255,255,.06);color:var(--text)}
+.cmd-item-ico{font-size:15px;width:22px;text-align:center;flex-shrink:0}
+.cmd-item-label{flex:1}
+.cmd-item-kb{font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace}
+
+/* ──────────────────────────────────────────
+   TOAST
+────────────────────────────────────────── */
+#toast-area{
+  position:fixed;bottom:20px;right:20px;
+  display:flex;flex-direction:column;gap:8px;z-index:999;
+}
+.toast{
+  background:rgba(30,30,34,.97);
+  backdrop-filter:blur(20px);
+  border:1px solid var(--border-hi);
+  border-radius:10px;
+  padding:9px 15px;font-size:13px;color:var(--text);
+  display:flex;align-items:center;gap:8px;
+  min-width:200px;
+  box-shadow:0 8px 24px rgba(0,0,0,.4);
+  animation:fadeUp .2s ease;
+}
+
+/* ──────────────────────────────────────────
+   SHARED UTILITY CLASSES
+────────────────────────────────────────── */
+.tag{
+  display:inline-block;font-size:10px;font-weight:500;
+  padding:2px 7px;border-radius:6px;
+  font-family:'JetBrains Mono',monospace;letter-spacing:.3px;
+}
+.tag-blue {background:rgba(66,133,244,.15);color:#8ab4f8}
+.tag-green{background:rgba(52,168,83,.15); color:#81c995}
+.tag-purple{background:rgba(156,92,245,.15);color:#c084fc}
+.tag-amber{background:rgba(251,188,4,.15); color:#fdd663}
+.tag-red  {background:rgba(234,67,53,.15); color:#f28b82}
+
+.panel{
+  background:rgba(255,255,255,.04);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  overflow:hidden;
+  transition:border-color .2s;
+}
+.panel:hover{border-color:var(--border-hi)}
+.panel-head{
+  padding:12px 16px;
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:8px;
+}
+.panel-title{font-size:13px;font-weight:500;color:var(--text);flex:1}
+.panel-badge{font-size:10px;padding:2px 8px;border-radius:8px;font-family:'JetBrains Mono',monospace}
+.panel-badge.blue{background:rgba(66,133,244,.15);color:#8ab4f8}
+.panel-badge.green{background:rgba(52,168,83,.15);color:#81c995}
+.panel-badge.amber{background:rgba(251,188,4,.15);color:#fdd663}
+.panel-body{padding:14px 16px}
+
+/* Bar */
+.bar{height:3px;border-radius:2px;background:rgba(255,255,255,.06);overflow:hidden}
+.bar-fill{height:100%;border-radius:2px;transition:width 1s ease}
+.bar-blue  {background:linear-gradient(90deg,#4285f4,#8ab4f8)}
+.bar-green {background:linear-gradient(90deg,#34a853,#81c995)}
+.bar-amber {background:linear-gradient(90deg,#fbbc04,#fdd663)}
+.bar-red   {background:linear-gradient(90deg,#ea4335,#f28b82)}
+
+/* Toggle */
+.toggle{
+  width:40px;height:22px;border-radius:11px;
+  background:rgba(255,255,255,.1);
+  cursor:pointer;position:relative;
+  transition:background .15s;flex-shrink:0;
+}
+.toggle.on{background:rgba(52,168,83,.3)}
+.toggle::after{
+  content:'';position:absolute;top:3px;left:3px;
+  width:16px;height:16px;border-radius:50%;
+  background:rgba(255,255,255,.4);transition:left .15s;
+}
+.toggle.on::after{left:21px;background:var(--green)}
+
+/* ──────────────────────────────────────────
+   HOME PAGE
+────────────────────────────────────────── */
+#pg-home{position:relative}
+
+.home-ctx-bar{
+  display:flex;align-items:center;gap:8px;
+  padding:7px 20px;
+  border-bottom:1px solid var(--border);
+  font-size:11px;color:var(--text3);
+  flex-shrink:0;background:rgba(0,0,0,.3);
+}
+.hcb-dot{
+  display:inline-block;width:6px;height:6px;
+  border-radius:50%;margin-right:4px;vertical-align:middle;
+}
+.hcb-sep{opacity:.4}
+.hcb-item{display:flex;align-items:center}
+
+/* Messages scrollable area */
+.home-msgs{
+  flex:1;overflow-y:auto;
+  display:flex;flex-direction:column;
+  padding:0 0 8px;
+}
+
+/* Empty state — centered */
+.home-empty{
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  flex:1;padding:40px 24px 24px;
+  text-align:center;
+  animation:fadeUp .3s ease;
+}
+.home-greeting{
+  font-size:28px;font-weight:400;line-height:1.3;
+  background:linear-gradient(120deg,#e3e3e3 0%,#8ab4f8 45%,#c084fc 75%,#e3e3e3 100%);
+  background-size:200% auto;
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  animation:aurora 4s ease infinite;
+  margin-bottom:6px;
+}
+.home-sub{font-size:14px;color:var(--text3);margin-bottom:28px}
+
+.home-chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:28px;max-width:620px}
+.hchip{
+  padding:7px 14px;border-radius:18px;
+  border:1px solid var(--border);
+  font-size:12px;color:var(--text2);
+  background:rgba(255,255,255,.03);
+  cursor:pointer;transition:all .15s;white-space:nowrap;
+}
+.hchip:hover{background:rgba(255,255,255,.07);border-color:var(--border-hi);color:var(--text)}
+
+.home-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:520px;width:100%}
+.hcard{
+  background:rgba(255,255,255,.04);border:1px solid var(--border);
+  border-radius:var(--radius);padding:16px;
+  cursor:pointer;transition:all .15s;text-align:left;
+}
+.hcard:hover{background:rgba(255,255,255,.07);border-color:var(--border-hi);transform:translateY(-1px)}
+.hcard-ico{font-size:18px;margin-bottom:7px}
+.hcard-t{font-size:13px;font-weight:500;color:rgba(255,255,255,.8);margin-bottom:3px}
+.hcard-s{font-size:11px;color:var(--text3)}
+
+/* Inline messages (after first send) */
+.home-msgs-inner{
+  padding:20px 0;
+  display:flex;flex-direction:column;gap:18px;
+  max-width:680px;width:100%;margin:0 auto;padding-left:20px;padding-right:20px;
+}
+.hmsg{display:flex;gap:12px;align-items:flex-start;animation:fadeUp .2s ease}
+.hmsg.usr{flex-direction:row-reverse}
+.hmsg-ava{
+  width:28px;height:28px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:700;flex-shrink:0;
+}
+.hmsg-ava.e{background:linear-gradient(135deg,#4285f4,#9c5cf5);color:#fff}
+.hmsg-ava.u{background:rgba(255,255,255,.1);color:var(--text2)}
+.hmsg-wrap{max-width:78%;display:flex;flex-direction:column}
+.hmsg-bubble{
+  padding:10px 14px;border-radius:16px;
+  font-size:14px;line-height:1.6;color:var(--text);
+}
+.hmsg-bubble.e{background:rgba(255,255,255,.05);border-radius:4px 16px 16px 16px}
+.hmsg-bubble.u{
+  background:rgba(66,133,244,.15);
+  border:1px solid rgba(66,133,244,.18);
+  border-radius:16px 16px 4px 16px;
+  align-self:flex-end;
+}
+.hmsg-meta{font-size:10px;color:var(--text3);margin-top:3px;padding:0 3px;font-family:'JetBrains Mono',monospace}
+.hmsg-meta.r{text-align:right}
+
+/* Thinking state */
+.hmsg-thinking{
+  display:flex;gap:4px;align-items:center;padding:10px 14px;
+}
+.th-dot{
+  width:6px;height:6px;border-radius:50%;
+  background:var(--text3);animation:pulse 1.2s ease infinite;
+}
+.th-dot:nth-child(2){animation-delay:.15s}
+.th-dot:nth-child(3){animation-delay:.3s}
+
+/* Tool call inline block */
+.tool-call-block{
+  background:rgba(66,133,244,.07);
+  border:1px solid rgba(66,133,244,.18);
+  border-radius:8px;padding:8px 12px;
+  margin:6px 0;font-size:12px;
+  display:flex;align-items:center;gap:8px;
+  cursor:pointer;transition:background .15s;
+}
+.tool-call-block:hover{background:rgba(66,133,244,.12)}
+.tcb-icon{font-size:13px}
+.tcb-name{font-family:'JetBrains Mono',monospace;color:#8ab4f8;flex:1}
+.tcb-args{font-size:11px;color:var(--text3);font-family:'JetBrains Mono',monospace}
+.tcb-result{
+  display:none;margin-top:6px;padding:6px 8px;
+  background:rgba(0,0,0,.3);border-radius:6px;
+  font-size:11px;color:var(--text2);font-family:'JetBrains Mono',monospace;
+  white-space:pre-wrap;
+}
+.tool-call-block.expanded .tcb-result{display:block}
+
+/* Task drawer */
+.task-drawer{
+  flex-shrink:0;
+  border-top:1px solid var(--border);
+  background:rgba(0,0,0,.4);
+}
+.td-head{
+  display:flex;align-items:center;gap:10px;
+  padding:8px 18px;cursor:pointer;font-size:12px;
+  color:var(--text2);transition:background .15s;
+}
+.td-head:hover{background:rgba(255,255,255,.04)}
+.td-badge{
+  font-size:10px;padding:2px 7px;border-radius:8px;
+  background:rgba(66,133,244,.15);color:#8ab4f8;
+  font-family:'JetBrains Mono',monospace;
+}
+#td-chev{margin-left:auto;transition:transform .2s}
+.td-body{padding:8px 18px 12px;display:flex;flex-direction:column;gap:8px}
+.td-row{background:rgba(255,255,255,.04);border-radius:8px;padding:10px 12px}
+.td-name{font-size:12px;color:var(--text2);margin-bottom:6px;font-family:'JetBrains Mono',monospace}
+.td-steps{display:flex;gap:6px}
+.tds{font-size:10px;padding:3px 9px;border-radius:6px;font-family:'JetBrains Mono',monospace}
+.tds.done{background:rgba(52,168,83,.15);color:#81c995}
+.tds.run{background:rgba(66,133,244,.15);color:#8ab4f8;animation:shimmer 1s infinite}
+.tds.wait{background:rgba(255,255,255,.06);color:var(--text3)}
+
+/* Input area */
+.home-input-area{
+  flex-shrink:0;
+  padding:10px 16px 14px;
+  border-top:1px solid var(--border);
+  background:var(--bg1);
+}
+.tool-strip{
+  display:flex;align-items:center;gap:8px;
+  padding:6px 12px;border-radius:8px;
+  background:rgba(66,133,244,.08);
+  border:1px solid rgba(66,133,244,.18);
+  margin-bottom:8px;font-size:12px;
+}
+.ts-label{color:var(--text3)}
+.ts-tool{flex:1;font-family:'JetBrains Mono',monospace;color:#8ab4f8;font-size:11px}
+.ts-close{color:var(--text3);cursor:pointer;font-size:16px;line-height:1;padding:0 2px}
+.ts-close:hover{color:var(--text)}
+
+.home-box{
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:12px 14px 10px;
+  transition:border-color .2s;
+  max-width:760px;margin:0 auto;width:100%;
+}
+.home-box:focus-within{border-color:rgba(138,180,248,.35)}
+.home-ta{
+  width:100%;background:transparent;
+  font-size:14px;color:var(--text);
+  resize:none;min-height:22px;max-height:160px;
+  overflow-y:auto;line-height:1.6;display:block;
+}
+.home-ta::placeholder{color:var(--text3)}
+.home-box-row{
+  display:flex;align-items:center;gap:6px;
+  margin-top:8px;
+}
+.hbox-btn{
+  width:30px;height:30px;border-radius:8px;
+  font-size:15px;cursor:pointer;color:var(--text3);
+  display:flex;align-items:center;justify-content:center;
+  transition:background .15s,color .15s;
+}
+.hbox-btn:hover{background:rgba(255,255,255,.07);color:var(--text2)}
+.hbox-hint{font-size:11px;color:var(--text3);font-family:'JetBrains Mono',monospace}
+.hbox-send{
+  width:32px;height:32px;border-radius:50%;
+  background:var(--accent);color:#fff;font-size:15px;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:background .15s;flex-shrink:0;
+}
+.hbox-send:hover{background:#3367d6}
+
+/* ──────────────────────────────────────────
+   SETTINGS
+────────────────────────────────────────── */
+.set-body{padding:20px 28px;max-width:700px;margin:0 auto;display:flex;flex-direction:column;gap:0}
+.set-group{margin-bottom:28px}
+.sg-title{font-size:11px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--text3);margin-bottom:2px;padding:0 2px}
+.set-row{display:flex;align-items:center;gap:13px;padding:12px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+.set-row:last-child{border-bottom:none}
+.sr-ico{font-size:18px;width:28px;text-align:center;flex-shrink:0}
+.sr-info{flex:1}
+.sr-t{font-size:14px;color:rgba(255,255,255,.8)}
+.sr-s{font-size:12px;color:var(--text3);margin-top:2px}
+.sr-btn{
+  padding:5px 13px;border-radius:8px;
+  background:rgba(255,255,255,.06);border:1px solid var(--border);
+  color:var(--text3);font-size:12px;cursor:pointer;
+  transition:all .15s;flex-shrink:0;white-space:nowrap;
+}
+.sr-btn:hover{background:rgba(255,255,255,.1);color:var(--text2)}
+.sr-btn.warn{border-color:rgba(251,188,4,.3);color:#fdd663;background:rgba(251,188,4,.08)}
+.sr-btn.warn:hover{background:rgba(251,188,4,.14)}
+.sr-btn.danger{border-color:rgba(234,67,53,.3);color:#f28b82;background:rgba(234,67,53,.08)}
+.sr-btn.danger:hover{background:rgba(234,67,53,.14)}
+.sr-chips{display:flex;gap:4px;flex-shrink:0}
+.src{
+  padding:5px 12px;border-radius:8px;font-size:12px;
+  color:var(--text3);background:rgba(255,255,255,.04);
+  border:1px solid var(--border);cursor:pointer;transition:all .15s;
+}
+.src:hover{background:rgba(255,255,255,.08);color:var(--text2)}
+.src.active{background:rgba(66,133,244,.15);border-color:rgba(66,133,244,.25);color:#8ab4f8}
+.sr-colors{display:flex;gap:6px;flex-shrink:0}
+.src-color{
+  width:22px;height:22px;border-radius:50%;cursor:pointer;
+  transition:transform .15s;border:2px solid transparent;
+}
+.src-color:hover{transform:scale(1.15)}
+.src-color.active{border-color:rgba(255,255,255,.6)}
+
+/* ──────────────────────────────────────────
+   CUSTOMIZE
+────────────────────────────────────────── */
+#pg-customize{flex-direction:row;overflow:hidden}
+.cust-layout{display:flex;flex:1;overflow:hidden}
+.cust-nav{
+  width:190px;flex-shrink:0;background:var(--bg);
+  border-right:1px solid var(--border);
+  padding:14px 8px;overflow-y:auto;
+}
+.cn-header{
+  font-size:10px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;
+  color:var(--text3);padding:4px 10px 10px;
+}
+.cn-item{
+  display:flex;align-items:center;gap:8px;
+  padding:9px 10px;border-radius:9px;
+  font-size:13px;font-weight:500;color:var(--text2);
+  cursor:pointer;transition:all .12s;margin-bottom:2px;
+}
+.cn-item:hover{background:rgba(255,255,255,.06);color:var(--text)}
+.cn-item.active{background:rgba(66,133,244,.12);color:#8ab4f8}
+.cn-badge{
+  margin-left:auto;font-size:10px;padding:1px 6px;border-radius:7px;
+}
+.cn-badge.amber{background:rgba(251,188,4,.2);color:#fdd663}
+.cust-content{
+  flex:1;overflow-y:auto;padding:20px 24px;
+  display:flex;flex-direction:column;
+}
+.ct{display:none;flex-direction:column;gap:14px;animation:fadeUp .2s ease}
+.ct.active{display:flex}
+.ct-title{font-size:17px;font-weight:600;color:var(--text)}
+.ct-sub{font-size:12px;color:var(--text3);margin-top:-8px}
+.ct-sect{
+  font-size:10px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;
+  color:var(--text3);margin-top:4px;
+}
+.ct-btn{
+  padding:7px 15px;border-radius:14px;
+  background:rgba(66,133,244,.15);border:1px solid rgba(66,133,244,.2);
+  color:#8ab4f8;font-size:13px;cursor:pointer;
+  transition:all .15s;white-space:nowrap;
+}
+.ct-btn:hover{background:rgba(66,133,244,.25)}
+/* Memory */
+.mem-stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.ms-card{background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:var(--radius);padding:13px}
+.ms-dot{width:8px;height:8px;border-radius:50%;margin-bottom:7px}
+.ms-val{font-size:24px;font-weight:500;color:var(--text);font-family:'JetBrains Mono',monospace}
+.ms-lbl{font-size:11px;color:var(--text3);margin-top:3px}
+.mem-items{display:flex;flex-direction:column;gap:8px}
+.mi{background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:10px;padding:12px 13px;cursor:pointer;transition:all .15s}
+.mi:hover{background:rgba(255,255,255,.07);border-color:var(--border-hi)}
+.mi-top{display:flex;align-items:center;gap:7px;margin-bottom:4px;flex-wrap:wrap}
+.mi-key{font-size:11px;color:var(--text3);font-family:'JetBrains Mono',monospace;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mi-t{font-size:10px;color:var(--text3);flex-shrink:0}
+.mi-val{font-size:13px;color:var(--text2);line-height:1.5}
+/* MCP */
+.mcp-cards{display:flex;flex-direction:column;gap:8px}
+.mcp-card{display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;cursor:pointer;transition:all .15s}
+.mcp-card:hover{background:rgba(255,255,255,.07);border-color:var(--border-hi)}
+.mcp-ico{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
+.mcp-info{flex:1;min-width:0}
+.mcp-n{font-size:13px;font-weight:500;color:var(--text);margin-bottom:2px}
+.mcp-d{font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mcp-r{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.mcp-tools{font-size:11px;color:var(--text3);font-family:'JetBrains Mono',monospace}
+/* Security */
+.sec-stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.sec-stat{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:var(--radius);padding:13px;border-left:3px solid transparent}
+.sec-stat.ok{border-left-color:var(--green)}
+.sec-stat.warn{border-left-color:var(--amber)}
+.sec-stat>span:first-child{font-size:20px;flex-shrink:0}
+.ss-title{font-size:13px;font-weight:500;color:rgba(255,255,255,.8)}
+.ss-sub{font-size:11px;color:var(--text3);margin-top:2px}
+.ss-check{margin-left:auto;font-size:16px;flex-shrink:0}
+.sec-evs{display:flex;flex-direction:column;gap:7px}
+.sec-ev{background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:9px;padding:11px 13px;border-left:3px solid transparent}
+.sec-ev.ok{border-left-color:var(--green)}
+.sec-ev.warn{border-left-color:var(--amber)}
+.sev-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px}
+.sev-t{font-size:13px;font-weight:500;color:rgba(255,255,255,.8)}
+.sev-ts{font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace}
+.sev-d{font-size:12px;color:var(--text3)}
+/* Repo DNA */
+.dna-input{
+  flex:1;background:rgba(255,255,255,.06);border:1px solid var(--border);
+  border-radius:9px;padding:8px 13px;font-size:13px;color:var(--text);
+  transition:border-color .2s;
+}
+.dna-input:focus{border-color:rgba(138,180,248,.35)}
+.dna-input::placeholder{color:var(--text3)}
+.dna-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.dna-sc{background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:var(--radius);padding:13px}
+.dna-sl{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:5px}
+.dna-sv{font-size:24px;font-weight:500;color:var(--text);font-family:'JetBrains Mono',monospace}
+.dna-ss{font-size:11px;color:var(--text3);margin-top:3px}
+.dna-insights{display:flex;flex-direction:column;gap:8px}
+.dna-ins{background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px}
+.di-t{font-size:13px;font-weight:500;color:rgba(255,255,255,.8);margin:5px 0 4px}
+.di-d{font-size:12px;color:var(--text3);line-height:1.6}
+/* Personalization */
+.pers-rows{display:flex;flex-direction:column}
+.pr{display:flex;align-items:center;gap:11px;padding:13px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+.pr:last-child{border-bottom:none}
+.pr-ico{font-size:18px;width:28px;text-align:center;flex-shrink:0}
+.pr-info{flex:1}
+.pr-t{font-size:14px;color:rgba(255,255,255,.8)}
+.pr-s{font-size:12px;color:var(--text3);margin-top:2px}
+
+/* ──────────────────────────────────────────
+   LOGS
+────────────────────────────────────────── */
+.logs-bar{display:flex;align-items:center;gap:10px;flex-shrink:0;flex-wrap:wrap}
+.lb-search-wrap{
+  background:rgba(255,255,255,.05);border:1px solid var(--border);
+  border-radius:9px;display:flex;align-items:center;gap:7px;
+  padding:6px 11px;min-width:180px;
+}
+.lb-search{flex:1;font-size:13px;color:var(--text)}
+.lb-search::placeholder{color:var(--text3)}
+.lb-tabs{
+  display:flex;gap:2px;
+  background:rgba(255,255,255,.04);border-radius:9px;padding:3px;
+}
+.lb-tab{
+  padding:5px 11px;border-radius:7px;
+  font-size:12px;font-weight:500;color:var(--text3);
+  cursor:pointer;transition:all .15s;white-space:nowrap;
+}
+.lb-tab:hover{color:var(--text2)}
+.lb-tab.active{background:rgba(255,255,255,.1);color:var(--text)}
+.lb-btn{
+  padding:6px 12px;border-radius:8px;
+  background:rgba(255,255,255,.05);border:1px solid var(--border);
+  font-size:12px;color:var(--text3);cursor:pointer;transition:all .15s;
+}
+.lb-btn:hover{background:rgba(255,255,255,.09);color:var(--text2)}
+.log-stream{
+  flex:1;overflow-y:auto;
+  background:rgba(0,0,0,.3);border:1px solid var(--border);
+  border-radius:var(--radius);padding:6px 0;
+  font-family:'JetBrains Mono',monospace;
+}
+.le{
+  display:flex;align-items:baseline;gap:10px;
+  padding:5px 14px;font-size:12px;
+  border-bottom:1px solid rgba(255,255,255,.03);
+  transition:background .1s;
+}
+.le:hover{background:rgba(255,255,255,.03)}
+.le:last-child{border-bottom:none}
+.le.warn{background:rgba(251,188,4,.04)}
+.le-t{color:var(--text3);flex-shrink:0;font-size:11px;min-width:65px}
+.le-cat{
+  font-size:9px;font-weight:700;padding:2px 6px;border-radius:5px;
+  letter-spacing:.5px;flex-shrink:0;
+}
+.le-cat.agt{background:rgba(66,133,244,.2);color:#8ab4f8}
+.le-cat.sys{background:rgba(52,168,83,.2);color:#81c995}
+.le-cat.mem{background:rgba(156,92,245,.2);color:#c084fc}
+.le-cat.mcp{background:rgba(251,188,4,.2);color:#fdd663}
+.le-cat.sec{background:rgba(234,67,53,.2);color:#f28b82}
+.le-m{color:rgba(255,255,255,.65);flex:1}
+
+/* ──────────────────────────────────────────
+   DASHBOARD
+────────────────────────────────────────── */
+.dash-body{padding:18px;display:flex;flex-direction:column;gap:14px;max-width:1080px;margin:0 auto;width:100%}
+.dash-row4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.dash-row3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.stat-card{
+  background:rgba(255,255,255,.04);border:1px solid var(--border);
+  border-radius:var(--radius);padding:15px;transition:border-color .2s;
+}
+.stat-card:hover{border-color:var(--border-hi)}
+.sc-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.sc-lbl{font-size:11px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.4px}
+.sc-ico{width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:13px}
+.sc-val{font-size:26px;font-weight:500;color:var(--text);line-height:1;font-family:'JetBrains Mono',monospace}
+.sc-sub{font-size:11px;color:var(--text3);margin-top:4px}
+.prov-r{display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:12px}
+.prov-r:last-child{border-bottom:none}
+.prov-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.prov-n{font-weight:500;color:rgba(255,255,255,.8);flex:1}
+.prov-m{font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace}
+.mem-ring-row{display:flex;align-items:center;gap:16px;padding:4px 0}
+.mem-ring-pos{position:relative;width:90px;height:90px;flex-shrink:0}
+.mem-legend{display:flex;flex-direction:column;gap:7px}
+.ml-r{display:flex;align-items:center;gap:7px;font-size:12px}
+.ml-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.ml-n{color:var(--text2);flex:1}
+.ml-v{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3)}
+.h-r{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:12px}
+.h-l{color:var(--text3);width:32px;font-size:11px;font-family:'JetBrains Mono',monospace;flex-shrink:0}
+.h-v{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3);width:34px;text-align:right;flex-shrink:0}
+.step-r{display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:13px}
+.step-r:last-child{border-bottom:none}
+.step-ic{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0}
+.step-ic.done{background:rgba(52,168,83,.2);color:#34a853}
+.step-ic.run{background:rgba(66,133,244,.2);color:#8ab4f8;animation:shimmer 1s infinite}
+.step-ic.wait{background:rgba(255,255,255,.07);color:var(--text3)}
+.step-t{flex:1;color:rgba(255,255,255,.7)}
+.step-ts{font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;flex-shrink:0}
+
+/* ──────────────────────────────────────────
+   CHAT PAGE
+────────────────────────────────────────── */
+#pg-chats{flex-direction:row;overflow:hidden}
+
+/* Conversation list */
+.cl-panel{
+  width:250px;flex-shrink:0;
+  background:var(--bg);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.cl-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 14px 10px;flex-shrink:0;
+}
+.cl-title{font-size:14px;font-weight:600;color:var(--text)}
+.cl-new-btn{
+  width:28px;height:28px;border-radius:8px;
+  background:rgba(66,133,244,.15);border:1px solid rgba(66,133,244,.2);
+  color:#8ab4f8;font-size:18px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:all .15s;line-height:1;
+}
+.cl-new-btn:hover{background:rgba(66,133,244,.25)}
+.cl-search-wrap{
+  margin:0 10px 6px;
+  background:rgba(255,255,255,.04);border:1px solid var(--border);
+  border-radius:9px;display:flex;align-items:center;gap:7px;padding:7px 10px;
+  flex-shrink:0;
+}
+.cl-si{font-size:12px;color:var(--text3)}
+.cl-search{flex:1;font-size:13px;color:var(--text)}
+.cl-search::placeholder{color:var(--text3)}
+.cl-section{
+  font-size:10px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;
+  color:var(--text3);padding:8px 14px 3px;flex-shrink:0;
+}
+.cl-panel{overflow-y:auto}
+
+.conv{
+  display:flex;align-items:center;gap:9px;
+  padding:8px 10px;cursor:pointer;
+  border-radius:9px;margin:1px 6px;
+  transition:background .12s;flex-shrink:0;
+}
+.conv:hover{background:rgba(255,255,255,.06)}
+.conv.active{background:rgba(66,133,244,.12)}
+.conv-ico{font-size:15px;flex-shrink:0}
+.conv-body{flex:1;min-width:0}
+.conv-title{font-size:13px;font-weight:500;color:rgba(255,255,255,.8);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.conv-sub{font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
+.conv-time{font-size:10px;color:var(--text3);flex-shrink:0;font-family:'JetBrains Mono',monospace}
+
+/* Chat right area */
+.chat-right{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg1)}
+
+.chat-tb{
+  padding:11px 18px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:10px;flex-shrink:0;
+}
+.ctb-info{flex:1;min-width:0}
+.ctb-title{font-size:14px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ctb-sub{font-size:11px;color:var(--text3);margin-top:1px}
+.ctb-acts{display:flex;gap:3px;flex-shrink:0}
+.ctb-btn{
+  width:30px;height:30px;border-radius:8px;font-size:14px;cursor:pointer;
+  color:var(--text3);transition:all .15s;
+  display:flex;align-items:center;justify-content:center;
+}
+.ctb-btn:hover{background:rgba(255,255,255,.07);color:var(--text2)}
+.ctb-btn.danger:hover{background:rgba(234,67,53,.12);color:#f28b82}
+
+/* Chat + artifact split */
+.chat-split{flex:1;display:flex;overflow:hidden}
+
+/* Messages */
+.chat-msgs{
+  flex:1;overflow-y:auto;padding:20px 22px;
+  display:flex;flex-direction:column;gap:18px;
+}
+.cmsg{display:flex;gap:11px;align-items:flex-start;animation:fadeUp .2s ease}
+.cmsg.usr{flex-direction:row-reverse}
+.cmsg-ava{
+  width:28px;height:28px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:700;flex-shrink:0;
+}
+.cmsg-ava.e{background:linear-gradient(135deg,#4285f4,#9c5cf5);color:#fff}
+.cmsg-ava.u{background:rgba(255,255,255,.1);color:var(--text2)}
+.cmsg-wrap{max-width:78%;display:flex;flex-direction:column}
+.cmsg-bubble{padding:10px 14px;border-radius:16px;font-size:14px;line-height:1.6;color:var(--text)}
+.cmsg-bubble.e{background:rgba(255,255,255,.05);border-radius:4px 16px 16px 16px}
+.cmsg-bubble.u{
+  background:rgba(66,133,244,.15);border:1px solid rgba(66,133,244,.18);
+  border-radius:16px 16px 4px 16px;align-self:flex-end;
+}
+.cmsg-meta{font-size:10px;color:var(--text3);margin-top:3px;padding:0 3px;font-family:'JetBrains Mono',monospace}
+.cmsg-meta.r{text-align:right}
+
+/* Inline steps */
+.inline-steps{display:flex;flex-direction:column;gap:5px}
+.is-row{display:flex;align-items:center;gap:7px;font-size:12px;color:rgba(255,255,255,.7)}
+.is-ic{
+  width:18px;height:18px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0;
+}
+.is-row.done .is-ic{background:rgba(52,168,83,.2);color:#34a853}
+.is-row.run .is-ic{background:rgba(66,133,244,.2);color:#8ab4f8;animation:shimmer 1s infinite}
+.is-row.wait .is-ic{background:rgba(255,255,255,.07);color:var(--text3)}
+.is-t{margin-left:auto;font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace}
+
+/* Artifact panel (feature 2) */
+.artifact-panel{
+  width:340px;flex-shrink:0;
+  background:var(--bg2);
+  border-left:1px solid var(--border);
+  display:flex;flex-direction:column;
+  animation:slideRight .2s ease;
+}
+.ap-head{
+  padding:12px 16px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:8px;flex-shrink:0;
+}
+.ap-title{font-size:13px;font-weight:500;color:var(--text);flex:1}
+.ap-close{
+  width:24px;height:24px;border-radius:50%;
+  background:rgba(255,255,255,.06);color:var(--text2);
+  font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:all .15s;
+}
+.ap-close:hover{background:rgba(255,255,255,.12)}
+.ap-body{flex:1;overflow-y:auto;padding:14px 16px}
+
+/* Chat input */
+.chat-input-area{
+  flex-shrink:0;padding:10px 16px 14px;
+  border-top:1px solid var(--border);background:var(--bg1);
+}
+.cia-box{
+  background:var(--bg2);border:1px solid var(--border);
+  border-radius:14px;padding:10px 14px;
+  display:flex;align-items:flex-end;gap:8px;
+  transition:border-color .2s;
+}
+.cia-box:focus-within{border-color:rgba(138,180,248,.35)}
+.cia-ta{
+  flex:1;background:transparent;font-size:14px;color:var(--text);
+  resize:none;min-height:22px;max-height:120px;overflow-y:auto;line-height:1.5;
+}
+.cia-ta::placeholder{color:var(--text3)}
+.cia-btn{
+  width:30px;height:30px;border-radius:50%;font-size:15px;cursor:pointer;
+  color:var(--text3);flex-shrink:0;transition:all .15s;
+  display:flex;align-items:center;justify-content:center;
+}
+.cia-btn:hover{background:rgba(255,255,255,.08);color:var(--text2)}
+.cia-send{
+  width:30px;height:30px;border-radius:50%;
+  background:var(--accent);color:#fff;font-size:14px;cursor:pointer;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;transition:background .15s;
+}
+.cia-send:hover{background:#3367d6}
+
+</style>
+</head>
+<body>
+
+<div id="toast-area"></div>
+
+<!-- Command palette -->
+<div class="cmd-backdrop" id="cmd-backdrop" onclick="closeCmdPalette(event)">
+  <div class="cmd-box">
+    <div class="cmd-input-wrap">
+      <span class="cmd-icon">⌘</span>
+      <input class="cmd-input" id="cmd-input" placeholder="Search pages, actions, memory…"
+        oninput="cmdFilter(this.value)"
+        onkeydown="cmdKey(event)"/>
+      <span class="cmd-esc" onclick="closeCmdPalette()">ESC</span>
+    </div>
+    <div class="cmd-results" id="cmd-results"></div>
+  </div>
+</div>
+
+<div class="app">
+
+  <!-- ── RAIL ── -->
+  <nav class="rail">
+    <div class="rail-logo" onclick="nav('home')">
+      <div class="rail-logo-e">E</div>
+    </div>
+
+    <div class="ri active" id="ri-home" onclick="nav('home')">
+      <span class="ri-ico">🏠</span>
+      <span class="ri-lbl">Home</span>
+    </div>
+    <div class="ri" id="ri-chats" onclick="nav('chats')">
+      <span class="ri-ico">💬</span>
+      <span class="ri-lbl">Chats</span>
+      <span class="ri-dot blue"></span>
+    </div>
+    <div class="ri" id="ri-dashboard" onclick="nav('dashboard')">
+      <span class="ri-ico">⬡</span>
+      <span class="ri-lbl">Dash</span>
+    </div>
+    <div class="ri" id="ri-logs" onclick="nav('logs')">
+      <span class="ri-ico">📜</span>
+      <span class="ri-lbl">Logs</span>
+      <span class="ri-dot amber"></span>
+    </div>
+    <div class="ri" id="ri-customize" onclick="nav('customize')">
+      <span class="ri-ico">🎨</span>
+      <span class="ri-lbl">Custom</span>
+    </div>
+
+    <div class="rail-gap"></div>
+
+    <div class="ri" id="ri-settings" onclick="nav('settings')">
+      <span class="ri-ico">⚙️</span>
+      <span class="ri-lbl">Config</span>
+    </div>
+    <div class="rail-avatar" title="Vaibhav">V</div>
+  </nav>
+
+  <!-- ── MAIN ── -->
+  <main class="main">
+
+    <!-- Topbar -->
+    <div class="topbar">
+      <div class="tb-title" id="tb-title">Home</div>
+      <div class="tb-right">
+        <div class="tb-pill on" id="tb-provider">● Groq</div>
+        <div class="tb-pill" id="tb-node">Cloud</div>
+        <div class="tb-kb" onclick="openCmdPalette()" title="⌘K">⌘K</div>
+        <div class="tb-clock" id="tb-clock">--:--:--</div>
+      </div>
+    </div>
+
+    <!-- Pages injected by subsequent phases -->
+    <!-- ══ HOME PAGE ══ -->
+    <div class="page active" id="pg-home">
+
+      <!-- Context bar -->
+      <div class="home-ctx-bar">
+        <div class="hcb-item"><span class="hcb-dot" style="background:#4285f4"></span>842 memories</div>
+        <div class="hcb-sep">·</div>
+        <div class="hcb-item">4 MCP active</div>
+        <div class="hcb-sep">·</div>
+        <div class="hcb-item"><span class="hcb-dot" style="background:#34a853;box-shadow:0 0 4px #34a853"></span>Groq 340ms</div>
+      </div>
+
+      <!-- Messages area — scrollable, empty state centered -->
+      <div class="home-msgs" id="home-msgs">
+        <div class="home-empty" id="home-empty">
+          <div class="home-greeting" id="home-greeting">Good morning, Vaibhav.</div>
+          <div class="home-sub">What should we work on?</div>
+          <div class="home-chips" id="home-chips">
+            <div class="hchip" onclick="homeChip(this)">📧 Check my emails</div>
+            <div class="hchip" onclick="homeChip(this)">📅 Today's schedule</div>
+            <div class="hchip" onclick="homeChip(this)">🔍 Search the web</div>
+            <div class="hchip" onclick="homeChip(this)">🤖 Run agent task</div>
+            <div class="hchip" onclick="homeChip(this)">⬡ System health</div>
+            <div class="hchip" onclick="homeChip(this)">🔒 Open vault</div>
+          </div>
+          <div class="home-cards">
+            <div class="hcard" onclick="nav('chats')"><div class="hcard-ico">💬</div><div class="hcard-t">Chats</div><div class="hcard-s">3 today</div></div>
+            <div class="hcard" onclick="nav('dashboard')"><div class="hcard-ico">⬡</div><div class="hcard-t">Dashboard</div><div class="hcard-s">RAM 61%</div></div>
+            <div class="hcard" onclick="nav('customize')"><div class="hcard-ico">🎨</div><div class="hcard-t">Customize</div><div class="hcard-s">842 memories</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Task drawer (agent tasks) -->
+      <div class="task-drawer" id="task-drawer" style="display:none">
+        <div class="td-head" onclick="toggleTaskDrawer()">
+          <span>⚙️ Agent Tasks</span>
+          <span class="td-badge" id="td-count">1 running</span>
+          <span id="td-chev">▾</span>
+        </div>
+        <div class="td-body" id="td-body">
+          <div class="td-row">
+            <div class="td-name">ag-4f21 — organize downloads</div>
+            <div class="td-steps">
+              <span class="tds done">✓ Plan</span>
+              <span class="tds run">⟳ Execute</span>
+              <span class="tds wait">○ Validate</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pinned input at bottom -->
+      <div class="home-input-area">
+        <!-- Tool call transparency strip -->
+        <div class="tool-strip" id="tool-strip" style="display:none">
+          <span class="ts-label">🔧 Calling</span>
+          <span class="ts-tool" id="ts-content">filesystem → list_files(~/Downloads)</span>
+          <span class="ts-close" onclick="document.getElementById('tool-strip').style.display='none'">×</span>
+        </div>
+        <div class="home-box">
+          <textarea class="home-ta" id="home-input"
+            placeholder="Ask EDITH anything… (⏎ send, ⇧⏎ newline)"
+            rows="1"
+            oninput="autoResize(this)"
+            onkeydown="homeKey(event)"></textarea>
+          <div class="home-box-row">
+            <button class="hbox-btn" title="Voice">🎤</button>
+            <button class="hbox-btn" title="Attach">📎</button>
+            <button class="hbox-btn" title="Screenshot">📷</button>
+            <button class="hbox-btn" title="Agent mode" onclick="toggleAgentMode()">🤖</button>
+            <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+              <span class="hbox-hint">⌘K search · ⏎ send</span>
+              <button class="hbox-send" onclick="homeSubmit()">↑</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+    <!-- ══ CHAT PAGE ══ -->
+    <div class="page" id="pg-chats">
+
+      <!-- Left: conversation list -->
+      <div class="cl-panel" id="cl-panel">
+        <div class="cl-head">
+          <span class="cl-title">Chats</span>
+          <button class="cl-new-btn" onclick="newConv()">＋</button>
+        </div>
+        <div class="cl-search-wrap">
+          <span class="cl-si">🔍</span>
+          <input class="cl-search" placeholder="Search…" oninput="filterConvs(this.value)"/>
+        </div>
+
+        <div class="cl-section">Pinned</div>
+        <div class="conv active" id="conv-c0" onclick="selectConv(this,'c0')">
+          <div class="conv-ico">📌</div>
+          <div class="conv-body">
+            <div class="conv-title">Organize downloads folder</div>
+            <div class="conv-sub">Agent running · 2 steps done</div>
+          </div>
+          <div class="conv-time">now</div>
+        </div>
+
+        <div class="cl-section">Today</div>
+        <div class="conv" id="conv-c1" onclick="selectConv(this,'c1')">
+          <div class="conv-ico">💬</div>
+          <div class="conv-body">
+            <div class="conv-title">Email summary</div>
+            <div class="conv-sub">3 unread, standup moved…</div>
+          </div>
+          <div class="conv-time">08:03</div>
+        </div>
+        <div class="conv" id="conv-c2" onclick="selectConv(this,'c2')">
+          <div class="conv-ico">💬</div>
+          <div class="conv-body">
+            <div class="conv-title">Fix orchestrator token bug</div>
+            <div class="conv-sub">tiktoken cl100k_base…</div>
+          </div>
+          <div class="conv-time">07:44</div>
+        </div>
+        <div class="conv" id="conv-c3" onclick="selectConv(this,'c3')">
+          <div class="conv-ico">💬</div>
+          <div class="conv-body">
+            <div class="conv-title">System health check</div>
+            <div class="conv-sub">All systems nominal</div>
+          </div>
+          <div class="conv-time">07:30</div>
+        </div>
+
+        <div class="cl-section">Yesterday</div>
+        <div class="conv" id="conv-c4" onclick="selectConv(this,'c4')">
+          <div class="conv-ico">💬</div>
+          <div class="conv-body">
+            <div class="conv-title">Deploy 4 reliability fixes</div>
+            <div class="conv-sub">Pushed master, DO pulled</div>
+          </div>
+          <div class="conv-time">Jun 8</div>
+        </div>
+        <div class="conv" id="conv-c5" onclick="selectConv(this,'c5')">
+          <div class="conv-ico">💬</div>
+          <div class="conv-body">
+            <div class="conv-title">Dashboard redesign</div>
+            <div class="conv-sub">Gemini-style, aurora…</div>
+          </div>
+          <div class="conv-time">Jun 8</div>
+        </div>
+
+        <div class="cl-section">Archived</div>
+        <div class="conv archived" id="conv-c6" onclick="selectConv(this,'c6')">
+          <div class="conv-ico" style="opacity:.4">📦</div>
+          <div class="conv-body">
+            <div class="conv-title" style="opacity:.45">Audit report v1</div>
+            <div class="conv-sub">Archived</div>
+          </div>
+          <div class="conv-time" style="opacity:.4">Jun 5</div>
+        </div>
+      </div>
+
+      <!-- Right: chat area + optional artifact panel -->
+      <div class="chat-right" id="chat-right">
+
+        <!-- Chat topbar -->
+        <div class="chat-tb">
+          <div class="ctb-info">
+            <div class="ctb-title" id="ctb-title">Organize downloads folder</div>
+            <div class="ctb-sub" id="ctb-sub">Agent running · ag-4f21</div>
+          </div>
+          <div class="ctb-acts">
+            <button class="ctb-btn" onclick="toggleArtifact()" title="Artifact panel">⬡</button>
+            <button class="ctb-btn" title="Search in chat">🔍</button>
+            <button class="ctb-btn" title="Export">⬇</button>
+            <button class="ctb-btn" title="Rename" onclick="toast('✏️','Rename coming soon')">✏️</button>
+            <button class="ctb-btn danger" title="Delete" onclick="toast('🗑','Delete conversation coming soon')">🗑</button>
+          </div>
+        </div>
+
+        <!-- Chat + artifact split -->
+        <div class="chat-split">
+
+          <!-- Messages -->
+          <div class="chat-msgs" id="chat-msgs">
+
+            <div class="cmsg">
+              <div class="cmsg-ava e">E</div>
+              <div class="cmsg-wrap">
+                <div class="cmsg-bubble e">Good morning, Boss. 3 unread emails, standup at 10:30am. Groq at 340ms.</div>
+                <div class="cmsg-meta">EDITH · 08:02 · Groq · 340ms</div>
+              </div>
+            </div>
+
+            <div class="cmsg usr">
+              <div class="cmsg-ava u">V</div>
+              <div class="cmsg-wrap">
+                <div class="cmsg-bubble u">Organize my downloads folder with the agent</div>
+                <div class="cmsg-meta r">You · 08:05</div>
+              </div>
+            </div>
+
+            <div class="cmsg">
+              <div class="cmsg-ava e">E</div>
+              <div class="cmsg-wrap">
+                <div class="cmsg-bubble e">
+                  ⚙️ Agent started — 3 steps planned.<br><br>
+                  <!-- Tool call block (feature 4) -->
+                  <div class="tool-call-block" onclick="this.classList.toggle('expanded')">
+                    <span class="tcb-icon">🔧</span>
+                    <span class="tcb-name">filesystem → list_files</span>
+                    <span class="tcb-args">~/Downloads</span>
+                    <span style="margin-left:auto;font-size:10px;color:var(--text3)">▾</span>
+                    <div class="tcb-result">Found 84 files: 32 PDFs, 18 ZIPs, 14 images, 12 videos, 8 other</div>
+                  </div>
+                  <div class="inline-steps" style="margin-top:10px">
+                    <div class="is-row done"><span class="is-ic">✓</span><span>Plan — analyzed 84 files across 6 types</span><span class="is-t">0.4s</span></div>
+                    <div class="is-row run"><span class="is-ic">⟳</span><span>Execute — creating subfolders…</span><span class="is-t">running</span></div>
+                    <div class="is-row wait"><span class="is-ic">3</span><span>Validate — awaiting approval</span><span class="is-t">pending</span></div>
+                  </div>
+                </div>
+                <div class="cmsg-meta">EDITH · 08:05 · ag-4f21</div>
+              </div>
+            </div>
+
+            <!-- Typing indicator -->
+            <div class="cmsg" id="chat-typing" style="display:none">
+              <div class="cmsg-ava e">E</div>
+              <div class="cmsg-wrap">
+                <div class="cmsg-bubble e hmsg-thinking">
+                  <div class="th-dot"></div><div class="th-dot"></div><div class="th-dot"></div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Artifact panel (feature 2) -->
+          <div class="artifact-panel" id="artifact-panel" style="display:none">
+            <div class="ap-head">
+              <span class="ap-title" id="ap-title">Artifact</span>
+              <button class="ap-close" onclick="toggleArtifact()">×</button>
+            </div>
+            <div class="ap-body" id="ap-body">
+              <pre style="font-size:12px;color:var(--text2);line-height:1.5;font-family:'JetBrains Mono',monospace">
+# Downloads folder structure
+~/Downloads/
+├── PDFs/         (32 files)
+├── Archives/     (18 files)
+├── Images/       (14 files)
+├── Videos/       (12 files)
+└── Other/        (8 files)
+
+Total: 84 files → 5 organized folders
+              </pre>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Chat input -->
+        <div class="chat-input-area">
+          <div class="cia-box" id="cia-box">
+            <button class="cia-btn">🎤</button>
+            <textarea class="cia-ta" id="cia-input"
+              placeholder="Message EDITH…" rows="1"
+              oninput="autoResize(this)"
+              onkeydown="chatKey(event)"></textarea>
+            <button class="cia-btn">📎</button>
+            <button class="cia-send" onclick="chatSend()">↑</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+    <!-- ══ DASHBOARD ══ -->
+    <div class="page" id="pg-dashboard">
+      <div style="overflow-y:auto;flex:1">
+        <div class="dash-body">
+
+          <!-- Stat row -->
+          <div class="dash-row4">
+            <div class="stat-card">
+              <div class="sc-top"><span class="sc-lbl">RAM</span><span class="sc-ico" style="background:rgba(66,133,244,.12)">🧠</span></div>
+              <div class="sc-val" id="d-ram">61%</div>
+              <div class="sc-sub">4.9 GB / 8 GB</div>
+              <div class="bar" style="margin-top:10px"><div class="bar-fill bar-blue" id="d-ram-bar" style="width:61%"></div></div>
+            </div>
+            <div class="stat-card">
+              <div class="sc-top"><span class="sc-lbl">CPU</span><span class="sc-ico" style="background:rgba(52,168,83,.12)">⚡</span></div>
+              <div class="sc-val" id="d-cpu">23%</div>
+              <div class="sc-sub">i5-12400 · 6 cores</div>
+              <div class="bar" style="margin-top:10px"><div class="bar-fill bar-green" id="d-cpu-bar" style="width:23%"></div></div>
+            </div>
+            <div class="stat-card">
+              <div class="sc-top"><span class="sc-lbl">Disk</span><span class="sc-ico" style="background:rgba(251,188,4,.12)">💾</span></div>
+              <div class="sc-val">48%</div>
+              <div class="sc-sub">476 GB / 1 TB</div>
+              <div class="bar" style="margin-top:10px"><div class="bar-fill bar-amber" style="width:48%"></div></div>
+            </div>
+            <div class="stat-card">
+              <div class="sc-top"><span class="sc-lbl">API Today</span><span class="sc-ico" style="background:rgba(234,67,53,.12)">🔮</span></div>
+              <div class="sc-val" style="color:#f28b82">147</div>
+              <div class="sc-sub">Limit 150 · 98%</div>
+              <div class="bar" style="margin-top:10px"><div class="bar-fill bar-red" style="width:98%"></div></div>
+            </div>
+          </div>
+
+          <!-- Middle row -->
+          <div class="dash-row3">
+            <!-- Providers -->
+            <div class="panel">
+              <div class="panel-head"><span class="panel-title">AI Providers</span></div>
+              <div class="panel-body" style="padding-top:8px;padding-bottom:8px">
+                <div class="prov-r"><span class="prov-dot" style="background:#34a853;box-shadow:0 0 4px #34a853"></span><span class="prov-n">Groq</span><span class="prov-m">llama-3.3-70b</span><span class="tag tag-green">active</span></div>
+                <div class="prov-r"><span class="prov-dot" style="background:#34a853;box-shadow:0 0 4px #34a853"></span><span class="prov-n">Gemini</span><span class="prov-m">2.0-flash</span><span class="tag" style="background:rgba(255,255,255,.06);color:var(--text3)">standby</span></div>
+                <div class="prov-r"><span class="prov-dot" style="background:#fbbc04"></span><span class="prov-n">NVIDIA</span><span class="prov-m">llama-3.1-70b</span><span class="tag tag-amber">cooldown</span></div>
+                <div class="prov-r"><span class="prov-dot" style="background:#34a853;box-shadow:0 0 4px #34a853"></span><span class="prov-n">OpenRouter</span><span class="prov-m">llama-3.3-70b</span><span class="tag" style="background:rgba(255,255,255,.06);color:var(--text3)">standby</span></div>
+              </div>
+            </div>
+            <!-- Memory ring -->
+            <div class="panel">
+              <div class="panel-head"><span class="panel-title">Memory</span><span class="panel-badge blue">842 items</span></div>
+              <div class="panel-body">
+                <div class="mem-ring-row">
+                  <div class="mem-ring-pos">
+                    <svg width="90" height="90" viewBox="0 0 90 90" style="transform:rotate(-90deg)">
+                      <circle cx="45" cy="45" r="33" fill="none" stroke="rgba(255,255,255,.06)" stroke-width="7"/>
+                      <circle cx="45" cy="45" r="33" fill="none" stroke="#4285f4" stroke-width="7" stroke-dasharray="207" stroke-dashoffset="80" stroke-linecap="round"/>
+                      <circle cx="45" cy="45" r="25" fill="none" stroke="rgba(255,255,255,.04)" stroke-width="5"/>
+                      <circle cx="45" cy="45" r="25" fill="none" stroke="#34a853" stroke-width="5" stroke-dasharray="157" stroke-dashoffset="50" stroke-linecap="round"/>
+                      <circle cx="45" cy="45" r="17" fill="none" stroke="rgba(255,255,255,.04)" stroke-width="4"/>
+                      <circle cx="45" cy="45" r="17" fill="none" stroke="#9c5cf5" stroke-width="4" stroke-dasharray="107" stroke-dashoffset="65" stroke-linecap="round"/>
+                    </svg>
+                    <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">
+                      <div style="font-size:17px;font-weight:600;font-family:'JetBrains Mono',monospace">842</div>
+                      <div style="font-size:10px;color:var(--text3)">items</div>
+                    </div>
+                  </div>
+                  <div class="mem-legend">
+                    <div class="ml-r"><span class="ml-dot" style="background:#4285f4"></span><span class="ml-n">RAM</span><span class="ml-v">50</span></div>
+                    <div class="ml-r"><span class="ml-dot" style="background:#34a853"></span><span class="ml-n">SQLite</span><span class="ml-v">614</span></div>
+                    <div class="ml-r"><span class="ml-dot" style="background:#9c5cf5"></span><span class="ml-n">ChromaDB</span><span class="ml-v">156</span></div>
+                    <div class="ml-r"><span class="ml-dot" style="background:#fbbc04"></span><span class="ml-n">Graph</span><span class="ml-v">22</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- Health -->
+            <div class="panel">
+              <div class="panel-head"><span class="panel-title">Health</span><span class="panel-badge green">OK</span></div>
+              <div class="panel-body">
+                <div class="h-r"><span class="h-l">RAM</span><div class="bar" style="flex:1"><div class="bar-fill bar-blue" id="h-ram" style="width:61%"></div></div><span class="h-v" id="hv-ram">61%</span></div>
+                <div class="h-r"><span class="h-l">CPU</span><div class="bar" style="flex:1"><div class="bar-fill bar-green" id="h-cpu" style="width:23%"></div></div><span class="h-v" id="hv-cpu">23%</span></div>
+                <div class="h-r"><span class="h-l">Disk</span><div class="bar" style="flex:1"><div class="bar-fill bar-amber" style="width:48%"></div></div><span class="h-v">48%</span></div>
+                <div class="h-r"><span class="h-l">API</span><div class="bar" style="flex:1"><div class="bar-fill bar-red" style="width:98%"></div></div><span class="h-v" style="color:#f28b82">98%</span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Agent activity -->
+          <div class="panel">
+            <div class="panel-head"><span class="panel-title">Agent Activity</span><span class="panel-badge blue">1 running · ag-4f21</span></div>
+            <div class="panel-body">
+              <div class="step-r"><div class="step-ic done">✓</div><div class="step-t">Plan — analyzed Downloads, found 84 files across 6 types</div><div class="step-ts">0.4s</div></div>
+              <div class="step-r"><div class="step-ic run">⟳</div><div class="step-t">Execute — sorting into subfolders by type…</div><div class="step-ts">running</div></div>
+              <div class="step-r"><div class="step-ic wait">3</div><div class="step-t">Validate — awaiting your approval before any deletion</div><div class="step-ts">pending</div></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+    <!-- ══ LOGS ══ -->
+    <div class="page" id="pg-logs">
+      <div style="display:flex;flex-direction:column;flex:1;overflow:hidden;padding:14px 16px;gap:10px">
+
+        <!-- Filter bar -->
+        <div class="logs-bar">
+          <div class="lb-search-wrap">
+            <span style="font-size:13px;color:var(--text3)">🔍</span>
+            <input class="lb-search" placeholder="Search logs…" oninput="filterLogs(this.value)"/>
+          </div>
+          <div class="lb-tabs" id="lb-tabs">
+            <div class="lb-tab active" onclick="setLogTab(this,'all')">All</div>
+            <div class="lb-tab" onclick="setLogTab(this,'agent')">Agent</div>
+            <div class="lb-tab" onclick="setLogTab(this,'system')">System</div>
+            <div class="lb-tab" onclick="setLogTab(this,'memory')">Memory</div>
+            <div class="lb-tab" onclick="setLogTab(this,'mcp')">MCP</div>
+            <div class="lb-tab" onclick="setLogTab(this,'security')">Security</div>
+          </div>
+          <div style="margin-left:auto;display:flex;gap:6px">
+            <button class="lb-btn" onclick="toast('⬇','Export coming soon')">⬇ Export</button>
+            <button class="lb-btn" onclick="clearLogs()">🗑 Clear</button>
+          </div>
+        </div>
+
+        <!-- Log stream -->
+        <div class="log-stream" id="log-stream">
+          <div class="le" data-cat="security"><span class="le-t">08:01:22</span><span class="le-cat sec">SEC</span><span class="le-m">Vault unlocked — 7 API keys loaded successfully</span></div>
+          <div class="le" data-cat="system"><span class="le-t">08:01:25</span><span class="le-cat sys">SYS</span><span class="le-m">chat_server started — uvicorn port 8001 · PID 42301</span></div>
+          <div class="le" data-cat="memory"><span class="le-t">08:01:28</span><span class="le-cat mem">MEM</span><span class="le-m">SmartMemory init — 614 SQLite entries, 50 RAM cache items</span></div>
+          <div class="le" data-cat="mcp"><span class="le-t">08:01:31</span><span class="le-cat mcp">MCP</span><span class="le-m">filesystem server started (pid 42305) — 12 tools ready</span></div>
+          <div class="le" data-cat="mcp"><span class="le-t">08:01:33</span><span class="le-cat mcp">MCP</span><span class="le-m">google-workspace server started — 95 tools ready</span></div>
+          <div class="le" data-cat="system"><span class="le-t">08:02:00</span><span class="le-cat sys">SYS</span><span class="le-m">Wake listener active — Vosk fuzzy fallback (openwakeword not installed)</span></div>
+          <div class="le" data-cat="agent"><span class="le-t">08:05:14</span><span class="le-cat agt">AGT</span><span class="le-m">[ag-4f21] PLANNING → intent: organize downloads</span></div>
+          <div class="le" data-cat="agent"><span class="le-t">08:05:15</span><span class="le-cat agt">AGT</span><span class="le-m">[ag-4f21] Plan: 3 steps · avg_confidence: 0.82</span></div>
+          <div class="le" data-cat="agent"><span class="le-t">08:05:16</span><span class="le-cat agt">AGT</span><span class="le-m">[ag-4f21] EXECUTING step 1/3 — ls ~/Downloads</span></div>
+          <div class="le" data-cat="agent"><span class="le-t">08:05:16</span><span class="le-cat agt">AGT</span><span class="le-m">[ag-4f21] Step 1 ✓ — 84 files found · output 1.2KB</span></div>
+          <div class="le" data-cat="agent"><span class="le-t">08:05:17</span><span class="le-cat agt">AGT</span><span class="le-m">[ag-4f21] EXECUTING step 2/3 — mkdir by type…</span></div>
+          <div class="le" data-cat="memory"><span class="le-t">08:05:18</span><span class="le-cat mem">MEM</span><span class="le-m">Memory write — key: exchange_2847391 · 148 chars</span></div>
+          <div class="le warn" data-cat="security"><span class="le-t">08:07:44</span><span class="le-cat sec">SEC</span><span class="le-m">⚠ Groq daily limit at 98% — 3 calls remaining</span></div>
+          <div class="le" data-cat="system"><span class="le-t">08:10:00</span><span class="le-cat sys">SYS</span><span class="le-m">Health check passed — 6 services OK</span></div>
+          <div class="le" data-cat="memory"><span class="le-t">08:12:30</span><span class="le-cat mem">MEM</span><span class="le-m">Graph triples extracted: 3 new (vaibhav→builds→edith)</span></div>
+          <div class="le" data-cat="mcp"><span class="le-t">08:15:10</span><span class="le-cat mcp">MCP</span><span class="le-m">github — search_repos("EDITH") · 1 result · 380ms</span></div>
+        </div>
+
+      </div>
+    </div>
+    <!-- ══ CUSTOMIZE ══ -->
+    <div class="page" id="pg-customize">
+      <div class="cust-layout">
+
+        <!-- Left sub-nav -->
+        <div class="cust-nav">
+          <div class="cn-header">Control Center</div>
+          <div class="cn-item active" id="cni-memory" onclick="custTab(this,'memory')"><span>🧠</span>Memory</div>
+          <div class="cn-item" id="cni-mcp" onclick="custTab(this,'mcp')"><span>🔌</span>MCP Servers</div>
+          <div class="cn-item" id="cni-security" onclick="custTab(this,'security')"><span>🛡️</span>Security<span class="cn-badge amber">1</span></div>
+          <div class="cn-item" id="cni-repodna" onclick="custTab(this,'repodna')"><span>🧬</span>Repo DNA</div>
+          <div class="cn-item" id="cni-personal" onclick="custTab(this,'personal')"><span>✨</span>Personalization</div>
+        </div>
+
+        <!-- Right content -->
+        <div class="cust-content">
+
+          <!-- Memory tab -->
+          <div class="ct active" id="ct-memory">
+            <div class="ct-title">Memory</div>
+            <div class="ct-sub">842 items across 4 layers — persistent context for every conversation</div>
+            <div class="mem-stat-row">
+              <div class="ms-card"><div class="ms-dot" style="background:#4285f4"></div><div class="ms-val">50</div><div class="ms-lbl">RAM cache</div></div>
+              <div class="ms-card"><div class="ms-dot" style="background:#34a853"></div><div class="ms-val">614</div><div class="ms-lbl">SQLite / working</div></div>
+              <div class="ms-card"><div class="ms-dot" style="background:#9c5cf5"></div><div class="ms-val">156</div><div class="ms-lbl">ChromaDB / semantic</div></div>
+              <div class="ms-card"><div class="ms-dot" style="background:#fbbc04"></div><div class="ms-val">22</div><div class="ms-lbl">Graph nodes</div></div>
+            </div>
+            <div class="ct-sect">Recent Memories</div>
+            <div class="mem-items">
+              <div class="mi"><div class="mi-top"><span class="tag tag-blue">preference</span><span class="mi-key">coding_style_dark_mode</span><span class="mi-t">2h ago</span></div><div class="mi-val">Vaibhav prefers dark mode and concise responses, no markdown headers</div></div>
+              <div class="mi"><div class="mi-top"><span class="tag tag-green">git</span><span class="mi-key">git_EDITH_a16d068</span><span class="mi-t">1h ago</span></div><div class="mi-val">[git:EDITH] 2026-06-08 — fix: 4 reliability fixes from audit (sha:a16d068)</div></div>
+              <div class="mi"><div class="mi-top"><span class="tag tag-purple">reflection</span><span class="mi-key">reflection_3829471</span><span class="mi-t">3h ago</span></div><div class="mi-val">Vaibhav uses AyurStock for medicine inventory — Next.js + Supabase</div></div>
+              <div class="mi"><div class="mi-top"><span class="tag tag-amber">graph</span><span class="mi-key">vaibhav → builds → edith</span><span class="mi-t">5h ago</span></div><div class="mi-val">Knowledge triple: vaibhav --[builds]--> edith --[uses]--> chromadb</div></div>
+            </div>
+          </div>
+
+          <!-- MCP tab -->
+          <div class="ct" id="ct-mcp">
+            <div class="ct-title">MCP Servers</div>
+            <div class="ct-sub">Model Context Protocol — tool integrations for EDITH</div>
+            <div style="margin-bottom:14px"><button class="ct-btn" onclick="toast('⚙️','Add server form coming soon')">＋ Add Server</button></div>
+            <div class="mcp-cards">
+              <div class="mcp-card"><div class="mcp-ico" style="background:rgba(66,133,244,.12)">📁</div><div class="mcp-info"><div class="mcp-n">filesystem</div><div class="mcp-d">Local files under /home/vaibhav</div></div><div class="mcp-r"><span class="mcp-tools">12 tools</span><button class="toggle on" onclick="toast('🔌','filesystem toggled')"></button></div></div>
+              <div class="mcp-card"><div class="mcp-ico" style="background:rgba(52,168,83,.12)">🐙</div><div class="mcp-info"><div class="mcp-n">github</div><div class="mcp-d">Repos, issues, PRs, code search</div></div><div class="mcp-r"><span class="mcp-tools">8 tools</span><button class="toggle on"></button></div></div>
+              <div class="mcp-card"><div class="mcp-ico" style="background:rgba(234,67,53,.12)">📊</div><div class="mcp-info"><div class="mcp-n">google-workspace</div><div class="mcp-d">Docs, Sheets, Drive, Gmail, Calendar</div></div><div class="mcp-r"><span class="mcp-tools">95 tools</span><button class="toggle on"></button></div></div>
+              <div class="mcp-card"><div class="mcp-ico" style="background:rgba(156,92,245,.12)">📓</div><div class="mcp-info"><div class="mcp-n">obsidian</div><div class="mcp-d">EDITH BRAIN vault — notes & search</div></div><div class="mcp-r"><span class="mcp-tools">6 tools</span><button class="toggle on"></button></div></div>
+              <div class="mcp-card" style="opacity:.55"><div class="mcp-ico" style="background:rgba(251,188,4,.1)">☁️</div><div class="mcp-info"><div class="mcp-n">cloudflare</div><div class="mcp-d">Workers, DNS, analytics</div></div><div class="mcp-r"><span class="mcp-tools">—</span><button class="toggle"></button></div></div>
+              <div class="mcp-card" style="opacity:.55"><div class="mcp-ico" style="background:rgba(52,168,83,.08)">🎵</div><div class="mcp-info"><div class="mcp-n">spotify</div><div class="mcp-d">Music playback control</div></div><div class="mcp-r"><span class="mcp-tools">—</span><button class="toggle"></button></div></div>
+            </div>
+          </div>
+
+          <!-- Security tab -->
+          <div class="ct" id="ct-security">
+            <div class="ct-title">Security</div>
+            <div class="ct-sub">Vault, authentication, access controls, and event log</div>
+            <div class="sec-stat-row">
+              <div class="sec-stat ok"><span>🔒</span><div><div class="ss-title">Vault</div><div class="ss-sub">Locked · Argon2 + Fernet · 600 perms</div></div><span class="ss-check">✅</span></div>
+              <div class="sec-stat ok"><span>🛡️</span><div><div class="ss-title">API Auth</div><div class="ss-sub">Middleware active · 12 requests today</div></div><span class="ss-check">✅</span></div>
+              <div class="sec-stat warn"><span>⚠️</span><div><div class="ss-title">API Spend</div><div class="ss-sub">Groq at 98% daily limit — 3 calls left</div></div><span class="ss-check" style="color:#fbbc04">⚠️</span></div>
+            </div>
+            <div class="ct-sect">Event Log</div>
+            <div class="sec-evs">
+              <div class="sec-ev ok"><div class="sev-h"><span class="sev-t">Vault access</span><span class="sev-ts">08:01</span></div><div class="sev-d">API keys loaded — 7 secrets unlocked on start</div></div>
+              <div class="sec-ev warn"><div class="sev-h"><span class="sev-t">Rate limit warning</span><span class="sev-ts">07:44</span></div><div class="sev-d">Groq daily limit at 98% — consider switching to Gemini</div></div>
+              <div class="sec-ev ok"><div class="sev-h"><span class="sev-t">PII scan</span><span class="sev-ts">06:00</span></div><div class="sev-d">No sensitive data routed to cloud this session</div></div>
+            </div>
+          </div>
+
+          <!-- Repo DNA tab -->
+          <div class="ct" id="ct-repodna">
+            <div class="ct-title">Repo DNA</div>
+            <div class="ct-sub">Developer intelligence system — scan and understand your codebase</div>
+            <div style="display:flex;gap:8px;margin-bottom:16px">
+              <input class="dna-input" placeholder="https://github.com/user/repo or /local/path"/>
+              <button class="ct-btn" onclick="toast('🧬','Repo scan started…')">Analyze →</button>
+            </div>
+            <div class="dna-stats">
+              <div class="dna-sc"><div class="dna-sl">Files</div><div class="dna-sv">147</div><div class="dna-ss">Python · TS · HTML</div></div>
+              <div class="dna-sc"><div class="dna-sl">Modules</div><div class="dna-sv">38</div><div class="dna-ss">Active</div></div>
+              <div class="dna-sc"><div class="dna-sl">Memory layers</div><div class="dna-sv">4</div><div class="dna-ss">RAM·SQLite·Chroma·Graph</div></div>
+              <div class="dna-sc"><div class="dna-sl">Routes</div><div class="dna-sv">12</div><div class="dna-ss">FastAPI endpoints</div></div>
+            </div>
+            <div class="ct-sect">AI Insights</div>
+            <div class="dna-insights">
+              <div class="dna-ins"><span class="tag tag-blue">Improvement</span><div class="di-t">Add Gmail write access</div><div class="di-d">EDITH reads email only (IMAP). Gmail API write scope would enable compose/send — closing the biggest Gemini Spark gap.</div></div>
+              <div class="dna-ins"><span class="tag tag-red">Tech Debt</span><div class="di-t">100+ files in repo root</div><div class="di-d">Root has duplicate shim files (graph_memory.py, smart_memory.py etc.) re-exporting from subdirs. Consolidation needed.</div></div>
+              <div class="dna-ins"><span class="tag tag-green">Capability</span><div class="di-t">4-layer memory architecture</div><div class="di-d">RAM LRU + SQLite FTS + ChromaDB vectors + NetworkX graph — more sophisticated than most production RAG pipelines.</div></div>
+            </div>
+          </div>
+
+          <!-- Personalization tab -->
+          <div class="ct" id="ct-personal">
+            <div class="ct-title">Personalization</div>
+            <div class="ct-sub">Personality, voice, behavior rules, and preferences</div>
+            <div class="pers-rows">
+              <div class="pr"><div class="pr-ico">🗣️</div><div class="pr-info"><div class="pr-t">Assistant Personality</div><div class="pr-s">Sharp, warm, direct — talks like a brilliant friend</div></div><button class="ct-btn" onclick="toast('✏️','Personality editor coming soon')">Edit</button></div>
+              <div class="pr"><div class="pr-ico">🎤</div><div class="pr-info"><div class="pr-t">Voice Engine</div><div class="pr-s">Groq Orpheus → Piper fallback · STT: Groq Whisper</div></div><button class="ct-btn">Change</button></div>
+              <div class="pr"><div class="pr-ico">🌙</div><div class="pr-info"><div class="pr-t">Quiet Hours</div><div class="pr-s">No non-critical alerts 11pm – 7am IST</div></div><button class="toggle on"></button></div>
+              <div class="pr"><div class="pr-ico">💡</div><div class="pr-info"><div class="pr-t">Post-turn Reflection</div><div class="pr-s">Save facts after conversations (20% sample rate)</div></div><button class="toggle on"></button></div>
+              <div class="pr"><div class="pr-ico">📱</div><div class="pr-info"><div class="pr-t">Telegram Alerts</div><div class="pr-s">Push system events to Telegram bot</div></div><button class="toggle on"></button></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+    <!-- ══ SETTINGS ══ -->
+    <div class="page" id="pg-settings">
+      <div style="overflow-y:auto;flex:1">
+        <div class="set-body">
+
+          <div class="set-group">
+            <div class="sg-title">Appearance</div>
+            <div class="set-row"><div class="sr-ico">🎨</div><div class="sr-info"><div class="sr-t">Theme</div><div class="sr-s">Current: True Black (default)</div></div><div class="sr-chips"><div class="src active">Dark</div><div class="src" onclick="toast('🎨','System theme')">System</div><div class="src" onclick="toast('🎨','Custom theme')">Custom</div></div></div>
+            <div class="set-row"><div class="sr-ico">🎯</div><div class="sr-info"><div class="sr-t">Accent Color</div><div class="sr-s">Current: Google Blue (#4285f4)</div></div><div class="sr-colors"><div class="src-color active" style="background:#4285f4"></div><div class="src-color" style="background:#9c5cf5" onclick="toast('🎨','Accent: Purple')"></div><div class="src-color" style="background:#34a853" onclick="toast('🎨','Accent: Green')"></div><div class="src-color" style="background:#ea4335" onclick="toast('🎨','Accent: Red')"></div><div class="src-color" style="background:#fbbc04" onclick="toast('🎨','Accent: Amber')"></div></div></div>
+            <div class="set-row"><div class="sr-ico">📐</div><div class="sr-info"><div class="sr-t">Layout Density</div><div class="sr-s">Controls spacing and font size</div></div><div class="sr-chips"><div class="src" onclick="toast('📐','Compact')">Compact</div><div class="src active">Comfortable</div><div class="src" onclick="toast('📐','Wide')">Wide</div></div></div>
+            <div class="set-row"><div class="sr-ico">🖼️</div><div class="sr-info"><div class="sr-t">Background</div><div class="sr-s">Upload wallpaper, set blur intensity</div></div><button class="sr-btn" onclick="toast('🖼️','Background picker coming soon')">Upload</button></div>
+          </div>
+
+          <div class="set-group">
+            <div class="sg-title">AI Settings</div>
+            <div class="set-row"><div class="sr-ico">🔮</div><div class="sr-info"><div class="sr-t">Primary Provider</div><div class="sr-s">Groq → Gemini → NVIDIA → OpenRouter (failover)</div></div><button class="sr-btn" onclick="nav('customize')">Configure</button></div>
+            <div class="set-row"><div class="sr-ico">🧠</div><div class="sr-info"><div class="sr-t">Deep Reasoning (CoT)</div><div class="sr-s">Inject chain-of-thought on every request</div></div><button class="toggle on"></button></div>
+            <div class="set-row"><div class="sr-ico">💰</div><div class="sr-info"><div class="sr-t">Daily Spend Cap</div><div class="sr-s">Hard limit per provider — currently not set</div></div><button class="sr-btn warn" onclick="toast('⚠️','Set a cap to prevent runaway API costs')">Set Limit</button></div>
+            <div class="set-row"><div class="sr-ico">🔧</div><div class="sr-info"><div class="sr-t">Tool Permissions</div><div class="sr-s">Control which tools EDITH can use autonomously</div></div><button class="sr-btn" onclick="nav('customize')">Manage</button></div>
+          </div>
+
+          <div class="set-group">
+            <div class="sg-title">Voice</div>
+            <div class="set-row"><div class="sr-ico">🎤</div><div class="sr-info"><div class="sr-t">Wake Word</div><div class="sr-s" style="color:#fbbc04">⚠ hey_jarvis model — low accuracy for "Hey EDITH"</div></div><button class="sr-btn warn" onclick="toast('🎤','Train custom Porcupine wake word')">Fix</button></div>
+            <div class="set-row"><div class="sr-ico">🔊</div><div class="sr-info"><div class="sr-t">TTS Engine</div><div class="sr-s">Groq Orpheus → Piper fallback</div></div><button class="sr-btn">Change</button></div>
+            <div class="set-row"><div class="sr-ico">🌍</div><div class="sr-info"><div class="sr-t">STT Language</div><div class="sr-s">Auto-detect · Hindi/Hinglish/English supported</div></div><button class="sr-btn">Settings</button></div>
+          </div>
+
+          <div class="set-group">
+            <div class="sg-title">Data & Privacy</div>
+            <div class="set-row"><div class="sr-ico">🗃️</div><div class="sr-info"><div class="sr-t">Memory TTL</div><div class="sr-s">Auto-delete vectors older than 60 days</div></div><button class="sr-btn">60 days ▾</button></div>
+            <div class="set-row"><div class="sr-ico">🔒</div><div class="sr-info"><div class="sr-t">Private Intents</div><div class="sr-s">vault · shell · email — never sent to cloud LLMs</div></div><button class="toggle on"></button></div>
+            <div class="set-row"><div class="sr-ico">🗑️</div><div class="sr-info"><div class="sr-t">Clear All Memory</div><div class="sr-s">Permanently deletes all memories — cannot be undone</div></div><button class="sr-btn danger" onclick="toast('⚠️','Add confirmation gate before enabling this')">Clear</button></div>
+          </div>
+
+          <div class="set-group">
+            <div class="sg-title">About</div>
+            <div class="set-row"><div class="sr-ico">ℹ️</div><div class="sr-info"><div class="sr-t">EDITH v5.0</div><div class="sr-s">Built by Vaibhav Kashyap · Fatehpur, UP, India</div></div><button class="sr-btn" onclick="toast('🌐','github.com/kashyapvaibhav10000-ai/EDITH')">GitHub</button></div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+/* ── Clock ── */
+function tick(){
+  const n=new Date();
+  document.getElementById('tb-clock').textContent=
+    n.toLocaleTimeString('en-IN',{hour12:false});
+}
+tick();setInterval(tick,1000);
+
+/* ── Navigation ── */
+const PAGE_TITLES={
+  home:'Home',chats:'Chats',dashboard:'Dashboard',
+  logs:'Logs',customize:'Customize',settings:'Settings'
+};
+function nav(id){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.ri').forEach(r=>r.classList.remove('active'));
+  const pg=document.getElementById('pg-'+id);
+  const ri=document.getElementById('ri-'+id);
+  if(pg) pg.classList.add('active');
+  if(ri) ri.classList.add('active');
+  document.getElementById('tb-title').textContent=PAGE_TITLES[id]||id;
+}
+
+/* ── Command palette ── */
+const CMD_ITEMS=[
+  {ico:'🏠',label:'Go to Home',kb:'⌘1',action:()=>nav('home')},
+  {ico:'💬',label:'Go to Chats',kb:'⌘2',action:()=>nav('chats')},
+  {ico:'⬡', label:'Go to Dashboard',kb:'⌘3',action:()=>nav('dashboard')},
+  {ico:'📜',label:'Go to Logs',kb:'⌘4',action:()=>nav('logs')},
+  {ico:'🎨',label:'Go to Customize',kb:'⌘5',action:()=>nav('customize')},
+  {ico:'⚙️',label:'Go to Settings',kb:'⌘6',action:()=>nav('settings')},
+  {ico:'💬',label:'New conversation',kb:'⌘N',action:()=>{nav('chats');toast('💬','New conversation')}},
+  {ico:'🧠',label:'Search memory',kb:'',action:()=>{nav('customize');toast('🧠','Memory search')}},
+  {ico:'🔌',label:'MCP Servers',kb:'',action:()=>nav('customize')},
+  {ico:'🛡️',label:'Security events',kb:'',action:()=>nav('customize')},
+];
+let cmdSel=0;
+function openCmdPalette(){
+  document.getElementById('cmd-backdrop').classList.add('open');
+  document.getElementById('cmd-input').value='';
+  renderCmdItems(CMD_ITEMS);
+  setTimeout(()=>document.getElementById('cmd-input').focus(),50);
+}
+function closeCmdPalette(e){
+  if(!e||e.target===document.getElementById('cmd-backdrop'))
+    document.getElementById('cmd-backdrop').classList.remove('open');
+}
+function renderCmdItems(items){
+  const r=document.getElementById('cmd-results');
+  r.innerHTML='<div class="cmd-group-label">Actions</div>'+
+    items.map((it,i)=>
+      `<div class="cmd-item${i===0?' sel':''}" onclick="runCmdItem(${CMD_ITEMS.indexOf(it)})">
+        <span class="cmd-item-ico">${it.ico}</span>
+        <span class="cmd-item-label">${it.label}</span>
+        <span class="cmd-item-kb">${it.kb}</span>
+      </div>`
+    ).join('');
+  cmdSel=0;
+}
+function cmdFilter(q){
+  const filtered=CMD_ITEMS.filter(i=>i.label.toLowerCase().includes(q.toLowerCase()));
+  renderCmdItems(filtered);
+}
+function cmdKey(e){
+  const items=document.querySelectorAll('.cmd-item');
+  if(e.key==='ArrowDown'){
+    e.preventDefault();
+    items[cmdSel]?.classList.remove('sel');
+    cmdSel=Math.min(cmdSel+1,items.length-1);
+    items[cmdSel]?.classList.add('sel');
+    items[cmdSel]?.scrollIntoView({block:'nearest'});
+  } else if(e.key==='ArrowUp'){
+    e.preventDefault();
+    items[cmdSel]?.classList.remove('sel');
+    cmdSel=Math.max(cmdSel-1,0);
+    items[cmdSel]?.classList.add('sel');
+  } else if(e.key==='Enter'){
+    e.preventDefault();
+    const sel=document.querySelector('.cmd-item.sel');
+    if(sel) sel.click();
+  } else if(e.key==='Escape'){
+    closeCmdPalette();
+  }
+}
+function runCmdItem(idx){
+  CMD_ITEMS[idx]?.action();
+  closeCmdPalette();
+}
+
+/* Global ⌘K shortcut */
+document.addEventListener('keydown',e=>{
+  if((e.metaKey||e.ctrlKey)&&e.key==='k'){
+    e.preventDefault();openCmdPalette();
+  }
+  if((e.metaKey||e.ctrlKey)&&e.key>='1'&&e.key<='6'){
+    e.preventDefault();
+    const pages=['home','chats','dashboard','logs','customize','settings'];
+    nav(pages[parseInt(e.key)-1]);
+  }
+});
+
+/* ── Toast ── */
+function toast(icon,msg,dur=3000){
+  const a=document.getElementById('toast-area');
+  const t=document.createElement('div');
+  t.className='toast';
+  t.innerHTML=`<span>${icon}</span><span>${msg}</span>`;
+  a.appendChild(t);
+  setTimeout(()=>t.style.opacity='0',dur-300);
+  setTimeout(()=>t.remove(),dur);
+}
+
+/* ── Utility ── */
+function autoResize(el){
+  el.style.height='';
+  el.style.height=Math.min(el.scrollHeight,160)+'px';
+}
+
+/* ── CUSTOMIZE ── */
+function custTab(el,id){
+  document.querySelectorAll('.cn-item').forEach(i=>i.classList.remove('active'));
+  document.querySelectorAll('.ct').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('ct-'+id).classList.add('active');
+}
+
+/* ── LOGS ── */
+function setLogTab(el,cat){
+  document.querySelectorAll('.lb-tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.le').forEach(e=>{
+    e.style.display=cat==='all'||e.dataset.cat===cat?'':'none';
+  });
+}
+function filterLogs(q){
+  document.querySelectorAll('.le').forEach(e=>{
+    const t=e.querySelector('.le-m')?.textContent.toLowerCase()||'';
+    e.style.display=!q||t.includes(q.toLowerCase())?'':'none';
+  });
+}
+function clearLogs(){
+  document.getElementById('log-stream').innerHTML=
+    '<div style="padding:20px;text-align:center;color:var(--text3);font-size:13px;font-family:\'JetBrains Mono\',monospace">Log stream cleared</div>';
+  toast('🗑','Logs cleared');
+}
+
+/* ── DASHBOARD ── */
+function fakeStats(){
+  const ram=Math.round(55+Math.random()*15);
+  const cpu=Math.round(10+Math.random()*28);
+  const se=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v};
+  const sw=(id,v)=>{const e=document.getElementById(id);if(e)e.style.width=v+'%'};
+  se('d-ram',ram+'%');se('d-cpu',cpu+'%');se('hv-ram',ram+'%');se('hv-cpu',cpu+'%');
+  sw('d-ram-bar',ram);sw('d-cpu-bar',cpu);sw('h-ram',ram);sw('h-cpu',cpu);
+}
+setInterval(fakeStats,5000);
+
+/* ── CHAT ── */
+const CONV_DATA={
+  c0:{title:'Organize downloads folder',sub:'Agent running · ag-4f21'},
+  c1:{title:'Email summary',sub:'3 unread, standup moved'},
+  c2:{title:'Fix orchestrator token bug',sub:'tiktoken cl100k_base fix'},
+  c3:{title:'System health check',sub:'All systems nominal'},
+  c4:{title:'Deploy 4 reliability fixes',sub:'Pushed master, DO pulled'},
+  c5:{title:'Dashboard redesign',sub:'Gemini-style, aurora gradient'},
+  c6:{title:'Audit report v1',sub:'Archived'},
+};
+function selectConv(el,id){
+  document.querySelectorAll('.conv').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('ctb-title').textContent=CONV_DATA[id]?.title||id;
+  document.getElementById('ctb-sub').textContent=CONV_DATA[id]?.sub||'';
+}
+function newConv(){
+  toast('💬','New conversation');
+  nav('chats');
+}
+function filterConvs(q){
+  document.querySelectorAll('.conv').forEach(c=>{
+    const t=c.querySelector('.conv-title')?.textContent.toLowerCase()||'';
+    c.style.display=!q||t.includes(q.toLowerCase())?'':'none';
+  });
+}
+function chatKey(e){
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();chatSend()}
+}
+function chatSend(){
+  const inp=document.getElementById('cia-input');
+  const val=inp.value.trim();if(!val) return;
+  inp.value='';inp.style.height='';
+  const msgs=document.getElementById('chat-msgs');
+  const ti=document.getElementById('chat-typing');
+  const now=new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:false});
+  const d=document.createElement('div');
+  d.className='cmsg usr';
+  d.innerHTML=`<div class="cmsg-ava u">V</div><div class="cmsg-wrap"><div class="cmsg-bubble u">${val}</div><div class="cmsg-meta r">You · ${now}</div></div>`;
+  msgs.insertBefore(d,ti);
+  ti.style.display='flex';
+  msgs.scrollTop=msgs.scrollHeight;
+  setTimeout(()=>{
+    ti.style.display='none';
+    const r=document.createElement('div');
+    r.className='cmsg';
+    r.innerHTML=`<div class="cmsg-ava e">E</div><div class="cmsg-wrap"><div class="cmsg-bubble e">Got it, Boss.</div><div class="cmsg-meta">EDITH · ${now} · Groq</div></div>`;
+    msgs.insertBefore(r,ti);
+    msgs.scrollTop=msgs.scrollHeight;
+  },1200);
+}
+function toggleArtifact(){
+  const ap=document.getElementById('artifact-panel');
+  ap.style.display=ap.style.display==='none'?'flex':'none';
+}
+
+/* ── HOME ── */
+let homeHasMessages=false;
+let agentModeOn=false;
+
+function homeKey(e){
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();homeSubmit()}
+}
+
+function homeSubmit(){
+  const inp=document.getElementById('home-input');
+  const val=inp.value.trim();
+  if(!val) return;
+
+  const msgs=document.getElementById('home-msgs');
+  const empty=document.getElementById('home-empty');
+
+  // First message: swap empty state for message list
+  if(!homeHasMessages){
+    homeHasMessages=true;
+    empty.style.transition='opacity .25s';
+    empty.style.opacity='0';
+    setTimeout(()=>{
+      empty.style.display='none';
+      const inner=document.createElement('div');
+      inner.className='home-msgs-inner';
+      inner.id='home-msgs-inner';
+      msgs.appendChild(inner);
+    },250);
+  }
+
+  inp.value='';inp.style.height='';
+
+  // Add user bubble after inner exists
+  setTimeout(()=>{
+    const inner=document.getElementById('home-msgs-inner');
+    if(!inner) return;
+    const now=new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:false});
+    addHomeMsg('user',val,now,inner);
+
+    // Show tool strip briefly (feature 4)
+    const ts=document.getElementById('tool-strip');
+    document.getElementById('ts-content').textContent='smart_memory → recall("'+val.slice(0,30)+'…")';
+    ts.style.display='flex';
+
+    // Add thinking bubble
+    const thinkDiv=document.createElement('div');
+    thinkDiv.className='hmsg';thinkDiv.id='home-thinking';
+    thinkDiv.innerHTML=`<div class="hmsg-ava e">E</div><div class="hmsg-wrap"><div class="hmsg-bubble e hmsg-thinking"><div class="th-dot"></div><div class="th-dot"></div><div class="th-dot"></div></div></div>`;
+    inner.appendChild(thinkDiv);
+    msgs.scrollTop=msgs.scrollHeight;
+
+    // After 1.4s: remove thinking, add real reply
+    setTimeout(()=>{
+      ts.style.display='none';
+      thinkDiv.remove();
+      const replyMap={
+        'check my emails':'📧 You have 3 unread emails: GitHub PR merged, Notion digest ready, standup moved to 10:30am.',
+        "today's schedule":'📅 Standup at 10:30am. Nothing else scheduled. Groq at 98% limit — consider switching providers.',
+        'search the web':'🔍 What would you like me to search for?',
+        'run agent task':'🤖 What task should I plan and execute? I\'ll break it into steps and ask for confirmation before risky actions.',
+        'system health':'✅ All systems nominal — RAM 61%, CPU 23%, Disk 48%. Groq active at 340ms. API at 98% daily limit.',
+        'open vault':'🔒 Vault is locked. This requires local terminal confirmation — I can\'t open it from the cloud node.',
+      };
+      const lc=val.toLowerCase().replace(/^[^\w]+/,'').trim();
+      const reply=replyMap[lc]||`Got it, Boss. Working on: "${val.slice(0,50)}${val.length>50?'…':''}". Let me check memory and MCP first.`;
+      addHomeMsg('edith',reply,now,inner);
+
+      // Show agent task drawer if agent-mode-ish query
+      if(/agent|task|organize|plan|execute|automate/i.test(val)){
+        document.getElementById('task-drawer').style.display='block';
+      }
+      msgs.scrollTop=msgs.scrollHeight;
+    },1400);
+  },280);
+}
+
+function addHomeMsg(role,text,time,container){
+  const d=document.createElement('div');
+  d.className='hmsg'+(role==='user'?' usr':'');
+  const isUser=role==='user';
+  d.innerHTML=`
+    <div class="hmsg-ava ${isUser?'u':'e'}">${isUser?'V':'E'}</div>
+    <div class="hmsg-wrap">
+      <div class="hmsg-bubble ${isUser?'u':'e'}">${text}</div>
+      <div class="hmsg-meta${isUser?' r':''}">${isUser?'You':'EDITH'} · ${time}${!isUser?' · Groq':''}</div>
+    </div>`;
+  container.appendChild(d);
+}
+
+function homeChip(el){
+  document.getElementById('home-input').value=el.textContent.replace(/^[^\w]/,'').trim();
+  homeSubmit();
+}
+
+function toggleTaskDrawer(){
+  const body=document.getElementById('td-body');
+  const chev=document.getElementById('td-chev');
+  const open=body.style.display!=='none';
+  body.style.display=open?'none':'flex';
+  chev.style.transform=open?'rotate(-90deg)':'';
+}
+
+function toggleAgentMode(){
+  agentModeOn=!agentModeOn;
+  const btn=document.querySelector('.hbox-btn[title="Agent mode"]');
+  btn.style.background=agentModeOn?'rgba(66,133,244,.2)':'';
+  btn.style.borderRadius='8px';
+  toast(agentModeOn?'🤖':'💬',agentModeOn?'Agent mode ON — EDITH will plan and execute':'Chat mode');
+}
+
+// Clock greeting
+function updateGreeting(){
+  const h=new Date().getHours();
+  const g=h<12?'Good morning':h<17?'Good afternoon':'Good evening';
+  const el=document.getElementById('home-greeting');
+  if(el) el.textContent=g+', Vaibhav.';
+}
+updateGreeting();setInterval(updateGreeting,60000);
+
+/* Boot */
+setTimeout(()=>toast('✅','EDITH online — all systems nominal',2500),400);
+</script>
+</body>
+</html>

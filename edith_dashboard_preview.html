@@ -1,0 +1,1407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EDITH</title>
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@300;400;500;600&family=Google+Sans+Display:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ─── RESET ──────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:#000;color:#e3e3e3;
+  font-family:'Google Sans','Segoe UI',system-ui,sans-serif;font-size:15px;}
+button,input,textarea{font-family:inherit;outline:none;border:none}
+a{text-decoration:none;color:inherit}
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:3px}
+
+/* ─── AURORA GRADIENT (Gemini's signature) ────── */
+@keyframes aurora{
+  0%  {background-position:0% 50%}
+  50% {background-position:100% 50%}
+  100%{background-position:0% 50%}
+}
+@keyframes fade-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes shimmer{0%{opacity:.5}50%{opacity:1}100%{opacity:.5}}
+@keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes slide-up{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+
+/* ─── APP SHELL ──────────────────────────────── */
+.app{display:flex;height:100vh;overflow:hidden}
+
+/* ─── LEFT RAIL (narrow icon rail like Gemini) ── */
+.rail{
+  width:68px;flex-shrink:0;
+  background:#000;
+  border-right:1px solid rgba(255,255,255,0.06);
+  display:flex;flex-direction:column;align-items:center;
+  padding:16px 0 20px;
+  gap:4px;
+  z-index:10;
+}
+.rail-logo{
+  width:36px;height:36px;border-radius:50%;
+  background:linear-gradient(135deg,#4285f4,#9c5cf5,#34a853,#ea4335);
+  background-size:300% 300%;
+  animation:aurora 6s ease infinite;
+  margin-bottom:24px;flex-shrink:0;
+  position:relative;
+  cursor:pointer;
+}
+.rail-logo::after{
+  content:'';position:absolute;inset:3px;border-radius:50%;background:#000;
+}
+.rail-logo-letter{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-size:14px;font-weight:700;color:#fff;z-index:1;letter-spacing:0;
+}
+
+.rail-icon{
+  width:48px;height:48px;border-radius:14px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:20px;cursor:pointer;
+  color:rgba(255,255,255,0.45);
+  transition:background .15s,color .15s;
+  position:relative;
+}
+.rail-icon:hover{background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.9)}
+.rail-icon.active{background:rgba(138,180,248,0.12);color:#8ab4f8}
+.rail-icon .badge{
+  position:absolute;top:6px;right:6px;
+  width:7px;height:7px;border-radius:50%;
+  background:#4285f4;border:1.5px solid #000;
+}
+.rail-icon .badge.red{background:#ea4335}
+.rail-icon .badge.amber{background:#fbbc04}
+
+.rail-spacer{flex:1}
+.rail-avatar{
+  width:32px;height:32px;border-radius:50%;
+  background:linear-gradient(135deg,#4285f4,#9c5cf5);
+  display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:700;color:#fff;
+  cursor:pointer;margin-top:8px;
+}
+
+/* ─── MAIN AREA ──────────────────────────────── */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;background:#0a0a0a}
+
+/* ─── TOP BAR (thin, minimal) ─────────────────── */
+.topbar{
+  height:52px;flex-shrink:0;
+  display:flex;align-items:center;padding:0 20px;
+  border-bottom:1px solid rgba(255,255,255,0.06);
+  gap:12px;
+  background:rgba(10,10,10,0.8);
+  backdrop-filter:blur(20px);
+}
+.topbar-title{font-size:16px;font-weight:500;color:#e3e3e3;flex:1}
+.topbar-sub{font-size:12px;color:rgba(255,255,255,0.35)}
+.topbar-chips{display:flex;gap:6px;margin-left:auto}
+.topbar-chip{
+  font-size:11px;padding:4px 10px;border-radius:20px;
+  border:1px solid rgba(255,255,255,0.1);
+  color:rgba(255,255,255,0.4);
+  background:transparent;cursor:pointer;
+  transition:all .15s;
+}
+.topbar-chip.live{
+  border-color:rgba(52,168,83,0.4);color:#34a853;
+  background:rgba(52,168,83,0.08);
+}
+.topbar-chip:hover{border-color:rgba(255,255,255,0.2);color:rgba(255,255,255,.7)}
+.topbar-clock{
+  font-family:'JetBrains Mono',monospace;
+  font-size:12px;color:rgba(255,255,255,0.3);
+  background:rgba(255,255,255,0.04);
+  padding:4px 10px;border-radius:8px;
+}
+
+/* ─── PAGE ROUTER ────────────────────────────── */
+.page{display:none;flex:1;overflow:hidden;flex-direction:column}
+.page.active{display:flex}
+
+/* ─── HOME PAGE (Gemini-style cinematic) ─────── */
+#page-home{
+  background:#000;
+  overflow-y:auto;
+  align-items:center;
+  justify-content:flex-start;
+  padding:0;
+}
+
+.home-hero{
+  width:100%;max-width:720px;
+  margin:0 auto;
+  padding:60px 24px 0;
+  animation:fade-in .5s ease;
+}
+
+.home-greeting{
+  font-family:'Google Sans Display','Google Sans',sans-serif;
+  font-size:32px;font-weight:400;
+  line-height:1.3;
+  background:linear-gradient(135deg,#e3e3e3 0%,#8ab4f8 40%,#c084fc 70%,#e3e3e3 100%);
+  background-size:200% auto;
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  animation:aurora 4s ease infinite;
+  margin-bottom:8px;
+}
+.home-sub{
+  font-size:15px;color:rgba(255,255,255,0.45);
+  margin-bottom:36px;font-weight:400;
+}
+
+/* Suggestion chips */
+.home-chips{
+  display:flex;flex-wrap:wrap;gap:8px;
+  margin-bottom:28px;
+}
+.home-chip{
+  padding:8px 16px;border-radius:20px;
+  border:1px solid rgba(255,255,255,0.1);
+  font-size:13px;color:rgba(255,255,255,0.65);
+  background:rgba(255,255,255,0.04);
+  cursor:pointer;transition:all .15s;white-space:nowrap;
+}
+.home-chip:hover{
+  background:rgba(255,255,255,0.08);
+  border-color:rgba(255,255,255,0.2);
+  color:#fff;
+}
+
+/* The big input box — Gemini style */
+.prompt-box{
+  width:100%;
+  background:rgba(255,255,255,0.06);
+  border:1px solid rgba(255,255,255,0.1);
+  border-radius:24px;
+  padding:16px 20px;
+  margin-bottom:16px;
+  transition:border-color .2s,background .2s;
+  position:relative;
+}
+.prompt-box:focus-within{
+  border-color:rgba(138,180,248,0.4);
+  background:rgba(255,255,255,0.08);
+}
+.prompt-box::before{
+  content:'';
+  position:absolute;inset:-1px;border-radius:25px;
+  background:linear-gradient(135deg,rgba(66,133,244,0),rgba(66,133,244,0.3),rgba(156,92,245,0.3),rgba(52,168,83,0));
+  opacity:0;transition:opacity .3s;z-index:-1;
+}
+.prompt-box:focus-within::before{opacity:1}
+
+.prompt-input{
+  width:100%;background:transparent;
+  font-size:15px;color:#e3e3e3;
+  resize:none;min-height:24px;max-height:160px;
+  overflow-y:auto;line-height:1.6;
+}
+.prompt-input::placeholder{color:rgba(255,255,255,0.3)}
+.prompt-actions{
+  display:flex;align-items:center;gap:8px;
+  margin-top:12px;
+}
+.prompt-btn{
+  width:36px;height:36px;border-radius:50%;
+  background:transparent;
+  display:flex;align-items:center;justify-content:center;
+  font-size:17px;cursor:pointer;
+  color:rgba(255,255,255,0.4);
+  transition:background .15s,color .15s;
+}
+.prompt-btn:hover{background:rgba(255,255,255,0.08);color:rgba(255,255,255,.8)}
+.prompt-send{
+  margin-left:auto;
+  width:36px;height:36px;border-radius:50%;
+  background:#4285f4;
+  display:flex;align-items:center;justify-content:center;
+  font-size:17px;cursor:pointer;color:#fff;
+  transition:background .15s;
+}
+.prompt-send:hover{background:#3367d6}
+
+/* Home cards row */
+.home-cards{
+  display:grid;grid-template-columns:1fr 1fr 1fr;
+  gap:10px;margin:24px 0;
+  max-width:720px;width:100%;margin-left:auto;margin-right:auto;
+  padding:0 24px;
+}
+.home-card{
+  background:rgba(255,255,255,0.04);
+  border:1px solid rgba(255,255,255,0.07);
+  border-radius:16px;padding:16px;
+  cursor:pointer;transition:all .15s;
+}
+.home-card:hover{
+  background:rgba(255,255,255,0.07);
+  border-color:rgba(255,255,255,0.12);
+}
+.home-card-icon{font-size:22px;margin-bottom:8px}
+.home-card-title{font-size:13px;font-weight:500;color:rgba(255,255,255,.8);margin-bottom:3px}
+.home-card-sub{font-size:11px;color:rgba(255,255,255,.35)}
+
+/* ─── CHAT PAGE ───────────────────────────────── */
+#page-chat{background:#0a0a0a}
+
+.chat-header{
+  padding:16px 24px;border-bottom:1px solid rgba(255,255,255,0.06);
+  display:flex;align-items:center;gap:12px;flex-shrink:0;
+}
+.chat-header-title{font-size:14px;font-weight:500;color:rgba(255,255,255,.7)}
+.chat-session-btn{
+  margin-left:auto;padding:6px 14px;border-radius:20px;
+  background:rgba(66,133,244,0.12);
+  border:1px solid rgba(66,133,244,0.2);
+  font-size:12px;color:#8ab4f8;cursor:pointer;
+  transition:all .15s;
+}
+.chat-session-btn:hover{background:rgba(66,133,244,0.2)}
+
+.chat-messages{
+  flex:1;overflow-y:auto;padding:24px;
+  display:flex;flex-direction:column;gap:24px;
+}
+
+.msg-row{display:flex;gap:12px;animation:slide-up .2s ease}
+.msg-row.user{flex-direction:row-reverse}
+.msg-icon{
+  width:32px;height:32px;border-radius:50%;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:700;
+}
+.mi-edith{
+  background:linear-gradient(135deg,#4285f4,#9c5cf5);
+  color:#fff;font-size:12px;
+}
+.mi-user{background:rgba(255,255,255,0.1);color:rgba(255,255,255,.6)}
+.msg-bubble{
+  max-width:72%;
+  padding:12px 16px;
+  border-radius:18px;
+  font-size:14px;line-height:1.6;color:#e3e3e3;
+}
+.msg-row:not(.user) .msg-bubble{
+  background:rgba(255,255,255,0.05);
+  border-radius:4px 18px 18px 18px;
+}
+.msg-row.user .msg-bubble{
+  background:rgba(66,133,244,0.15);
+  border:1px solid rgba(66,133,244,0.2);
+  border-radius:18px 18px 4px 18px;
+  color:#e3e3e3;
+}
+.msg-meta{
+  font-size:11px;color:rgba(255,255,255,.25);
+  margin-top:4px;font-family:'JetBrains Mono',monospace;
+  padding:0 4px;
+}
+
+.chat-input-area{
+  padding:16px 24px 20px;
+  border-top:1px solid rgba(255,255,255,0.06);
+  flex-shrink:0;
+}
+.chat-input-box{
+  background:rgba(255,255,255,0.06);
+  border:1px solid rgba(255,255,255,0.1);
+  border-radius:20px;
+  padding:12px 16px;
+  display:flex;align-items:flex-end;gap:10px;
+  transition:border-color .2s;
+}
+.chat-input-box:focus-within{border-color:rgba(138,180,248,0.35)}
+.chat-textarea{
+  flex:1;background:transparent;
+  font-size:14px;color:#e3e3e3;
+  resize:none;min-height:22px;max-height:120px;
+  overflow-y:auto;line-height:1.5;
+}
+.chat-textarea::placeholder{color:rgba(255,255,255,.28)}
+.chat-send-btn{
+  width:34px;height:34px;border-radius:50%;
+  background:#4285f4;color:#fff;
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;cursor:pointer;flex-shrink:0;
+  transition:background .15s;
+}
+.chat-send-btn:hover{background:#3367d6}
+.chat-mic-btn{
+  width:34px;height:34px;border-radius:50%;
+  background:rgba(255,255,255,0.06);color:rgba(255,255,255,.45);
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;cursor:pointer;flex-shrink:0;
+  transition:all .15s;
+}
+.chat-mic-btn:hover{background:rgba(255,255,255,.1);color:rgba(255,255,255,.8)}
+
+/* ─── DASHBOARD PAGE ─────────────────────────── */
+#page-dashboard{background:#0a0a0a;overflow-y:auto}
+
+.dash-body{padding:24px;max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+
+.dash-row{display:grid;gap:12px}
+.dash-row-4{grid-template-columns:repeat(4,1fr)}
+.dash-row-3{grid-template-columns:repeat(3,1fr)}
+.dash-row-2{grid-template-columns:2fr 1fr}
+.dash-row-full{grid-template-columns:1fr}
+
+/* card */
+.card{
+  background:rgba(255,255,255,0.04);
+  border:1px solid rgba(255,255,255,0.07);
+  border-radius:16px;padding:20px;
+  transition:border-color .2s,background .2s;
+}
+.card:hover{background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.11)}
+.card-label{
+  font-size:11px;font-weight:500;letter-spacing:.6px;text-transform:uppercase;
+  color:rgba(255,255,255,.35);margin-bottom:10px;
+}
+.card-value{
+  font-size:30px;font-weight:500;color:#e3e3e3;
+  font-family:'Google Sans Display',sans-serif;line-height:1;
+}
+.card-sub{font-size:12px;color:rgba(255,255,255,.35);margin-top:6px}
+.card-bar{
+  height:3px;border-radius:2px;
+  background:rgba(255,255,255,.06);overflow:hidden;margin-top:12px;
+}
+.card-bar-fill{height:100%;border-radius:2px;transition:width 1s ease}
+.cbf-blue  {background:linear-gradient(90deg,#4285f4,#8ab4f8)}
+.cbf-green {background:linear-gradient(90deg,#34a853,#81c995)}
+.cbf-amber {background:linear-gradient(90deg,#fbbc04,#fdd663)}
+.cbf-red   {background:linear-gradient(90deg,#ea4335,#f28b82)}
+
+/* panel */
+.panel{
+  background:rgba(255,255,255,0.04);
+  border:1px solid rgba(255,255,255,0.07);
+  border-radius:16px;overflow:hidden;
+  transition:border-color .2s;
+}
+.panel:hover{border-color:rgba(255,255,255,.1)}
+.panel-head{
+  padding:16px 20px;
+  border-bottom:1px solid rgba(255,255,255,0.06);
+  display:flex;align-items:center;gap:10px;
+}
+.panel-title{font-size:14px;font-weight:500;color:rgba(255,255,255,.8);flex:1}
+.panel-badge{
+  font-size:11px;padding:2px 9px;border-radius:10px;
+  font-family:'JetBrains Mono',monospace;
+}
+.pb-blue  {background:rgba(66,133,244,.15);color:#8ab4f8}
+.pb-green {background:rgba(52,168,83,.15); color:#81c995}
+.pb-amber {background:rgba(251,188,4,.15); color:#fdd663}
+.pb-red   {background:rgba(234,67,53,.15); color:#f28b82}
+.panel-body{padding:16px 20px}
+
+/* provider rows */
+.prov-row{
+  display:flex;align-items:center;gap:10px;
+  padding:9px 0;
+  border-bottom:1px solid rgba(255,255,255,.05);
+  font-size:13px;
+}
+.prov-row:last-child{border-bottom:none}
+.prov-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.pd-green{background:#34a853;box-shadow:0 0 6px #34a853}
+.pd-amber{background:#fbbc04}
+.pd-grey {background:rgba(255,255,255,.2)}
+.prov-name{font-weight:500;color:rgba(255,255,255,.8);flex:1}
+.prov-model{font-size:11px;color:rgba(255,255,255,.3);font-family:'JetBrains Mono',monospace}
+.prov-status{
+  font-size:10px;padding:2px 8px;border-radius:10px;
+  font-family:'JetBrains Mono',monospace;
+}
+.ps-active {background:rgba(52,168,83,.15);color:#81c995}
+.ps-standby{background:rgba(255,255,255,.06);color:rgba(255,255,255,.4)}
+.ps-cool   {background:rgba(251,188,4,.12);color:#fdd663}
+
+/* memory ring */
+.mem-ring-wrap{display:flex;align-items:center;gap:20px;padding:4px 0}
+.ring-svg{transform:rotate(-90deg)}
+.ring-center{
+  position:absolute;inset:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+}
+.ring-num{font-size:20px;font-weight:600;color:#e3e3e3;font-family:'JetBrains Mono',monospace}
+.ring-lbl{font-size:10px;color:rgba(255,255,255,.3)}
+.ring-pos{position:relative;width:100px;height:100px;flex-shrink:0}
+.ring-legend{display:flex;flex-direction:column;gap:8px}
+.rl{display:flex;align-items:center;gap:8px;font-size:12px}
+.rl-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.rl-name{color:rgba(255,255,255,.6);flex:1}
+.rl-n{font-family:'JetBrains Mono',monospace;font-size:11px;color:rgba(255,255,255,.3)}
+
+/* agent steps */
+.step-row{
+  display:flex;align-items:center;gap:10px;
+  padding:9px 0;border-bottom:1px solid rgba(255,255,255,.05);
+  font-size:13px;
+}
+.step-row:last-child{border-bottom:none}
+.step-ico{
+  width:24px;height:24px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;flex-shrink:0;
+}
+.s-done {background:rgba(52,168,83,.2);color:#81c995}
+.s-run  {background:rgba(66,133,244,.2);color:#8ab4f8;animation:shimmer 1.2s ease-in-out infinite}
+.s-wait {background:rgba(255,255,255,.06);color:rgba(255,255,255,.3)}
+.step-txt{flex:1;color:rgba(255,255,255,.75)}
+.step-t{font-size:11px;color:rgba(255,255,255,.25);font-family:'JetBrains Mono',monospace}
+
+/* health rows */
+.h-row{display:flex;align-items:center;gap:10px;padding:7px 0;font-size:13px}
+.h-lbl{color:rgba(255,255,255,.35);width:38px;font-size:11px;font-family:'JetBrains Mono',monospace}
+.h-bar{flex:1;height:4px;background:rgba(255,255,255,.06);border-radius:2px;overflow:hidden}
+.h-fill{height:100%;border-radius:2px;transition:width 1s ease}
+.h-val{font-family:'JetBrains Mono',monospace;font-size:11px;color:rgba(255,255,255,.4);width:36px;text-align:right}
+
+/* ─── MEMORY PAGE ────────────────────────────── */
+#page-memory{background:#0a0a0a;overflow-y:auto}
+.mem-body{padding:24px;max-width:900px;margin:0 auto}
+
+.mem-search{
+  background:rgba(255,255,255,0.06);
+  border:1px solid rgba(255,255,255,0.1);
+  border-radius:24px;padding:12px 20px;
+  display:flex;align-items:center;gap:10px;
+  margin-bottom:24px;
+  transition:border-color .2s;
+}
+.mem-search:focus-within{border-color:rgba(138,180,248,.35)}
+.mem-search input{
+  flex:1;background:transparent;font-size:14px;color:#e3e3e3;
+}
+.mem-search input::placeholder{color:rgba(255,255,255,.28)}
+.mem-search-icon{font-size:18px;color:rgba(255,255,255,.3)}
+
+.mem-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px}
+.mem-stat{
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);
+  border-radius:14px;padding:16px;
+}
+.ms-val{font-size:26px;font-weight:500;color:#e3e3e3;font-family:'JetBrains Mono',monospace}
+.ms-lbl{font-size:11px;color:rgba(255,255,255,.35);margin-top:4px}
+.ms-dot{width:6px;height:6px;border-radius:50%;margin-bottom:8px}
+
+.mem-items{display:flex;flex-direction:column;gap:8px}
+.mem-item{
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);
+  border-radius:12px;padding:14px 16px;
+  transition:border-color .15s;cursor:pointer;
+}
+.mem-item:hover{border-color:rgba(255,255,255,.13);background:rgba(255,255,255,.06)}
+.mi-top{display:flex;align-items:center;gap:10px;margin-bottom:5px}
+.mi-tag{
+  font-size:10px;padding:2px 8px;border-radius:8px;
+  font-family:'JetBrains Mono',monospace;
+}
+.mi-t-blue{background:rgba(66,133,244,.15);color:#8ab4f8}
+.mi-t-green{background:rgba(52,168,83,.15);color:#81c995}
+.mi-t-purple{background:rgba(156,92,245,.15);color:#c084fc}
+.mi-t-amber{background:rgba(251,188,4,.15);color:#fdd663}
+.mi-key{font-size:12px;font-family:'JetBrains Mono',monospace;color:rgba(255,255,255,.5);flex:1}
+.mi-time{font-size:11px;color:rgba(255,255,255,.25)}
+.mi-val{font-size:13px;color:rgba(255,255,255,.75);line-height:1.5}
+
+/* ─── MCP PAGE ───────────────────────────────── */
+#page-mcp{background:#0a0a0a;overflow-y:auto}
+.mcp-body{padding:24px;max-width:960px;margin:0 auto}
+
+.mcp-grid{display:flex;flex-direction:column;gap:10px;margin-bottom:24px}
+.mcp-card{
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);
+  border-radius:14px;padding:16px 20px;
+  display:flex;align-items:center;gap:16px;
+  transition:all .15s;cursor:pointer;
+}
+.mcp-card:hover{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.12)}
+.mcp-icon{
+  width:42px;height:42px;border-radius:12px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:20px;flex-shrink:0;
+}
+.mcp-info{flex:1;min-width:0}
+.mcp-name{font-size:14px;font-weight:500;color:#e3e3e3;margin-bottom:2px}
+.mcp-desc{font-size:12px;color:rgba(255,255,255,.35);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mcp-meta{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.mcp-tools-count{font-size:12px;font-family:'JetBrains Mono',monospace;color:rgba(255,255,255,.3)}
+.mcp-on{
+  width:42px;height:24px;border-radius:12px;
+  background:rgba(52,168,83,.3);border:none;cursor:pointer;
+  position:relative;transition:background .15s;
+}
+.mcp-on::after{
+  content:'';position:absolute;top:3px;right:3px;
+  width:18px;height:18px;border-radius:50%;background:#34a853;
+  box-shadow:0 0 6px #34a853;transition:right .15s;
+}
+.mcp-off{
+  width:42px;height:24px;border-radius:12px;
+  background:rgba(255,255,255,.1);border:none;cursor:pointer;
+  position:relative;transition:background .15s;
+}
+.mcp-off::after{
+  content:'';position:absolute;top:3px;left:3px;
+  width:18px;height:18px;border-radius:50%;background:rgba(255,255,255,.4);
+}
+
+/* ─── SECURITY PAGE ──────────────────────────── */
+#page-security{background:#0a0a0a;overflow-y:auto}
+.sec-body{padding:24px;max-width:900px;margin:0 auto}
+.sec-status-row{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;
+}
+.sec-status-card{
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);
+  border-radius:14px;padding:16px;display:flex;align-items:center;gap:12px;
+}
+.sec-icon{font-size:24px}
+.sec-info-title{font-size:13px;font-weight:500;color:rgba(255,255,255,.8)}
+.sec-info-sub{font-size:11px;color:rgba(255,255,255,.35);margin-top:2px}
+.sec-check{
+  margin-left:auto;font-size:18px;
+}
+
+.sec-events-list{display:flex;flex-direction:column;gap:8px}
+.sec-event{
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);
+  border-radius:12px;padding:14px 16px;
+  border-left:3px solid transparent;
+}
+.sec-event.ok  {border-left-color:#34a853}
+.sec-event.warn{border-left-color:#fbbc04}
+.sec-event.err {border-left-color:#ea4335}
+.se-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.se-title{font-size:13px;font-weight:500;color:rgba(255,255,255,.8)}
+.se-time{font-size:11px;color:rgba(255,255,255,.25);font-family:'JetBrains Mono',monospace}
+.se-desc{font-size:12px;color:rgba(255,255,255,.4)}
+
+/* ─── SETTINGS PAGE ──────────────────────────── */
+#page-settings{background:#0a0a0a;overflow-y:auto}
+.set-body{padding:24px;max-width:700px;margin:0 auto}
+.set-section{margin-bottom:28px}
+.set-section-title{
+  font-size:13px;font-weight:500;color:rgba(255,255,255,.45);
+  text-transform:uppercase;letter-spacing:.8px;
+  margin-bottom:12px;
+}
+.set-row{
+  display:flex;align-items:center;gap:14px;
+  padding:14px 0;border-bottom:1px solid rgba(255,255,255,.06);
+}
+.set-row:last-child{border-bottom:none}
+.set-row-icon{font-size:20px;width:32px;text-align:center}
+.set-row-info{flex:1}
+.set-row-title{font-size:14px;color:rgba(255,255,255,.8)}
+.set-row-sub{font-size:12px;color:rgba(255,255,255,.35);margin-top:2px}
+.set-toggle{
+  width:44px;height:26px;border-radius:13px;background:rgba(52,168,83,.3);
+  border:none;cursor:pointer;position:relative;flex-shrink:0;
+}
+.set-toggle::after{
+  content:'';position:absolute;top:3px;right:3px;
+  width:20px;height:20px;border-radius:50%;background:#34a853;
+}
+.set-toggle.off{background:rgba(255,255,255,.1)}
+.set-toggle.off::after{right:auto;left:3px;background:rgba(255,255,255,.4)}
+.set-chip{
+  font-size:12px;padding:4px 12px;border-radius:8px;
+  background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);
+  color:rgba(255,255,255,.55);cursor:pointer;white-space:nowrap;
+}
+
+/* ─── BOTTOM NAV (Gemini mobile-style) ──────────*/
+.bottom-nav{
+  display:none; /* desktop: hidden — rail serves this purpose */
+}
+
+/* ─── TOOLTIP ────────────────────────────────── */
+.rail-icon{position:relative}
+.tip{
+  display:none;position:absolute;left:calc(100% + 10px);
+  background:rgba(40,40,40,.95);color:#e3e3e3;
+  font-size:12px;padding:5px 10px;border-radius:8px;white-space:nowrap;
+  pointer-events:none;z-index:100;
+  box-shadow:0 4px 16px rgba(0,0,0,.4);
+}
+.rail-icon:hover .tip{display:block}
+
+/* ─── TOAST ──────────────────────────────────── */
+#toast-area{
+  position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+  display:flex;flex-direction:column;align-items:center;gap:8px;z-index:999;
+}
+.toast{
+  background:rgba(40,40,44,.97);backdrop-filter:blur(20px);
+  border:1px solid rgba(255,255,255,.1);border-radius:12px;
+  padding:10px 18px;font-size:13px;color:#e3e3e3;
+  display:flex;align-items:center;gap:8px;
+  box-shadow:0 8px 32px rgba(0,0,0,.4);
+  animation:slide-up .2s ease;min-width:240px;justify-content:center;
+}
+
+/* ─── SCROLL ─────────────────────────────────── */
+#page-dashboard,#page-memory,#page-mcp,#page-security,#page-settings,
+#page-home{overflow-y:auto}
+
+</style>
+</head>
+<body>
+
+<div id="toast-area"></div>
+
+<div class="app">
+
+  <!-- ── RAIL ── -->
+  <nav class="rail">
+    <div class="rail-logo" onclick="nav('home')">
+      <div class="rail-logo-letter">E</div>
+    </div>
+
+    <div class="rail-icon active" id="ri-home" onclick="nav('home')">
+      🏠<span class="tip">Home</span>
+    </div>
+    <div class="rail-icon" id="ri-chat" onclick="nav('chat')">
+      💬<span class="tip">Chat</span>
+      <span class="badge"></span>
+    </div>
+    <div class="rail-icon" id="ri-dashboard" onclick="nav('dashboard')">
+      ⬡<span class="tip">Dashboard</span>
+    </div>
+    <div class="rail-icon" id="ri-memory" onclick="nav('memory')">
+      🧠<span class="tip">Memory</span>
+    </div>
+    <div class="rail-icon" id="ri-mcp" onclick="nav('mcp')">
+      🔌<span class="tip">MCP Servers</span>
+    </div>
+    <div class="rail-icon" id="ri-security" onclick="nav('security')">
+      🛡️<span class="tip">Security</span>
+      <span class="badge amber"></span>
+    </div>
+
+    <div class="rail-spacer"></div>
+
+    <div class="rail-icon" id="ri-settings" onclick="nav('settings')">
+      ⚙️<span class="tip">Settings</span>
+    </div>
+    <div class="rail-avatar">V</div>
+  </nav>
+
+  <!-- ── MAIN ── -->
+  <main class="main">
+
+    <!-- Topbar -->
+    <div class="topbar">
+      <div class="topbar-title" id="topbar-title">Home</div>
+      <div class="topbar-chips">
+        <div class="topbar-chip live">● Groq active</div>
+        <div class="topbar-chip">Gemini standby</div>
+      </div>
+      <div class="topbar-clock" id="clock">--:--:--</div>
+    </div>
+
+    <!-- ══ HOME PAGE ══ -->
+    <div class="page active" id="page-home">
+      <div style="overflow-y:auto;flex:1">
+
+        <div class="home-hero">
+          <div class="home-greeting" id="greeting">Good morning, Vaibhav.</div>
+          <div class="home-sub">What can I help you with today?</div>
+
+          <div class="home-chips">
+            <div class="home-chip" onclick="startChat('Check my emails')">📧 Check my emails</div>
+            <div class="home-chip" onclick="startChat('What\'s on my calendar today?')">📅 Today's schedule</div>
+            <div class="home-chip" onclick="startChat('System health check')">⬡ System status</div>
+            <div class="home-chip" onclick="startChat('Search latest AI news')">🔍 Search the web</div>
+            <div class="home-chip" onclick="startChat('Open my vault')">🔒 Vault</div>
+            <div class="home-chip" onclick="startChat('Analyze my downloads folder')">🤖 Run agent</div>
+          </div>
+
+          <div class="prompt-box">
+            <textarea class="prompt-input" id="home-input" placeholder="Ask EDITH anything…" rows="1"
+              oninput="autoResize(this)"
+              onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendHome()}"></textarea>
+            <div class="prompt-actions">
+              <div class="prompt-btn" title="Voice input">🎤</div>
+              <div class="prompt-btn" title="Attach file">📎</div>
+              <div class="prompt-btn" title="Camera / screenshot">📷</div>
+              <div class="prompt-send" onclick="sendHome()">↑</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="home-cards">
+          <div class="home-card" onclick="nav('dashboard')">
+            <div class="home-card-icon">⬡</div>
+            <div class="home-card-title">System Dashboard</div>
+            <div class="home-card-sub">RAM · CPU · Providers</div>
+          </div>
+          <div class="home-card" onclick="nav('memory')">
+            <div class="home-card-icon">🧠</div>
+            <div class="home-card-title">Memory</div>
+            <div class="home-card-sub">842 items stored</div>
+          </div>
+          <div class="home-card" onclick="nav('mcp')">
+            <div class="home-card-icon">🔌</div>
+            <div class="home-card-title">MCP Servers</div>
+            <div class="home-card-sub">4 active · 2 disabled</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ══ CHAT PAGE ══ -->
+    <div class="page" id="page-chat">
+      <div class="chat-header">
+        <span style="font-size:18px">💬</span>
+        <div class="chat-header-title">Chat with EDITH</div>
+        <button class="chat-session-btn">+ New session</button>
+      </div>
+      <div class="chat-messages" id="chat-msgs">
+
+        <div class="msg-row">
+          <div class="msg-icon mi-edith">E</div>
+          <div>
+            <div class="msg-bubble">Good morning, Boss. Groq is active at 340ms, 3 unread emails, no calendar conflicts until 10:30am.</div>
+            <div class="msg-meta">EDITH · 08:02</div>
+          </div>
+        </div>
+
+        <div class="msg-row user">
+          <div class="msg-icon mi-user">V</div>
+          <div>
+            <div class="msg-bubble">Summarize my unread emails</div>
+            <div class="msg-meta">You · 08:03</div>
+          </div>
+        </div>
+
+        <div class="msg-row">
+          <div class="msg-icon mi-edith">E</div>
+          <div>
+            <div class="msg-bubble">
+              <strong>📧 3 unread emails:</strong><br><br>
+              1. <strong>GitHub</strong> — PR #12 merged to master · 3 min ago<br>
+              2. <strong>Notion</strong> — Weekly digest is ready<br>
+              3. <strong>Team</strong> — Standup moved to 10:30am
+            </div>
+            <div class="msg-meta">EDITH · 08:03 · Groq · 340ms</div>
+          </div>
+        </div>
+
+        <div class="msg-row user">
+          <div class="msg-icon mi-user">V</div>
+          <div>
+            <div class="msg-bubble">Organize my downloads folder with the agent</div>
+            <div class="msg-meta">You · 08:05</div>
+          </div>
+        </div>
+
+        <div class="msg-row">
+          <div class="msg-icon mi-edith">E</div>
+          <div>
+            <div class="msg-bubble">⚙️ Agent started — planning 3 steps. I'll ask you to confirm before deleting anything.<br><br>Task: <code style="background:rgba(255,255,255,.08);padding:2px 6px;border-radius:4px;font-size:12px">ag-4f21</code> · EXECUTING step 2/3</div>
+            <div class="msg-meta">EDITH · 08:05</div>
+          </div>
+        </div>
+
+      </div>
+      <div class="chat-input-area">
+        <div class="chat-input-box">
+          <div class="chat-mic-btn">🎤</div>
+          <textarea class="chat-textarea" placeholder="Message EDITH…" rows="1"
+            oninput="autoResize(this)"
+            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}"></textarea>
+          <div class="chat-send-btn" onclick="sendChat()">↑</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ DASHBOARD PAGE ══ -->
+    <div class="page" id="page-dashboard">
+      <div class="dash-body">
+
+        <!-- Stats -->
+        <div class="dash-row dash-row-4">
+          <div class="card">
+            <div class="card-label">RAM</div>
+            <div class="card-value" id="d-ram">61%</div>
+            <div class="card-sub">4.9 GB / 8 GB</div>
+            <div class="card-bar"><div class="card-bar-fill cbf-blue" style="width:61%"></div></div>
+          </div>
+          <div class="card">
+            <div class="card-label">CPU</div>
+            <div class="card-value" id="d-cpu">23%</div>
+            <div class="card-sub">i5-12400 · 6 cores</div>
+            <div class="card-bar"><div class="card-bar-fill cbf-green" style="width:23%"></div></div>
+          </div>
+          <div class="card">
+            <div class="card-label">Disk</div>
+            <div class="card-value">48%</div>
+            <div class="card-sub">476 GB / 1 TB</div>
+            <div class="card-bar"><div class="card-bar-fill cbf-amber" style="width:48%"></div></div>
+          </div>
+          <div class="card">
+            <div class="card-label">API today</div>
+            <div class="card-value" style="color:#f28b82">147</div>
+            <div class="card-sub">Limit 150 · 98%</div>
+            <div class="card-bar"><div class="card-bar-fill cbf-red" style="width:98%"></div></div>
+          </div>
+        </div>
+
+        <!-- Middle row -->
+        <div class="dash-row" style="grid-template-columns:1fr 1fr 1fr">
+
+          <!-- AI Providers -->
+          <div class="panel">
+            <div class="panel-head">
+              <div class="panel-title">AI Providers</div>
+            </div>
+            <div class="panel-body" style="padding-top:8px;padding-bottom:8px">
+              <div class="prov-row">
+                <div class="prov-dot pd-green"></div>
+                <div class="prov-name">Groq</div>
+                <div class="prov-model">llama-3.3-70b</div>
+                <div class="prov-status ps-active">active</div>
+              </div>
+              <div class="prov-row">
+                <div class="prov-dot pd-green"></div>
+                <div class="prov-name">Gemini</div>
+                <div class="prov-model">2.0-flash</div>
+                <div class="prov-status ps-standby">standby</div>
+              </div>
+              <div class="prov-row">
+                <div class="prov-dot pd-amber"></div>
+                <div class="prov-name">NVIDIA</div>
+                <div class="prov-model">llama-3.1-70b</div>
+                <div class="prov-status ps-cool">cooldown</div>
+              </div>
+              <div class="prov-row">
+                <div class="prov-dot pd-green"></div>
+                <div class="prov-name">OpenRouter</div>
+                <div class="prov-model">llama-3.3-70b</div>
+                <div class="prov-status ps-standby">standby</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Memory Ring -->
+          <div class="panel">
+            <div class="panel-head">
+              <div class="panel-title">Memory</div>
+              <span class="panel-badge pb-blue">842 items</span>
+            </div>
+            <div class="panel-body">
+              <div class="mem-ring-wrap">
+                <div class="ring-pos">
+                  <svg class="ring-svg" width="100" height="100" viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="38" fill="none" stroke="rgba(255,255,255,.06)" stroke-width="7"/>
+                    <circle cx="50" cy="50" r="38" fill="none" stroke="#4285f4" stroke-width="7"
+                      stroke-dasharray="239" stroke-dashoffset="92" stroke-linecap="round"/>
+                    <circle cx="50" cy="50" r="30" fill="none" stroke="rgba(255,255,255,.04)" stroke-width="5"/>
+                    <circle cx="50" cy="50" r="30" fill="none" stroke="#34a853" stroke-width="5"
+                      stroke-dasharray="188" stroke-dashoffset="60" stroke-linecap="round"/>
+                    <circle cx="50" cy="50" r="22" fill="none" stroke="rgba(255,255,255,.04)" stroke-width="4"/>
+                    <circle cx="50" cy="50" r="22" fill="none" stroke="#9c5cf5" stroke-width="4"
+                      stroke-dasharray="138" stroke-dashoffset="80" stroke-linecap="round"/>
+                  </svg>
+                  <div class="ring-center">
+                    <div class="ring-num">842</div>
+                    <div class="ring-lbl">total</div>
+                  </div>
+                </div>
+                <div class="ring-legend">
+                  <div class="rl"><div class="rl-dot" style="background:#4285f4"></div><div class="rl-name">RAM</div><div class="rl-n">50</div></div>
+                  <div class="rl"><div class="rl-dot" style="background:#34a853"></div><div class="rl-name">SQLite</div><div class="rl-n">614</div></div>
+                  <div class="rl"><div class="rl-dot" style="background:#9c5cf5"></div><div class="rl-name">ChromaDB</div><div class="rl-n">156</div></div>
+                  <div class="rl"><div class="rl-dot" style="background:#fbbc04"></div><div class="rl-name">Graph</div><div class="rl-n">22</div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Health -->
+          <div class="panel">
+            <div class="panel-head">
+              <div class="panel-title">System Health</div>
+              <span class="panel-badge pb-green">OK</span>
+            </div>
+            <div class="panel-body">
+              <div class="h-row">
+                <div class="h-lbl">RAM</div>
+                <div class="h-bar"><div class="h-fill cbf-blue" id="h-ram" style="width:61%"></div></div>
+                <div class="h-val" id="hv-ram">61%</div>
+              </div>
+              <div class="h-row">
+                <div class="h-lbl">CPU</div>
+                <div class="h-bar"><div class="h-fill cbf-green" id="h-cpu" style="width:23%"></div></div>
+                <div class="h-val" id="hv-cpu">23%</div>
+              </div>
+              <div class="h-row">
+                <div class="h-lbl">Disk</div>
+                <div class="h-bar"><div class="h-fill cbf-amber" style="width:48%"></div></div>
+                <div class="h-val">48%</div>
+              </div>
+              <div class="h-row">
+                <div class="h-lbl">API</div>
+                <div class="h-bar"><div class="h-fill cbf-red" style="width:98%"></div></div>
+                <div class="h-val" style="color:#f28b82">98%</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Agent Activity -->
+        <div class="panel">
+          <div class="panel-head">
+            <div class="panel-title">Agent Activity</div>
+            <span class="panel-badge pb-blue">1 running · ag-4f21</span>
+          </div>
+          <div class="panel-body">
+            <div class="step-row">
+              <div class="step-ico s-done">✓</div>
+              <div class="step-txt">Plan — analyzed Downloads folder, found 84 files across 6 types</div>
+              <div class="step-t">0.4s</div>
+            </div>
+            <div class="step-row">
+              <div class="step-ico s-run">⟳</div>
+              <div class="step-txt">Execute — sorting files into subfolders by type…</div>
+              <div class="step-t">running</div>
+            </div>
+            <div class="step-row">
+              <div class="step-ico s-wait">3</div>
+              <div class="step-txt">Validate — confirm no important files removed (awaiting your approval)</div>
+              <div class="step-t">pending</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ══ MEMORY PAGE ══ -->
+    <div class="page" id="page-memory">
+      <div class="mem-body">
+        <div class="mem-search">
+          <span class="mem-search-icon">🔍</span>
+          <input placeholder="Search memory…" />
+        </div>
+
+        <div class="mem-stats">
+          <div class="mem-stat">
+            <div class="ms-dot" style="background:#4285f4"></div>
+            <div class="ms-val">50</div>
+            <div class="ms-lbl">RAM cache</div>
+          </div>
+          <div class="mem-stat">
+            <div class="ms-dot" style="background:#34a853"></div>
+            <div class="ms-val">614</div>
+            <div class="ms-lbl">SQLite</div>
+          </div>
+          <div class="mem-stat">
+            <div class="ms-dot" style="background:#9c5cf5"></div>
+            <div class="ms-val">156</div>
+            <div class="ms-lbl">ChromaDB</div>
+          </div>
+          <div class="mem-stat">
+            <div class="ms-dot" style="background:#fbbc04"></div>
+            <div class="ms-val">22</div>
+            <div class="ms-lbl">Graph nodes</div>
+          </div>
+        </div>
+
+        <div class="mem-items">
+          <div class="mem-item">
+            <div class="mi-top">
+              <span class="mi-tag mi-t-blue">preference</span>
+              <span class="mi-key">coding_style_dark_mode</span>
+              <span class="mi-time">2h ago</span>
+            </div>
+            <div class="mi-val">Vaibhav prefers dark mode and concise responses, no markdown headers</div>
+          </div>
+          <div class="mem-item">
+            <div class="mi-top">
+              <span class="mi-tag mi-t-green">git</span>
+              <span class="mi-key">git_EDITH_a16d068</span>
+              <span class="mi-time">1h ago</span>
+            </div>
+            <div class="mi-val">[git:EDITH] 2026-06-08 — fix: 4 reliability fixes from audit (sha:a16d068)</div>
+          </div>
+          <div class="mem-item">
+            <div class="mi-top">
+              <span class="mi-tag mi-t-purple">reflection</span>
+              <span class="mi-key">reflection_3829471</span>
+              <span class="mi-time">3h ago</span>
+            </div>
+            <div class="mi-val">Vaibhav uses AyurStock for medicine inventory — Next.js + Supabase</div>
+          </div>
+          <div class="mem-item">
+            <div class="mi-top">
+              <span class="mi-tag mi-t-amber">graph</span>
+              <span class="mi-key">triple: vaibhav→builds→edith</span>
+              <span class="mi-time">5h ago</span>
+            </div>
+            <div class="mi-val">Knowledge graph: vaibhav --[builds]--> edith --[uses]--> chromadb</div>
+          </div>
+          <div class="mem-item">
+            <div class="mi-top">
+              <span class="mi-tag mi-t-blue">episodic</span>
+              <span class="mi-key">episode_7c2a11f</span>
+              <span class="mi-time">Yesterday</span>
+            </div>
+            <div class="mi-val">Session: orchestrator refactor, fixed background daemon scheduler, deployed to DO</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ MCP PAGE ══ -->
+    <div class="page" id="page-mcp">
+      <div class="mcp-body">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+          <div>
+            <div style="font-size:16px;font-weight:500;color:#e3e3e3">MCP Servers</div>
+            <div style="font-size:12px;color:rgba(255,255,255,.35);margin-top:2px">4 enabled · 2 disabled · Model Context Protocol</div>
+          </div>
+          <button onclick="toast('⚙️','Add server form coming soon')"
+            style="padding:8px 18px;border-radius:20px;background:rgba(66,133,244,.15);
+            border:1px solid rgba(66,133,244,.25);color:#8ab4f8;font-size:13px;cursor:pointer">
+            + Add server
+          </button>
+        </div>
+
+        <div class="mcp-grid">
+          <div class="mcp-card">
+            <div class="mcp-icon" style="background:rgba(66,133,244,.12)">📁</div>
+            <div class="mcp-info">
+              <div class="mcp-name">filesystem</div>
+              <div class="mcp-desc">Local filesystem — read, write, list files under /home/vaibhav</div>
+            </div>
+            <div class="mcp-meta">
+              <div class="mcp-tools-count">12 tools</div>
+              <button class="mcp-on" onclick="toast('🔌','filesystem toggled')"></button>
+            </div>
+          </div>
+          <div class="mcp-card">
+            <div class="mcp-icon" style="background:rgba(52,168,83,.12)">🐙</div>
+            <div class="mcp-info">
+              <div class="mcp-name">github</div>
+              <div class="mcp-desc">GitHub API — repos, issues, PRs, code search</div>
+            </div>
+            <div class="mcp-meta">
+              <div class="mcp-tools-count">8 tools</div>
+              <button class="mcp-on" onclick="toast('🔌','github toggled')"></button>
+            </div>
+          </div>
+          <div class="mcp-card">
+            <div class="mcp-icon" style="background:rgba(234,67,53,.12)">📊</div>
+            <div class="mcp-info">
+              <div class="mcp-name">google-workspace</div>
+              <div class="mcp-desc">Docs, Sheets, Drive, Gmail, Calendar — 95+ tools</div>
+            </div>
+            <div class="mcp-meta">
+              <div class="mcp-tools-count">95 tools</div>
+              <button class="mcp-on" onclick="toast('🔌','google-workspace toggled')"></button>
+            </div>
+          </div>
+          <div class="mcp-card">
+            <div class="mcp-icon" style="background:rgba(156,92,245,.12)">📓</div>
+            <div class="mcp-info">
+              <div class="mcp-name">obsidian</div>
+              <div class="mcp-desc">EDITH BRAIN vault — read, search, create, edit notes</div>
+            </div>
+            <div class="mcp-meta">
+              <div class="mcp-tools-count">6 tools</div>
+              <button class="mcp-on" onclick="toast('🔌','obsidian toggled')"></button>
+            </div>
+          </div>
+          <div class="mcp-card" style="opacity:.55">
+            <div class="mcp-icon" style="background:rgba(251,188,4,.1)">☁️</div>
+            <div class="mcp-info">
+              <div class="mcp-name">cloudflare</div>
+              <div class="mcp-desc">Workers, DNS, analytics — needs CLOUDFLARE_API_TOKEN</div>
+            </div>
+            <div class="mcp-meta">
+              <div class="mcp-tools-count">—</div>
+              <button class="mcp-off" onclick="toast('✅','cloudflare enabled')"></button>
+            </div>
+          </div>
+          <div class="mcp-card" style="opacity:.55">
+            <div class="mcp-icon" style="background:rgba(52,168,83,.08)">🎵</div>
+            <div class="mcp-info">
+              <div class="mcp-name">spotify</div>
+              <div class="mcp-desc">Music playback control — needs SPOTIFY_CLIENT_ID</div>
+            </div>
+            <div class="mcp-meta">
+              <div class="mcp-tools-count">—</div>
+              <button class="mcp-off" onclick="toast('✅','spotify enabled')"></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ SECURITY PAGE ══ -->
+    <div class="page" id="page-security">
+      <div class="sec-body">
+        <div class="sec-status-row">
+          <div class="sec-status-card">
+            <div class="sec-icon">🔒</div>
+            <div>
+              <div class="sec-info-title">Vault</div>
+              <div class="sec-info-sub">Locked · Argon2 + Fernet</div>
+            </div>
+            <div class="sec-check">✅</div>
+          </div>
+          <div class="sec-status-card">
+            <div class="sec-icon">🛡️</div>
+            <div>
+              <div class="sec-info-title">API Auth</div>
+              <div class="sec-info-sub">Middleware active</div>
+            </div>
+            <div class="sec-check">✅</div>
+          </div>
+          <div class="sec-status-card">
+            <div class="sec-icon">⚠️</div>
+            <div>
+              <div class="sec-info-title">API Spend</div>
+              <div class="sec-info-sub">98% of daily limit</div>
+            </div>
+            <div class="sec-check" style="color:#fbbc04">⚠️</div>
+          </div>
+        </div>
+
+        <div class="panel-head" style="padding:0 0 12px;border-bottom:none">
+          <div class="panel-title">Recent Events</div>
+          <span class="panel-badge pb-amber">1 warning</span>
+        </div>
+        <div class="sec-events-list">
+          <div class="sec-event ok">
+            <div class="se-head"><span class="se-title">Vault access</span><span class="se-time">08:01</span></div>
+            <div class="se-desc">API keys loaded successfully on service start</div>
+          </div>
+          <div class="sec-event warn">
+            <div class="se-head"><span class="se-title">Rate limit warning</span><span class="se-time">07:44</span></div>
+            <div class="se-desc">Groq daily limit at 98% — 3 calls remaining today</div>
+          </div>
+          <div class="sec-event ok">
+            <div class="se-head"><span class="se-title">Auth middleware</span><span class="se-time">07:30</span></div>
+            <div class="se-desc">12 requests verified, 0 rejected in last hour</div>
+          </div>
+          <div class="sec-event ok">
+            <div class="se-head"><span class="se-title">PII scan</span><span class="se-time">06:00</span></div>
+            <div class="se-desc">No sensitive data routed to cloud — all private intents handled locally</div>
+          </div>
+          <div class="sec-event ok">
+            <div class="se-head"><span class="se-title">Vault permissions</span><span class="se-time">00:01</span></div>
+            <div class="se-desc">vault.enc and vault.salt verified as 600 (owner-only)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ SETTINGS PAGE ══ -->
+    <div class="page" id="page-settings">
+      <div class="set-body">
+
+        <div class="set-section">
+          <div class="set-section-title">AI & Routing</div>
+          <div class="set-row">
+            <div class="set-row-icon">🔮</div>
+            <div class="set-row-info">
+              <div class="set-row-title">Primary Provider</div>
+              <div class="set-row-sub">Currently: Groq (llama-3.3-70b-versatile)</div>
+            </div>
+            <div class="set-chip">Change</div>
+          </div>
+          <div class="set-row">
+            <div class="set-row-icon">🧠</div>
+            <div class="set-row-info">
+              <div class="set-row-title">Deep reasoning (CoT)</div>
+              <div class="set-row-sub">Inject chain-of-thought on every request</div>
+            </div>
+            <button class="set-toggle"></button>
+          </div>
+          <div class="set-row">
+            <div class="set-row-icon">💰</div>
+            <div class="set-row-info">
+              <div class="set-row-title">Daily spend cap</div>
+              <div class="set-row-sub">Hard limit per provider per day</div>
+            </div>
+            <div class="set-chip">Set limit</div>
+          </div>
+        </div>
+
+        <div class="set-section">
+          <div class="set-section-title">Memory</div>
+          <div class="set-row">
+            <div class="set-row-icon">💡</div>
+            <div class="set-row-info">
+              <div class="set-row-title">Post-turn reflection</div>
+              <div class="set-row-sub">Save facts after each conversation turn (20% sample rate)</div>
+            </div>
+            <button class="set-toggle"></button>
+          </div>
+          <div class="set-row">
+            <div class="set-row-icon">🗑️</div>
+            <div class="set-row-info">
+              <div class="set-row-title">Memory TTL</div>
+              <div class="set-row-sub">Auto-delete vectors older than 60 days</div>
+            </div>
+            <div class="set-chip">60 days</div>
+          </div>
+        </div>
+
+        <div class="set-section">
+          <div class="set-section-title">Voice</div>
+          <div class="set-row">
+            <div class="set-row-icon">🎤</div>
+            <div class="set-row-info">
+              <div class="set-row-title">Wake word</div>
+              <div class="set-row-sub">hey_jarvis model (openwakeword) — low accuracy</div>
+            </div>
+            <div class="set-chip" style="color:#fbbc04;border-color:rgba(251,188,4,.3)">Fix</div>
+          </div>
+          <div class="set-row">
+            <div class="set-row-icon">🔊</div>
+            <div class="set-row-info">
+              <div class="set-row-title">TTS Engine</div>
+              <div class="set-row-sub">Groq Orpheus → Piper fallback</div>
+            </div>
+            <div class="set-chip">Change</div>
+          </div>
+        </div>
+
+        <div class="set-section">
+          <div class="set-section-title">Notifications</div>
+          <div class="set-row">
+            <div class="set-row-icon">📱</div>
+            <div class="set-row-info">
+              <div class="set-row-title">Telegram alerts</div>
+              <div class="set-row-sub">Push system events to Telegram bot</div>
+            </div>
+            <button class="set-toggle"></button>
+          </div>
+          <div class="set-row">
+            <div class="set-row-icon">🌙</div>
+            <div class="set-row-info">
+              <div class="set-row-title">Quiet hours</div>
+              <div class="set-row-sub">No non-critical alerts 11pm – 7am IST</div>
+            </div>
+            <button class="set-toggle"></button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// ── Clock ──
+function tick(){
+  const n=new Date();
+  document.getElementById('clock').textContent=n.toLocaleTimeString('en-IN',{hour12:false});
+  const h=n.getHours();
+  const greet=h<12?'Good morning':h<17?'Good afternoon':'Good evening';
+  const el=document.getElementById('greeting');
+  if(el) el.textContent=greet+', Vaibhav.';
+}
+tick();setInterval(tick,1000);
+
+// ── Navigation ──
+const pages={
+  home:'Home',chat:'Chat',dashboard:'Dashboard',
+  memory:'Memory',mcp:'MCP Servers',security:'Security',settings:'Settings'
+};
+function nav(id){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.rail-icon').forEach(i=>i.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  const ri=document.getElementById('ri-'+id);
+  if(ri) ri.classList.add('active');
+  document.getElementById('topbar-title').textContent=pages[id]||id;
+}
+
+// ── Home prompt ──
+function sendHome(){
+  const inp=document.getElementById('home-input');
+  const val=inp.value.trim();
+  if(!val) return;
+  nav('chat');
+  addMsg('user',val);
+  inp.value='';
+  setTimeout(()=>addMsg('edith','Processing: '+val+'… Give me a moment.'),400);
+}
+function startChat(msg){
+  nav('chat');
+  addMsg('user',msg);
+  setTimeout(()=>addMsg('edith','On it, Boss.'),300);
+}
+
+// ── Chat ──
+function sendChat(){
+  const ta=document.querySelector('.chat-textarea');
+  const val=ta.value.trim();
+  if(!val) return;
+  addMsg('user',val);
+  ta.value='';ta.style.height='';
+  setTimeout(()=>addMsg('edith','Got it — working on that.'),350);
+}
+function addMsg(role,text){
+  const msgs=document.getElementById('chat-msgs');
+  const now=new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:false});
+  const div=document.createElement('div');
+  div.className='msg-row'+(role==='user'?' user':'');
+  div.innerHTML=role==='user'
+    ?`<div class="msg-icon mi-user">V</div><div><div class="msg-bubble">${text}</div><div class="msg-meta">You · ${now}</div></div>`
+    :`<div class="msg-icon mi-edith">E</div><div><div class="msg-bubble">${text}</div><div class="msg-meta">EDITH · ${now}</div></div>`;
+  msgs.appendChild(div);
+  msgs.scrollTop=msgs.scrollHeight;
+}
+
+// ── Auto resize textarea ──
+function autoResize(el){
+  el.style.height='';
+  el.style.height=Math.min(el.scrollHeight,160)+'px';
+}
+
+// ── Toast ──
+function toast(icon,msg){
+  const area=document.getElementById('toast-area');
+  const t=document.createElement('div');
+  t.className='toast';
+  t.innerHTML=`<span>${icon}</span><span>${msg}</span>`;
+  area.appendChild(t);
+  setTimeout(()=>t.remove(),3000);
+}
+
+// ── Fake live stats ──
+function fakeStats(){
+  const ram=Math.round(55+Math.random()*15);
+  const cpu=Math.round(12+Math.random()*28);
+  document.getElementById('d-ram').textContent=ram+'%';
+  document.getElementById('d-cpu').textContent=cpu+'%';
+  document.getElementById('h-ram').style.width=ram+'%';
+  document.getElementById('h-cpu').style.width=cpu+'%';
+  document.getElementById('hv-ram').textContent=ram+'%';
+  document.getElementById('hv-cpu').textContent=cpu+'%';
+}
+setInterval(fakeStats,5000);
+
+// Boot
+setTimeout(()=>toast('✅','EDITH online · all systems nominal'),600);
+setTimeout(()=>toast('⚠️','Groq at 98% daily limit'),1600);
+</script>
+</body>
+</html>
